@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}{{ team.name }}{% endblock %}
+
+{% block content %}
+    <div class="p-4 p-md-5 mb-4 bg-dark text-white rounded-3 shadow-sm">
+        <div class="container-fluid py-2">
+            <h1 class="display-5 fw-bold mb-3">{{ team.name }}</h1>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <div><strong>League Rank:</strong> {% if league_rank %}{{ league_rank }}{% else %}-{% endif %}</div>
+                </div>
+                <div class="col-md-3">
+                    <div><strong>Matches:</strong> {{ matches_won }}-{{ matches_lost }}</div>
+                </div>
+                <div class="col-md-3">
+                    <div><strong>Games:</strong> {{ games_won }}-{{ games_lost }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h2 class="h4 mb-3">Player Standings</h2>
+                    {% if team_player_stats %}
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Player</th>
+                                        <th>Wins</th>
+                                        <th>Losses</th>
+                                        <th>%</th>
+                                        <th>Runs</th>
+                                        <th>{{ active_league.team_size }} / 0</th>
+                                        <th>8s</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for stat in team_player_stats %}
+                                        <tr>
+                                            <td>
+                                                <a
+                                                    href="#"
+                                                    data-player-scores-modal
+                                                    data-player-id="{{ stat.player_id }}"
+                                                >
+                                                    {{ stat.player }}
+                                                </a>
+                                            </td>
+                                            <td>{{ stat.wins }}</td>
+                                            <td>{{ stat.losses }}</td>
+                                            <td>{{ stat.percentage|floatformat:2 }}%</td>
+                                            <td>{{ stat.runs }}</td>
+                                            <td>{{ stat.sweeps }}</td>
+                                            <td>{{ stat.eights }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No player scores available for this team.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h2 class="h4 mb-3">Captain</h2>
+                    <div class="mb-4">
+                        {% if team.captain %}
+                            <div><strong>Name:</strong> {{ team.captain.name }}</div>
+                            <div>
+                                <strong>Phone:</strong>
+                                {% if team.captain.phone %}
+                                    {{ team.captain.phone }}
+                                {% else %}
+                                    <span class="text-muted">No phone available</span>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <p class="text-muted mb-0">No captain assigned.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <br>
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h2 class="h4 mb-3">Venue</h2>
+                    <div>
+                        <div><strong>Name:</strong> {{ team.venue.name }}</div>
+                        {% if team.venue.phone != 'None' %}
+                        <div><strong>Phone:</strong> {{ team.venue.phone }}</div>
+                        {% endif %}
+                        <div><strong>Address:</strong> {{ team.venue.address }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h4 mb-3">Schedule & Results</h2>
+                    {% if team_schedule %}
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Week</th>
+                                        <th>Date</th>
+                                        <th>Opponent</th>
+                                        <th>Location</th>
+                                        <th>Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in team_schedule %}
+                                        <tr>
+                                            <td>{% if entry.week.number %}{{ entry.week.number }}{% else %}-{% endif %}</td>
+                                            <td>{{ entry.week.date|date:"M d, y" }}</td>
+                                            <td>
+                                                {% if entry.is_home %}VS {% else %}@ {% endif %}
+                                                <a href="/teams/{{ entry.opponent.id }}/">{{ entry.opponent }}</a>
+                                            </td>
+                                            <td>{{ entry.location }}</td>
+                                            <td>
+                                                {% if entry.result_label %}
+                                                    <a
+                                                        href="#"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#matchResultModal{{ entry.match_id }}"
+                                                    >
+                                                        {{ entry.result_label }}
+                                                    </a>
+                                                {% else %}
+                                                    <span class="text-muted">No result</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No schedule available for this team.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% for entry in team_schedule %}
+    {% if entry.result_label %}
+        <div
+            class="modal fade"
+            id="matchResultModal{{ entry.match_id }}"
+            tabindex="-1"
+            aria-labelledby="matchResultModalLabel{{ entry.match_id }}"
+            aria-hidden="true"
+        >
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="matchResultModalLabel{{ entry.match_id }}">
+                            Match Result: {{ team.name }} vs {{ entry.opponent.name }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>Week:</strong> {{ entry.week }}</p>
+                        <p><strong>Location:</strong> {{ entry.location }}</p>
+                        <p><strong>Result:</strong> {{ entry.result_label }}</p>
+
+                        {% if entry.match_detail_rows %}
+                            <div class="table-responsive">
+                                <table class="table table-striped align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Player</th>
+                                            <th>Team</th>
+                                            <th>Wins</th>
+                                            <th>Losses</th>
+                                            <th>Runouts</th>
+                                            <th>8s</th>
+                                            <th>Sweeps</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for row in entry.match_detail_rows %}
+                                            <tr>
+                                                <td>{{ row.player }}</td>
+                                                <td>{{ row.represented_team }}</td>
+                                                <td>{{ row.wins }}</td>
+                                                <td>{{ row.losses }}</td>
+                                                <td>{{ row.runouts }}</td>
+                                                <td>{{ row.eights }}</td>
+                                                <td>{% if row.sweeps %}Yes{% else %}No{% endif %}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <p class="text-muted mb-0">No detailed result data available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endfor %}
+<br>
+<br>
+{% endblock %}

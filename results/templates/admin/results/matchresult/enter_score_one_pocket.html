@@ -1,0 +1,118 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        .score-meta {
+            margin-bottom: 24px;
+            color: #888;
+        }
+
+        .score-form-card {
+            max-width: 640px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .score-form-header {
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            padding: 12px 16px;
+            font-weight: 700;
+            font-size: 16px;
+            color: #222;
+        }
+
+        .score-form-body {
+            padding: 16px;
+        }
+
+        .score-grid {
+            display: grid;
+            grid-template-columns: 1fr 140px;
+            gap: 12px 16px;
+            align-items: center;
+        }
+
+        .score-grid label {
+            font-weight: 700;
+            color: #222;
+        }
+
+        .score-grid input[type="number"] {
+            width: 100%;
+        }
+
+        .score-help {
+            margin-top: 16px;
+            color: #555;
+        }
+
+        .submit-row {
+            margin-top: 24px;
+        }
+
+        @media (max-width: 640px) {
+            .score-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="score-meta">
+        <p><strong>League:</strong> {{ league.name }}</p>
+        <p><strong>Match:</strong> {{ match.home_team }} vs {{ match.away_team }}</p>
+        <p><strong>Week:</strong> {{ match.week }}</p>
+        {% if match.location %}
+            <p><strong>Location:</strong> {{ match.location }}</p>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        {% if next_url %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+        {% endif %}
+
+        <div class="score-form-card">
+            <div class="score-form-header">One Pocket Match Score</div>
+            <div class="score-form-body">
+                <div class="score-grid">
+                    <label for="id_home_team_score">{{ match.home_team }}</label>
+                    <input
+                        id="id_home_team_score"
+                        type="number"
+                        name="home_team_score"
+                        min="0"
+                        max="3"
+                        value="{{ home_score }}"
+                        required
+                    >
+
+                    <label for="id_away_team_score">{{ match.away_team }}</label>
+                    <input
+                        id="id_away_team_score"
+                        type="number"
+                        name="away_team_score"
+                        min="0"
+                        max="3"
+                        value="{{ away_score }}"
+                        required
+                    >
+                </div>
+
+                <p class="score-help">
+                    Enter scores from 0 to 3. One team must have 3, and only one team can have 3.
+                </p>
+            </div>
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" value="Save Score" class="default">
+        </div>
+    </form>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Standings{% endblock %}
+
+{% block content %}
+    <div class="mb-4">
+        <h1 class="h2 mb-2">Standings</h1>
+        {% if available_weeks %}
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-sm-6 col-md-4">
+                    <select id="week" name="week" class="form-select" onchange="this.form.submit()">
+                        {% for week in available_weeks %}
+                            <option
+                                value="{{ week.id }}"
+                                {% if selected_week and week.id == selected_week.id %}selected{% endif %}
+                            >
+                                Week {{ week.number }} - {{ week.date }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            {% if team_standings %}
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Rank</th>
+                                <th scope="col">Team</th>
+                                <th scope="col">Matches Won</th>
+                                <th scope="col">Matches Lost</th>
+                                <th scope="col">Games Won</th>
+                                <th scope="col">Games Lost</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for standing in team_standings %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>
+                                        {% if active_league.results_type == 'one_pocket' %}
+                                            <a
+                                                href="/teams/{{ standing.team_id }}/schedule-modal/"
+                                                data-team-schedule-modal
+                                                data-team-id="{{ standing.team_id }}"
+                                            >
+                                                {{ standing.team }}
+                                            </a>
+                                        {% else %}
+                                            <a href="/teams/{{ standing.team_id }}/">{{ standing.team }}</a>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ standing.matches_won }}</td>
+                                    <td>{{ standing.matches_lost }}</td>
+                                    <td>{{ standing.games_won }}</td>
+                                    <td>{{ standing.games_lost }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">No standings available.</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

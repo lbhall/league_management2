@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Rules{% endblock %}
+
+{% block content %}
+    <style>
+        .rules-major-heading {
+            text-align: center;
+            margin: 2rem 0 1rem 0;
+        }
+
+        .rules-major-heading h2 {
+            margin-bottom: 0.75rem;
+        }
+
+        .rules-major-heading hr {
+            width: 100%;
+            margin: 0;
+        }
+
+        .rules-minor-heading {
+            margin: 1.5rem 0 0.75rem 0;
+        }
+
+        .rules-entry-list {
+            margin: 0 0 1rem 1.5rem;
+            padding-left: 0;
+        }
+
+        .rules-entry-list li {
+            margin-bottom: 0.35rem;
+        }
+    </style>
+
+    <div class="mb-4">
+        <h1 class="h2 mb-2">Rules</h1>
+    </div>
+
+    {% if rule_blocks %}
+        <div class="card shadow-sm">
+            <div class="card-body">
+                {% for block in rule_blocks %}
+                    {% if block.type == 'major_heading' %}
+                        <div class="rules-major-heading">
+                            <h2 class="h3">{{ block.text }}</h2>
+                            <hr>
+                        </div>
+                    {% elif block.type == 'minor_heading' %}
+                        <div class="rules-minor-heading">
+                            <h3 class="h5 mb-0">{{ block.text }}</h3>
+                        </div>
+                    {% elif block.type == 'rule_entries' %}
+                        <ul class="rules-entry-list">
+                            {% for entry in block.entries %}
+                                <li>{{ entry }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <p class="text-muted mb-0">No rules available for this league.</p>
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

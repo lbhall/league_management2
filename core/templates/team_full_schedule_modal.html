@@ -1,0 +1,55 @@
+<div class="modal fade" id="teamFullScheduleModal" tabindex="-1" aria-labelledby="onePocketFullScheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="onePocketFullScheduleModalLabel">Full Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if schedule_weeks %}
+                    {% for week_block in schedule_weeks %}
+                        <div class="mb-4">
+                            <h6 class="mb-2">
+                                {% if week_block.week.number %}
+                                    Week {{ week_block.week.number }}
+                                {% else %}
+                                    Holiday - {{ week_block.week.notes }}
+                                {% endif %}
+                                <span class="text-muted">({{ week_block.week.date }})</span>
+                            </h6>
+
+                            {% if week_block.entries %}
+                                {% if week_block.week.number %}
+                                <ul class="list-group">
+                                    {% for entry in week_block.entries %}
+                                        <li class="list-group-item">
+                                            <div class="fw-semibold">
+                                                {{ entry.home_team }}
+                                                vs
+                                                {% if entry.is_bye %}
+                                                    {{ entry.away_team }}
+                                                {% else %}
+                                                    {{ entry.away_team }}
+                                                {% endif %}
+                                                {% if entry.race_label %}
+                                                    <span class="text-muted"> {{ entry.race_label }}</span>
+                                                {% endif %}
+                                            </div>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                                {% else %}
+                                <p class="text-muted mb-0">No matches.</p>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted mb-0">No matches.</p>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted mb-0">No schedule available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

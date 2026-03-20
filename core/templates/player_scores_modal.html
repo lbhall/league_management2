@@ -1,0 +1,46 @@
+<div class="modal fade" id="playerScoresModal" tabindex="-1" aria-labelledby="playerScoresModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Player Scores: {{ player.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if player.team %}
+                    <p><strong>Team:</strong> {{ player.team.name }}</p>
+                {% endif %}
+
+                {% if matchup_rows %}
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Opponent</th>
+                                    <th>Wins</th>
+                                    <th>Losses</th>
+                                    <th>Runs</th>
+                                    <th>{{ active_season.league.team_size }} / 0</th>
+                                    <th>8s</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in matchup_rows %}
+                                    <tr>
+                                        <td><a href="/teams/{{ row.team_id }}/">{{ row.team_name }}</a></td>
+                                        <td>{{ row.wins }}</td>
+                                        <td>{{ row.losses }}</td>
+                                        <td>{{ row.runs }}</td>
+                                        <td>{{ row.sweeps }}</td>
+                                        <td>{{ row.eights }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">No score data available for this player.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

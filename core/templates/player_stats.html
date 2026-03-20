@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Player Stats{% endblock %}
+
+{% block content %}
+    <div class="mb-4">
+        <h1 class="h2 mb-2">Player Stats</h1>
+        {% if available_weeks %}
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-sm-6 col-md-4">
+                    <select id="week" name="week" class="form-select" onchange="this.form.submit()">
+                        {% for week in available_weeks %}
+                            <option
+                                value="{{ week.id }}"
+                                {% if selected_week and week.id == selected_week.id %}selected{% endif %}
+                            >
+                                Week {{ week.number }} - {{ week.date }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            {% if player_stats_data %}
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Rank</th>
+                                <th scope="col">Player</th>
+                                <th scope="col">Team</th>
+                                <th scope="col">Wins</th>
+                                <th scope="col">Losses</th>
+                                <th scope="col">Percentage</th>
+                                <th scope="col">Runs</th>
+                                <th scope="col">{{ active_league.team_size }} / 0</th>
+                                <th scope="col">8s</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stat in player_stats_data %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>
+                                        <a
+                                            href="#"
+                                            data-player-scores-modal
+                                            data-player-id="{{ stat.player_id }}"
+                                        >
+                                            {{ stat.player }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <a href="/teams/{{ stat.team_id }}/">{{ stat.team }}</a>
+
+                                    </td>
+                                    <td>{{ stat.wins }}</td>
+                                    <td>{{ stat.losses }}</td>
+                                    <td>{{ stat.percentage|floatformat:2 }}%</td>
+                                    <td>{{ stat.runs }}</td>
+                                    <td>{{ stat.sweeps }}</td>
+                                    <td>{{ stat.eights }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">No player stats available.</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

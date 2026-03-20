@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Contact Info{% endblock %}
+
+{% block content %}
+    <div class="mb-4">
+        <h1 class="h2 mb-2">Contact Info</h1>
+        {% if active_league %}
+            <p class="text-muted mb-0">{{ active_league.name }}</p>
+        {% endif %}
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            {% if teams %}
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Team</th>
+                                <th scope="col">Captain</th>
+                                <th scope="col">Phone</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for team in teams %}
+                                <tr>
+                                    <td>
+                                        <a href="/teams/{{ team.id }}/">{{ team.name }}</a>
+                                    </td>
+                                    <td>
+                                        {% if team.captain %}
+                                            {{ team.captain.name }}
+                                        {% else %}
+                                            <span class="text-muted">No captain assigned</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if team.captain and team.captain.phone %}
+                                            {{ team.captain.phone }}
+                                        {% else %}
+                                            <span class="text-muted">No phone available</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">No teams available for this league.</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

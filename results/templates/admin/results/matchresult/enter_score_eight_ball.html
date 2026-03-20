@@ -1,0 +1,446 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        .score-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .score-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .score-card-header {
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            padding: 12px 16px;
+            font-weight: 700;
+            font-size: 16px;
+            color: #222;
+        }
+
+        .score-card-body {
+            padding: 16px;
+        }
+
+        .score-meta {
+            margin-bottom: 18px;
+            color: #888;
+        }
+
+        .score-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .score-table th,
+        .score-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        .score-table th {
+            background: #fafafa;
+            color: #222;
+            font-weight: 700;
+        }
+
+        .score-table input[type="number"],
+        .score-table select {
+            width: 100%;
+            min-width: 90px;
+        }
+
+        .score-readonly {
+            color: #888;
+            font-weight: 600;
+        }
+
+        .score-empty {
+            color: #555;
+        }
+
+        .score-totals-row td {
+            background: #fafafa;
+            color: #222;
+            font-weight: 700;
+        }
+
+        .score-totals-row .totals-wins,
+        .score-totals-row .totals-losses,
+        .score-totals-row .totals-runouts,
+        .score-totals-row .totals-eight,
+        .score-totals-row .totals-sweeps {
+            color: #111;
+            font-weight: 700;
+        }
+
+        .submit-row {
+            margin-top: 24px;
+        }
+
+        .player-slot-label {
+            color: #888;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 960px) {
+            .score-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="score-meta">
+        <p><strong>League:</strong> {{ league.name }}</p>
+        <p><strong>Match:</strong> {{ match.home_team }} vs {{ match.away_team }}</p>
+        <p><strong>Week:</strong> {{ match.week }}</p>
+        <p><strong>Team Size:</strong> {{ team_size }}</p>
+        {% if match.location %}
+            <p><strong>Location:</strong> {{ match.location }}</p>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        {% if next_url %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+        {% endif %}
+
+        <div class="score-layout">
+            <div class="score-card" data-team-card="home">
+                <div class="score-card-header">{{ match.home_team }}</div>
+                <div class="score-card-body">
+                    <table class="score-table">
+                        <thead>
+                            <tr>
+                                <th>Slot</th>
+                                <th>Player</th>
+                                <th>Wins</th>
+                                <th>Losses</th>
+                                <th>Runouts</th>
+                                <th>8 on Breaks</th>
+                                <th>Sweep</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in home_player_rows %}
+                                <tr data-team="home">
+                                    <td class="player-slot-label">Player {{ row.slot_number }}</td>
+                                    <td>
+                                        <select name="home_player_{{ forloop.counter0 }}" class="player-select">
+                                            <option value="">---------</option>
+                                            <optgroup label="{{ match.home_team }}">
+                                                {% for player in row.choices.team_players %}
+                                                    <option
+                                                        value="{{ player.id }}"
+                                                        {% if row.player and row.player.id == player.id %}selected{% endif %}
+                                                    >
+                                                        {{ player.name }}
+                                                    </option>
+                                                {% endfor %}
+                                            </optgroup>
+                                            <optgroup label="Unassigned Players">
+                                                {% for player in row.choices.unassigned_players %}
+                                                    <option
+                                                        value="{{ player.id }}"
+                                                        {% if row.player and row.player.id == player.id %}selected{% endif %}
+                                                    >
+                                                        {{ player.name }}
+                                                    </option>
+                                                {% endfor %}
+                                            </optgroup>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="{{ team_size }}"
+                                            name="home_wins_{{ forloop.counter0 }}"
+                                            value="{{ row.wins }}"
+                                            class="wins-input"
+                                        >
+                                    </td>
+                                    <td>
+                                        <span class="score-readonly losses-display">{{ row.losses }}</span>
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            name="home_runouts_{{ forloop.counter0 }}"
+                                            value="{{ row.runouts }}"
+                                            class="runouts-input"
+                                        >
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            name="home_eight_on_the_breaks_{{ forloop.counter0 }}"
+                                            value="{{ row.eight_on_the_breaks }}"
+                                            class="eight-input"
+                                        >
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="checkbox"
+                                            class="sweep-checkbox"
+                                            {% if row.won_all_games %}checked{% endif %}
+                                            disabled
+                                        >
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            <tr class="score-totals-row" data-team-totals="home">
+                                <td colspan="2">Totals</td>
+                                <td class="totals-wins">{{ home_totals.wins }}</td>
+                                <td class="totals-losses">{{ home_totals.losses }}</td>
+                                <td class="totals-runouts">{{ home_totals.runouts }}</td>
+                                <td class="totals-eight">{{ home_totals.eight_on_the_breaks }}</td>
+                                <td class="totals-sweeps">{{ home_totals.sweeps }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="score-card" data-team-card="away">
+                <div class="score-card-header">{{ match.away_team }}</div>
+                <div class="score-card-body">
+                    <table class="score-table">
+                        <thead>
+                            <tr>
+                                <th>Slot</th>
+                                <th>Player</th>
+                                <th>Wins</th>
+                                <th>Losses</th>
+                                <th>Runouts</th>
+                                <th>8 on Breaks</th>
+                                <th>Sweep</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in away_player_rows %}
+                                <tr data-team="away">
+                                    <td class="player-slot-label">Player {{ row.slot_number }}</td>
+                                    <td>
+                                        <select name="away_player_{{ forloop.counter0 }}" class="player-select">
+                                            <option value="">---------</option>
+                                            <optgroup label="{{ match.away_team }}">
+                                                {% for player in row.choices.team_players %}
+                                                    <option
+                                                        value="{{ player.id }}"
+                                                        {% if row.player and row.player.id == player.id %}selected{% endif %}
+                                                    >
+                                                        {{ player.name }}
+                                                    </option>
+                                                {% endfor %}
+                                            </optgroup>
+                                            <optgroup label="Unassigned Players">
+                                                {% for player in row.choices.unassigned_players %}
+                                                    <option
+                                                        value="{{ player.id }}"
+                                                        {% if row.player and row.player.id == player.id %}selected{% endif %}
+                                                    >
+                                                        {{ player.name }}
+                                                    </option>
+                                                {% endfor %}
+                                            </optgroup>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="{{ team_size }}"
+                                            name="away_wins_{{ forloop.counter0 }}"
+                                            value="{{ row.wins }}"
+                                            class="wins-input"
+                                        >
+                                    </td>
+                                    <td>
+                                        <span class="score-readonly losses-display">{{ row.losses }}</span>
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            name="away_runouts_{{ forloop.counter0 }}"
+                                            value="{{ row.runouts }}"
+                                            class="runouts-input"
+                                        >
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            name="away_eight_on_the_breaks_{{ forloop.counter0 }}"
+                                            value="{{ row.eight_on_the_breaks }}"
+                                            class="eight-input"
+                                        >
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="checkbox"
+                                            class="sweep-checkbox"
+                                            {% if row.won_all_games %}checked{% endif %}
+                                            disabled
+                                        >
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            <tr class="score-totals-row" data-team-totals="away">
+                                <td colspan="2">Totals</td>
+                                <td class="totals-wins">{{ away_totals.wins }}</td>
+                                <td class="totals-losses">{{ away_totals.losses }}</td>
+                                <td class="totals-runouts">{{ away_totals.runouts }}</td>
+                                <td class="totals-eight">{{ away_totals.eight_on_the_breaks }}</td>
+                                <td class="totals-sweeps">{{ away_totals.sweeps }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" value="Save Score" class="default">
+        </div>
+    </form>
+
+    <script>
+        (function () {
+            const teamSize = {{ team_size }};
+
+            function parseNumber(value) {
+                const parsed = parseInt(value || '0', 10);
+                return Number.isNaN(parsed) ? 0 : parsed;
+            }
+
+            function clampWins(value) {
+                if (value < 0) {
+                    return 0;
+                }
+                if (value > teamSize) {
+                    return teamSize;
+                }
+                return value;
+            }
+
+            function rowIncluded(row) {
+                const playerSelect = row.querySelector('.player-select');
+                return playerSelect && playerSelect.value !== '';
+            }
+
+            function updateRow(row) {
+                const winsInput = row.querySelector('.wins-input');
+                const lossesDisplay = row.querySelector('.losses-display');
+                const sweepCheckbox = row.querySelector('.sweep-checkbox');
+
+                if (!winsInput || !lossesDisplay || !sweepCheckbox) {
+                    return;
+                }
+
+                let wins = clampWins(parseNumber(winsInput.value));
+                winsInput.value = wins;
+
+                const losses = teamSize - wins;
+                lossesDisplay.textContent = losses;
+                sweepCheckbox.checked = losses === 0;
+            }
+
+            function updateTeamTotals(teamName) {
+                const rows = document.querySelectorAll('tr[data-team="' + teamName + '"]');
+                const totalsRow = document.querySelector('tr[data-team-totals="' + teamName + '"]');
+
+                if (!totalsRow) {
+                    return;
+                }
+
+                let totalWins = 0;
+                let totalLosses = 0;
+                let totalRunouts = 0;
+                let totalEight = 0;
+                let totalSweeps = 0;
+
+                rows.forEach(function (row) {
+                    if (!rowIncluded(row)) {
+                        return;
+                    }
+
+                    const winsInput = row.querySelector('.wins-input');
+                    const lossesDisplay = row.querySelector('.losses-display');
+                    const runoutsInput = row.querySelector('.runouts-input');
+                    const eightInput = row.querySelector('.eight-input');
+                    const sweepCheckbox = row.querySelector('.sweep-checkbox');
+
+                    totalWins += parseNumber(winsInput ? winsInput.value : 0);
+                    totalLosses += parseNumber(lossesDisplay ? lossesDisplay.textContent : 0);
+                    totalRunouts += parseNumber(runoutsInput ? runoutsInput.value : 0);
+                    totalEight += parseNumber(eightInput ? eightInput.value : 0);
+                    totalSweeps += sweepCheckbox && sweepCheckbox.checked ? 1 : 0;
+                });
+
+                totalsRow.querySelector('.totals-wins').textContent = totalWins;
+                totalsRow.querySelector('.totals-losses').textContent = totalLosses;
+                totalsRow.querySelector('.totals-runouts').textContent = totalRunouts;
+                totalsRow.querySelector('.totals-eight').textContent = totalEight;
+                totalsRow.querySelector('.totals-sweeps').textContent = totalSweeps;
+            }
+
+            function updateAllTotals() {
+                updateTeamTotals('home');
+                updateTeamTotals('away');
+            }
+
+            document.querySelectorAll('tr[data-team]').forEach(function (row) {
+                const playerSelect = row.querySelector('.player-select');
+                const winsInput = row.querySelector('.wins-input');
+                const runoutsInput = row.querySelector('.runouts-input');
+                const eightInput = row.querySelector('.eight-input');
+
+                if (playerSelect) {
+                    playerSelect.addEventListener('change', function () {
+                        updateAllTotals();
+                    });
+                }
+
+                if (winsInput) {
+                    winsInput.addEventListener('input', function () {
+                        updateRow(row);
+                        updateAllTotals();
+                    });
+                    updateRow(row);
+                }
+
+                if (runoutsInput) {
+                    runoutsInput.addEventListener('input', function () {
+                        updateAllTotals();
+                    });
+                }
+
+                if (eightInput) {
+                    eightInput.addEventListener('input', function () {
+                        updateAllTotals();
+                    });
+                }
+            });
+
+            updateAllTotals();
+        })();
+    </script>
+{% endblock %}

@@ -1,0 +1,85 @@
+<div class="modal fade" id="teamScheduleModal" tabindex="-1" aria-labelledby="teamScheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="teamScheduleModalLabel">{{ team.name }} Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="mb-3">Results</h6>
+                {% if results_rows %}
+                    <div class="table-responsive mb-4">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Opponent</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in results_rows %}
+                                    <tr>
+                                        <td>{{ row.date }}</td>
+                                        <td>{{ row.opponent }}</td>
+                                        <td>{{ row.result }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No completed results yet.</p>
+                {% endif %}
+
+                <h6 class="mb-3">Makeup Matches</h6>
+                {% if makeup_rows %}
+                    <div class="table-responsive mb-4">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Opponent</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in makeup_rows %}
+                                    <tr>
+                                        <td>{{ row.date }}</td>
+                                        <td>{{ row.opponent }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No makeup matches scheduled.</p>
+                {% endif %}
+
+                <h6 class="mb-3">Upcoming Matches</h6>
+                {% if upcoming_rows %}
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Opponent</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in upcoming_rows %}
+                                    <tr>
+                                        <td>{{ row.date }}</td>
+                                        <td>{{ row.opponent }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">No upcoming matches scheduled.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

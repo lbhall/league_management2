@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Archived Seasons{% endblock %}
+
+{% block content %}
+    <div class="mb-4">
+        <h1 class="h2 mb-2">Archived Seasons</h1>
+
+        {% if archived_season_options %}
+            <form method="get" class="row g-2 align-items-end mb-4">
+                <div class="col-sm-6 col-md-4">
+                    <label for="season" class="form-label">Archived Season</label>
+                    <select id="season" name="season" class="form-select" onchange="this.form.submit()">
+                        {% for season in archived_season_options %}
+                            <option
+                                value="{{ season.id }}"
+                                {% if selected_archived_season and season.id == selected_archived_season.id %}selected{% endif %}
+                            >
+                                {{ season.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+
+    {% if selected_archived_season %}
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header">
+                        <strong>Archived Team Standings</strong>
+                    </div>
+                    <div class="card-body">
+                        {% if archived_team_standings %}
+                            <div class="table-responsive">
+                                <table class="table table-striped align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Rank</th>
+                                            <th scope="col">Team</th>
+                                            <th scope="col">Matches Won</th>
+                                            <th scope="col">Matches Lost</th>
+                                            <th scope="col">Games Won</th>
+                                            <th scope="col">Games Lost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for standing in archived_team_standings %}
+                                            <tr>
+                                                <td>{{ forloop.counter }}</td>
+                                                <td>{{ standing.team_name }}</td>
+                                                <td>{{ standing.matches_won }}</td>
+                                                <td>{{ standing.matches_lost }}</td>
+                                                <td>{{ standing.games_won }}</td>
+                                                <td>{{ standing.games_lost }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <p class="text-muted mb-0">No archived team standings available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header">
+                        <strong>Archived Player Standings</strong>
+                    </div>
+                    <div class="card-body">
+                        {% if archived_player_standings %}
+                            <div class="table-responsive">
+                                <table class="table table-striped align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Rank</th>
+                                            <th scope="col">Player</th>
+                                            <th scope="col">Team</th>
+                                            <th scope="col">Games Won</th>
+                                            <th scope="col">Games Lost</th>
+                                            <th scope="col">Run Outs</th>
+                                            <th scope="col">8 on the Breaks</th>
+                                            <th scope="col">Sweeps</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for standing in archived_player_standings %}
+                                            <tr>
+                                                <td>{{ forloop.counter }}</td>
+                                                <td>{{ standing.player_name }}</td>
+                                                <td>{{ standing.team_name|default:"-" }}</td>
+                                                <td>{{ standing.games_won }}</td>
+                                                <td>{{ standing.games_lost }}</td>
+                                                <td>{{ standing.run_outs }}</td>
+                                                <td>{{ standing.eight_on_the_breaks }}</td>
+                                                <td>{{ standing.sweeps }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <p class="text-muted mb-0">No archived player standings available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <p class="text-muted mb-0">No archived seasons available.</p>
+    {% endif %}
+{% endblock %}

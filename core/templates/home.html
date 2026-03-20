@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+    {% if active_league and active_league.wide_logo_url %}
+        <div class="text-center mb-4">
+            <img
+                src="{{ active_league.wide_logo_url }}"
+                alt="{{ active_league.name }} logo"
+                class="img-fluid rounded shadow-sm"
+                style="max-width: 100%; max-height: 240px; object-fit: contain;"
+            >
+        </div>
+    {% endif %}
+
+    {% if news_items %}
+        <section class="mt-4 mb-5">
+            <h2 class="mb-3">News</h2>
+
+            <div class="row g-3">
+                {% for news_item in news_items %}
+                    <div class="col-12">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h3 class="h5 card-title mb-2">{{ news_item.title }}</h3>
+                                <p class="text-muted small mb-2">
+                                    Showing {{ news_item.show_date }}
+                                    {% if news_item.expiration_date %}
+                                        through {{ news_item.expiration_date }}
+                                    {% endif %}
+                                </p>
+                                <p class="card-text mb-0">{{ news_item.description }}</p>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+    {% endif %}
+
+{% if active_league and active_league.results_type == 'one_pocket' and one_pocket_race_rows_left %}
+    <section class="mt-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h2 class="h4 mb-3">Race by Rank</h2>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Rank Matchup</th>
+                                        <th scope="col">Race</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in one_pocket_race_rows_left %}
+                                        <tr>
+                                            <td>{{ row.higher_rank }} vs {{ row.lower_rank }}</td>
+                                            <td>{{ row.higher_race }} vs {{ row.lower_race }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Rank Matchup</th>
+                                        <th scope="col">Race</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in one_pocket_race_rows_right %}
+                                        <tr>
+                                            <td>{{ row.higher_rank }} vs {{ row.lower_rank }}</td>
+                                            <td>{{ row.higher_race }} vs {{ row.lower_race }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endif %}
+    <section class="mt-4">
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <h2 class="h4 mb-3">Current Schedule</h2>
+                        {% if current_schedule_week %}
+                            <p class="text-muted mb-3">
+                                {{ current_schedule_week.date }}
+                                {% if active_league.results_type == 'one_pocket' and not current_schedule_is_holiday %}
+                                    (<a href="#" data-one-pocket-full-schedule-modal>full schedule</a>)
+                                {% endif %}
+                            </p>
+                        {% endif %}
+
+                        {% if current_schedule_is_holiday %}
+                            <p class="mb-1"><strong>No matches scheduled.</strong></p>
+                            {% if current_schedule_holiday_note %}
+                                <p class="text-muted mb-0">{{ current_schedule_holiday_note }}</p>
+                            {% endif %}
+                        {% elif current_schedule %}
+                            <ul class="list-group list-group-flush">
+                                {% for entry in current_schedule %}
+                                    <li class="list-group-item">
+                                        <div class="fw-semibold">
+                                            {% if active_league.results_type == 'one_pocket' %}
+                                                <a
+                                                    href="/teams/{{ entry.home_team.id }}/schedule-modal/"
+                                                    data-team-schedule-modal
+                                                    data-team-id="{{ entry.home_team.id }}"
+                                                >
+                                                    {{ entry.home_team.name }}
+                                                </a>
+                                            {% else %}
+                                                <a href="{% url 'team_detail' entry.home_team.id %}">{{ entry.home_team }}</a>
+                                            {% endif %}
+                                            vs
+                                            {% if entry.is_bye %}
+                                                {{ entry.away_team }}
+                                            {% else %}
+                                            {% if active_league.results_type == 'one_pocket' %}
+                                                <a
+                                                    href="/teams/{{ entry.away_team.id }}/schedule-modal/"
+                                                    data-team-schedule-modal
+                                                    data-team-id="{{ entry.away_team.id }}"
+                                                >
+                                                    {{ entry.away_team.name }}
+                                                </a>
+                                            {% else %}
+                                                <a href="{% url 'team_detail' entry.away_team.id %}">{{ entry.away_team }}</a>
+                                            {% endif %}
+                                            {% endif %}
+                                            {% if active_league.results_type == 'one_pocket' and entry.race_label %}
+                                                <span class="text-muted"> {{ entry.race_label }}</span>
+                                            {% endif %}
+                                        </div>
+                                        {% if active_league.results_type != 'one_pocket' and entry.location %}
+                                            <div class="text-muted small">{{ entry.location }}</div>
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="text-muted mb-0">No current schedule available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row g-4">
+                    <div class="col-md-{% if active_league.results_type == 'darts' %}12{% else %}6{% endif %}">
+                    {% if active_league.results_type != 'one_pocket' %}
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body">
+                                <h2 class="h5 mb-3">Top 5 {% if active_league.results_type != 'darts' %}Male {% endif %}Players</h2>
+                                {% if top_male_players %}
+                                    <ol class="mb-0">
+                                        {% for player in top_male_players %}
+                                            <li>
+                                                <a
+                                                    href="#"
+                                                    data-player-scores-modal
+                                                    data-player-id="{{ player.player_id }}"
+                                                >
+                                                    {{ player.player }}
+                                                </a>
+                                                {% if player.team %}
+                                                    <span class="text-muted">({{ player.team }})</span>
+                                                {% endif %}
+                                                <div class="text-muted small">
+                                                    {{ player.wins }}-{{ player.losses }} |
+                                                    {{ player.percentage|floatformat:2 }} | {{ player.runs }} Runs | {{ player.eights }} 8s | {{ player.sweeps }} {{ active_league.team_size }}/0
+                                                </div>
+                                            </li>
+                                        {% endfor %}
+                                    </ol>
+                                {% else %}
+                                    <p class="text-muted mb-0">No player stats available.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        {% if active_league.results_type != 'one_pocket' and active_league.results_type != 'darts'%}
+                        <div class="card shadow-sm h-100">
+                            <div class="card-body">
+                                <h2 class="h5 mb-3">Top 5 Female Players</h2>
+                                {% if top_female_players %}
+                                    <ol class="mb-0">
+                                        {% for player in top_female_players %}
+                                            <li>
+                                                <a
+                                                    href="#"
+                                                    data-player-scores-modal
+                                                    data-player-id="{{ player.player_id }}"
+                                                >
+                                                    {{ player.player }}
+                                                </a>
+                                                {% if player.team %}
+                                                    <span class="text-muted">({{ player.team }})</span>
+                                                {% endif %}
+                                                <div class="text-muted small">
+                                                    {{ player.wins }}-{{ player.losses }} |
+                                                    {{ player.percentage|floatformat:2 }} | {{ player.runs }} Runs | {{ player.eights }} 8s | {{ player.sweeps }} {{ active_league.team_size }}/0
+                                                </div>
+                                            </li>
+                                        {% endfor %}
+                                    </ol>
+                                {% else %}
+                                    <p class="text-muted mb-0">No player stats available.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+        </div>
+
+            <div class="col-lg-5">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h2 class="h4 mb-3">Current Standings</h2>
+                        <!-- ... existing code ... -->
+                        {% if team_standings %}
+                            <div class="table-responsive">
+                                <table class="table table-striped align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Team</th>
+                                            <th scope="col">Matches Won</th>
+                                            <th scope="col">Matches Lost</th>
+                                            <th scope="col">Games Won</th>
+                                            <th scope="col">Games Lost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for standing in team_standings %}
+                                            <tr>
+                                                <td>
+                                                    {% if active_league.results_type == 'one_pocket' %}
+                                                    <a
+                                                        href="/teams/{{ standing.team_id }}/schedule-modal/"
+                                                        data-team-schedule-modal
+                                                        data-team-id="{{ standing.team_id }}"
+                                                    >
+                                                        {{ standing.team }}
+                                                    </a>
+                                                {% else %}
+                                                    <a href="{% url 'team_detail' standing.team_id %}">{{ standing.team }}</a>
+                                                {% endif %}
+                                                </td>
+                                                <td>{{ standing.matches_won }}</td>
+                                                <td>{{ standing.matches_lost }}</td>
+                                                <td>{{ standing.games_won }}</td>
+                                                <td>{{ standing.games_lost }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <p class="text-muted mb-0">No standings available.</p>
+                        {% endif %}
+                        <!-- ... existing code ... -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
