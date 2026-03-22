@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools %}
+  {% if show_financial_breakdown and financial_breakdown_url %}
+    <ul class="object-tools">
+      <li>
+        <a href="{{ financial_breakdown_url }}" class="historylink">Financial Breakdown</a>
+      </li>
+    </ul>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

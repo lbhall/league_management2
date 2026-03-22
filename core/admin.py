@@ -1,12 +1,14 @@
+from decimal import Decimal
+
 from django import forms
 from django.contrib import admin
-from django.db.models import Q
 from django.forms.models import BaseInlineFormSet
-from django.http import JsonResponse
-from django.urls import path
+from django.http import HttpResponseRedirect, JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.urls import path, reverse
 
 from .models import League, LeagueAdminAccess, Player, Team, Venue
-
+from scheduling.models import Season
 
 def get_user_league(request):
     if request.user.is_superuser:
@@ -189,6 +191,7 @@ class LeagueAdmin(admin.ModelAdmin):
     search_fields = ('name',)
     list_display = ('name', 'team_size', 'results_type', 'day_of_week')
     list_filter = ('results_type', 'day_of_week')
+    change_form_template = 'admin/core/league/change_form.html'
 
     def has_module_permission(self, request):
         return request.user.is_superuser
@@ -202,9 +205,114 @@ class LeagueAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return request.user.is_superuser
 
-    def has_delete_permission(self, request, obj=None):
+    def has_delete_Fpermission(self, request, obj=None):
         return request.user.is_superuser
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<path:object_id>/financial-breakdown/',
+                self.admin_site.admin_view(self.financial_breakdown_view),
+                name='core_league_financial_breakdown',
+            ),
+        ]
+        return custom_urls + urls
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        if object_id:
+            league = get_object_or_404(League, pk=object_id)
+            if league.results_type == League.ResultsType.EIGHT_BALL:
+                extra_context['financial_breakdown_url'] = reverse(
+                    'admin:core_league_financial_breakdown',
+                    args=[league.pk],
+                )
+                extra_context['show_financial_breakdown'] = True
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
+    def financial_breakdown_view(self, request, object_id):
+        league = get_object_or_404(League, pk=object_id, results_type=League.ResultsType.EIGHT_BALL)
+
+        teams = league.teams.all().order_by('name')
+        team_count = teams.count()
+        team_size = league.team_size
+
+        active_season = league.seasons.all().filter(status=Season.Status.ACTIVE).first()
+        weeks = active_season.weeks.filter(number__isnull=False).count() if active_season else 0
+
+        signup_fee = league.signup_fee
+        fee_per_player = league.fee_per_player
+        greens_fee = league.greens_fee
+        tournament_target = league.tournament_target
+
+        weekly_collection_per_team = fee_per_player * Decimal(team_size)
+        weekly_greens_total_per_team = greens_fee * Decimal(team_size)
+        weekly_payout_pool_per_team = (fee_per_player - greens_fee) * Decimal(team_size)
+
+        total_signup_fees = signup_fee * Decimal(team_count)
+        total_weekly_collected = weekly_collection_per_team * Decimal(team_count) * Decimal(weeks)
+        total_greens_fees = weekly_greens_total_per_team * Decimal(team_count) * Decimal(weeks)
+        total_weekly_payout_pool = weekly_payout_pool_per_team * Decimal(team_count) * Decimal(weeks)
+        tournament_money = tournament_target * Decimal(team_count)
+
+        total_payout_amount = total_weekly_payout_pool + tournament_money
+
+        standings_data = []
+        if active_season:
+            from core.views import build_team_standings
+            standings_data = build_team_standings(league, active_season)
+
+        payout_rate = Decimal('0')
+        if standings_data:
+            total_games_won = sum(Decimal(row['games_won']) for row in standings_data)
+            if total_games_won > 0:
+                payout_rate = total_payout_amount / total_games_won
+
+        standings = []
+        for row in standings_data:
+            standings.append({
+                'team': row['team'],
+                'games_won': row['games_won'],
+                'payout': Decimal(row['games_won']) * payout_rate,
+            })
+
+        awards = [
+            {'label': 'Top Male', 'amount': Decimal('100')},
+            {'label': 'Top Female', 'amount': Decimal('100')},
+            {'label': 'Most Runouts', 'amount': Decimal('20')},
+            {'label': 'Most 8 on the Breaks', 'amount': Decimal('20')},
+            {'label': 'Most Sweeps', 'amount': Decimal('20')},
+        ]
+
+        return render(request, 'admin/core/league/financial_breakdown.html', {
+            'title': f'Financial Breakdown: {league.name}',
+            'league': league,
+            'team_count': team_count,
+            'team_size': team_size,
+            'weeks': weeks,
+            'fee_per_player': fee_per_player,
+            'greens_fee': greens_fee,
+            'signup_fee': signup_fee,
+            'tournament_target': tournament_target,
+            'weekly_collection_per_team': weekly_collection_per_team,
+            'weekly_greens_total_per_team': weekly_greens_total_per_team,
+            'weekly_payout_pool_per_team': weekly_payout_pool_per_team,
+            'total_signup_fees': total_signup_fees,
+            'total_weekly_collected': total_weekly_collected,
+            'total_greens_fees': total_greens_fees,
+            'total_weekly_payout_pool': total_weekly_payout_pool,
+            'tournament_money': tournament_money,
+            'total_payout_amount': total_payout_amount,
+            'payout_rate': payout_rate,
+            'standings': standings,
+            'awards': awards,
+        })
 
 @admin.register(LeagueAdminAccess)
 class LeagueAdminAccessAdmin(admin.ModelAdmin):

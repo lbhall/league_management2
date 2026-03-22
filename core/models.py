@@ -32,6 +32,31 @@ class League(models.Model):
     )
     wide_logo_url = models.URLField(blank=True)
 
+    fee_per_player = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=10,
+        help_text='Amount charged per player.',
+    )
+    greens_fee = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=2,
+        help_text='Portion of fee_per_player paid to the venue.',
+    )
+    tournament_target = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=90,
+        help_text='Target amount per team added to the end-of-season tournament.',
+    )
+    signup_fee = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=30,
+        help_text='Signup fee charged per team.',
+    )
+
     def __str__(self):
         return self.name
 
