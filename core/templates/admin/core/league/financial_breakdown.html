@@ -2,7 +2,6 @@
 
 {% block content %}
 <div class="module">
-  <h1>{{ title }}</h1>
   <p><strong>League:</strong> {{ league.name }}</p>
 
   <table>
@@ -12,10 +11,10 @@
     <tr><th>Greens Fee Per Player</th><td>${{ greens_fee|floatformat:2 }}</td></tr>
     <tr><th>Tournament Target Per Team</th><td>${{ tournament_target|floatformat:2 }}</td></tr>
     <tr><th>Weeks</th><td>{{ weeks }}</td></tr>
-    <tr><th>Games Played</th><td>{{ games_played }}</td></tr>
     <tr><th>Total Fees Collected</th><td>${{ total_weekly_collected|floatformat:2 }}</td></tr>
+    <tr><th>Total Payout Pool</th><td>${{ total_weekly_payout_pool|floatformat:2 }}</td></tr>
     <tr><th>Total Payout Amount</th><td>${{ total_payout_amount|floatformat:2 }}</td></tr>
-    <tr><th>Payout Rate</th><td>${{ payout_rate|floatformat:2 }} / win</td></tr>
+    <tr><th>Payout Rate</th><td>${{ payout_rate|floatformat:2 }} / game</td></tr>
   </table>
 </div>
 
@@ -32,7 +31,7 @@
     <tbody>
       {% for row in standings %}
       <tr>
-        <td>{{ row.team.name }}</td>
+        <td>{{ row.team }}</td>
         <td>{{ row.games_won }}</td>
         <td style="text-align:right;">${{ row.payout|floatformat:2 }}</td>
       </tr>
@@ -47,6 +46,7 @@
     <thead>
       <tr>
         <th>Award</th>
+        <th>Player</th>
         <th style="text-align:right;">Amount</th>
       </tr>
     </thead>
@@ -54,6 +54,13 @@
       {% for award in awards %}
       <tr>
         <td>{{ award.label }}</td>
+        <td>
+          {% if award.player %}
+            {{ award.player.player }}{% if award.player.team %} ({{ award.player.team }}){% endif %}
+          {% else %}
+            —
+          {% endif %}
+        </td>
         <td style="text-align:right;">${{ award.amount|floatformat:2 }}</td>
       </tr>
       {% endfor %}

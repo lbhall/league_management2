@@ -236,6 +236,7 @@ class LeagueAdmin(admin.ModelAdmin):
             extra_context=extra_context,
         )
 
+
     def financial_breakdown_view(self, request, object_id):
         league = get_object_or_404(League, pk=object_id, results_type=League.ResultsType.EIGHT_BALL)
 
@@ -256,23 +257,26 @@ class LeagueAdmin(admin.ModelAdmin):
         weekly_payout_pool_per_team = (fee_per_player - greens_fee) * Decimal(team_size)
 
         total_signup_fees = signup_fee * Decimal(team_count)
-        total_weekly_collected = weekly_collection_per_team * Decimal(team_count) * Decimal(weeks)
-        total_greens_fees = weekly_greens_total_per_team * Decimal(team_count) * Decimal(weeks)
-        total_weekly_payout_pool = weekly_payout_pool_per_team * Decimal(team_count) * Decimal(weeks)
+        total_weekly_collected = weekly_collection_per_team * Decimal(team_count)
+        total_greens_fees = weekly_greens_total_per_team * Decimal(team_count)
+        total_weekly_payout_pool = weekly_payout_pool_per_team * Decimal(team_count)
         tournament_money = tournament_target * Decimal(team_count)
+        print(f"tournament_money: {tournament_money}")
 
-        total_payout_amount = total_weekly_payout_pool + tournament_money
+        total_payout_amount = total_weekly_payout_pool - tournament_money
 
         standings_data = []
+        player_stats_data = []
         if active_season:
-            from core.views import build_team_standings
+            from core.views import build_player_stats, build_team_standings
             standings_data = build_team_standings(league, active_season)
+            player_stats_data = build_player_stats(league, active_season)
+
+        total_games_won = sum(Decimal(row['games_won']) for row in standings_data) if standings_data else Decimal('0')
 
         payout_rate = Decimal('0')
-        if standings_data:
-            total_games_won = sum(Decimal(row['games_won']) for row in standings_data)
-            if total_games_won > 0:
-                payout_rate = total_payout_amount / total_games_won
+        if total_games_won > 0:
+            payout_rate = total_payout_amount / total_games_won
 
         standings = []
         for row in standings_data:
@@ -282,12 +286,42 @@ class LeagueAdmin(admin.ModelAdmin):
                 'payout': Decimal(row['games_won']) * payout_rate,
             })
 
+        def top_player(players, predicate=None, stat_key='wins'):
+            filtered = [
+                p for p in players
+                if (predicate(p) if predicate else True)
+                   and (p['wins'] + p['losses']) > 0
+            ]
+            if not filtered:
+                return None
+            return max(filtered, key=lambda p: (p.get(stat_key, 0), p['wins'], p['player']))
+
         awards = [
-            {'label': 'Top Male', 'amount': Decimal('100')},
-            {'label': 'Top Female', 'amount': Decimal('100')},
-            {'label': 'Most Runouts', 'amount': Decimal('20')},
-            {'label': 'Most 8 on the Breaks', 'amount': Decimal('20')},
-            {'label': 'Most Sweeps', 'amount': Decimal('20')},
+            {
+                'label': 'Top Male',
+                'amount': Decimal('100'),
+                'player': top_player(player_stats_data, lambda p: p['male']),
+            },
+            {
+                'label': 'Top Female',
+                'amount': Decimal('100'),
+                'player': top_player(player_stats_data, lambda p: not p['male']),
+            },
+            {
+                'label': 'Most Runouts',
+                'amount': Decimal('20'),
+                'player': top_player(player_stats_data, stat_key='runs'),
+            },
+            {
+                'label': 'Most 8 on the Breaks',
+                'amount': Decimal('20'),
+                'player': top_player(player_stats_data, stat_key='eights'),
+            },
+            {
+                'label': 'Most Sweeps',
+                'amount': Decimal('20'),
+                'player': top_player(player_stats_data, stat_key='sweeps'),
+            },
         ]
 
         return render(request, 'admin/core/league/financial_breakdown.html', {
@@ -313,6 +347,7 @@ class LeagueAdmin(admin.ModelAdmin):
             'standings': standings,
             'awards': awards,
         })
+
 
 @admin.register(LeagueAdminAccess)
 class LeagueAdminAccessAdmin(admin.ModelAdmin):
