@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 import random
 
 from django.db import transaction
@@ -26,7 +26,6 @@ DAY_NAME_TO_WEEKDAY = {
     'saturday': 5,
     'sunday': 6,
 }
-
 
 def get_next_start_dates(league, from_date, count=5):
     weekday = DAY_NAME_TO_WEEKDAY[league.day_of_week]
@@ -476,3 +475,91 @@ def build_player_archive_stats(season):
         }
         for row in player_results
     }
+
+def _get_swap_placeholder_date(season):
+    existing_dates = set(season.weeks.values_list('date', flat=True))
+
+    candidate_dates = [
+        date(1, 1, 1),
+        date(9999, 12, 31),
+        date(1900, 1, 1),
+        date(2100, 1, 1),
+    ]
+
+    for candidate in candidate_dates:
+        if candidate not in existing_dates:
+            return candidate
+
+    raise ValueError('Unable to find a temporary date for moving weeks.')
+
+
+def _renumber_season_weeks(season):
+    weeks = list(season.weeks.order_by('date', 'id'))
+    playable_weeks = [week for week in weeks if week.number is not None]
+
+    if not playable_weeks:
+        return
+
+    # Clear numbers first so we don't collide on the unique constraint.
+    for week in playable_weeks:
+        week.number = None
+        week.save(update_fields=['number'])
+
+    # Reassign in date order.
+    for index, week in enumerate(playable_weeks, start=1):
+        week.number = index
+        week.save(update_fields=['number'])
+
+
+@transaction.atomic
+def move_week_up(week):
+    season_weeks = list(week.season.weeks.order_by('date', 'number', 'id'))
+    current_index = season_weeks.index(week)
+
+    if current_index == 0:
+        raise ValueError('The first week of the season cannot be moved up.')
+
+    previous_week = season_weeks[current_index - 1]
+    placeholder_date = _get_swap_placeholder_date(week.season)
+
+    previous_week_date = previous_week.date
+    week_date = week.date
+
+    previous_week.date = placeholder_date
+    previous_week.save(update_fields=['date'])
+
+    week.date = previous_week_date
+    week.save(update_fields=['date'])
+
+    previous_week.date = week_date
+    previous_week.save(update_fields=['date'])
+
+    _renumber_season_weeks(week.season)
+    return week
+
+
+@transaction.atomic
+def move_week_down(week):
+    season_weeks = list(week.season.weeks.order_by('date', 'number', 'id'))
+    current_index = season_weeks.index(week)
+
+    if current_index == len(season_weeks) - 1:
+        raise ValueError('The last week of the season cannot be moved down.')
+
+    next_week = season_weeks[current_index + 1]
+    placeholder_date = _get_swap_placeholder_date(week.season)
+
+    next_week_date = next_week.date
+    week_date = week.date
+
+    next_week.date = placeholder_date
+    next_week.save(update_fields=['date'])
+
+    week.date = next_week_date
+    week.save(update_fields=['date'])
+
+    next_week.date = week_date
+    next_week.save(update_fields=['date'])
+
+    _renumber_season_weeks(week.season)
+    return week

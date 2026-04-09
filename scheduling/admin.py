@@ -16,9 +16,12 @@ from .services import (
     get_next_start_dates,
     get_valid_destination_weeks,
     move_match_to_week,
+    move_week_down,
+    move_week_up,
     rebalance_season_matches,
     recreate_season_schedule,
 )
+
 
 
 def get_user_league(request):
@@ -149,11 +152,6 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
     ordering = ('league__name', 'name')
     inlines = [WeekInline]
 
-    def get_list_filter(self, request):
-        if request.user.is_superuser:
-            return ('league', 'status')
-        return ('status',)
-
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -197,6 +195,16 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 self.admin_site.admin_view(self.move_match_view),
                 name='scheduling_season_move_match',
             ),
+            path(
+                '<path:object_id>/move-week/<int:week_id>/up/',
+                self.admin_site.admin_view(self.move_week_up_view),
+                name='scheduling_season_move_week_up',
+            ),
+            path(
+                '<path:object_id>/move-week/<int:week_id>/down/',
+                self.admin_site.admin_view(self.move_week_down_view),
+                name='scheduling_season_move_week_down',
+            ),
         ]
         return custom_urls + urls
 
@@ -222,13 +230,58 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 'matches__result',
             ).order_by('date', 'number')
         )
+        teams = list(season.league.teams.order_by('name'))
 
-        for week in weeks:
+        for index, week in enumerate(weeks):
+            scheduled_team_ids = set()
             for match in week.matches.all():
                 match.valid_destination_weeks = get_valid_destination_weeks(season, match)
                 match.has_result = hasattr(match, 'result')
+                scheduled_team_ids.add(match.home_team_id)
+                scheduled_team_ids.add(match.away_team_id)
+
+            week.bye_teams = [
+                team for team in teams
+                if team.id not in scheduled_team_ids
+            ]
+            week.can_move_up = index > 0
+            week.can_move_down = index < len(weeks) - 1
 
         return weeks
+
+    def move_week_up_view(self, request, object_id, week_id):
+        season = self._get_league_scoped_object(request, object_id)
+
+        if request.method != 'POST':
+            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+
+        week = get_object_or_404(Week, pk=week_id, season=season)
+
+        try:
+            move_week_up(week)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+
+        self.message_user(request, 'Week moved up successfully.', level=messages.SUCCESS)
+        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+
+    def move_week_down_view(self, request, object_id, week_id):
+        season = self._get_league_scoped_object(request, object_id)
+
+        if request.method != 'POST':
+            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+
+        week = get_object_or_404(Week, pk=week_id, season=season)
+
+        try:
+            move_week_down(week)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+
+        self.message_user(request, 'Week moved down successfully.', level=messages.SUCCESS)
+        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
 
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
         extra_context = extra_context or {}

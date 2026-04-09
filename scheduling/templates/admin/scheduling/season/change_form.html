@@ -19,11 +19,27 @@
             padding: 12px 16px;
             border-bottom: 1px solid #eee;
             background: #f8f8f8;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
         }
 
         .schedule-week-card.schedule-week-holiday .schedule-week-header {
             background: #f7e7a8;
             border-bottom: 1px solid #d6b656;
+        }
+
+        .schedule-week-header-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .schedule-week-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
 
         .schedule-week-title {
@@ -78,6 +94,21 @@
             color: #333;
             font-size: 12px;
             margin-top: 4px;
+        }
+
+        .schedule-meta.schedule-home-venue {
+            color: #8a8a8a;
+            font-weight: 400;
+        }
+
+        .schedule-bye-list {
+            margin: 12px 0 0;
+            padding-left: 18px;
+            color: #666;
+        }
+
+        .schedule-bye-list li {
+            margin-bottom: 4px;
         }
 
         .schedule-disabled-note {
@@ -186,26 +217,45 @@
                 {% for week in schedule_weeks %}
                     <div class="schedule-week-card {% if week.number is None %}schedule-week-holiday{% endif %}">
                         <div class="schedule-week-header">
-                            <div class="schedule-week-title">
-                                {% if week.number %}
-                                    Week {{ week.number }}
-                                {% else %}
-                                    Holiday / No Matches
+                            <div class="schedule-week-header-main">
+                                <div class="schedule-week-title">
+                                    {% if week.number %}
+                                        Week {{ week.number }}
+                                    {% else %}
+                                        Holiday / No Matches
+                                    {% endif %}
+                                </div>
+
+                                <div class="schedule-meta">{{ week.date }}</div>
+
+                                {% if week.number is None %}
+                                    <div class="schedule-holiday-label">Holiday Week</div>
+                                {% endif %}
+
+                                {% if week.notes %}
+                                    {% if week.number is None %}
+                                        <p class="schedule-holiday-note">Holiday: {{ week.notes }}</p>
+                                    {% else %}
+                                        <div class="schedule-meta">Notes: {{ week.notes }}</div>
+                                    {% endif %}
                                 {% endif %}
                             </div>
 
-                            <div class="schedule-meta">{{ week.date }}</div>
-
-                            {% if week.number is None %}
-                                <div class="schedule-holiday-label">Holiday Week</div>
-                            {% endif %}
-
-                            {% if week.notes %}
-                                {% if week.number is None %}
-                                    <p class="schedule-holiday-note">Holiday: {{ week.notes }}</p>
-                                {% else %}
-                                    <div class="schedule-meta">Notes: {{ week.notes }}</div>
-                                {% endif %}
+                            {% if week.number is not None %}
+                                <div class="schedule-week-actions">
+                                    {% if week.can_move_up %}
+                                        <form action="{% url 'admin:scheduling_season_move_week_up' original.pk week.pk %}" method="post" style="display: inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="button">Move Up</button>
+                                        </form>
+                                    {% endif %}
+                                    {% if week.can_move_down %}
+                                        <form action="{% url 'admin:scheduling_season_move_week_down' original.pk week.pk %}" method="post" style="display: inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="button">Move Down</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
                             {% endif %}
                         </div>
 
@@ -230,7 +280,7 @@
                                             <tr>
                                                 <td>
                                                     <strong>{{ match.home_team }}</strong> vs <strong>{{ match.away_team }}</strong>
-                                                    <div class="schedule-meta">
+                                                    <div class="schedule-meta schedule-home-venue">
                                                         Home venue: {{ match.home_team.venue.name }}
                                                     </div>
                                                 </td>
@@ -250,7 +300,6 @@
                                                         >
                                                         <button type="submit" class="button">Update</button>
                                                     </form>
-
                                                 </td>
                                                 <td>
                                                     <form
@@ -303,6 +352,17 @@
                                         {% endfor %}
                                     </tbody>
                                 </table>
+
+                                {% if week.bye_teams %}
+                                    <div class="schedule-meta" style="margin-top: 12px; font-weight: 600;">
+                                        Bye teams:
+                                    </div>
+                                    <ul class="schedule-bye-list">
+                                        {% for team in week.bye_teams %}
+                                            <li>{{ team.name }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
                             {% else %}
                                 <p class="schedule-empty">No matches scheduled for this week.</p>
                             {% endif %}
