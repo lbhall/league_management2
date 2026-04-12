@@ -590,70 +590,84 @@ def team_detail(request, team_id):
 
     team_schedule = []
     if active_season:
-        matches = (
-            Match.objects.filter(
-                week__season=active_season,
-            ).filter(
-                Q(home_team=team) | Q(away_team=team)
-            ).select_related(
-                'home_team',
-                'away_team',
-                'week',
-            ).prefetch_related(
+        monday_weeks = (
+            Week.objects.filter(
+                season=active_season,
+                date__week_day=2,
+            )
+            .prefetch_related(
                 Prefetch(
-                    'result__player_results',
-                    queryset=PlayerMatchResult.objects.select_related('represented_team'),
+                    'matches',
+                    queryset=Match.objects.select_related(
+                        'home_team',
+                        'away_team',
+                        'week',
+                    ).order_by('sort_order', 'id'),
                 )
-            ).order_by('week__date', 'sort_order', 'id')
+            )
+            .order_by('date')
         )
 
-        total_games_per_match = team.league.team_size * team.league.team_size
+        for week in monday_weeks:
+            is_holiday_week = week.number is None
+            week_match = None if is_holiday_week else week.matches.filter(
+                Q(home_team=team) | Q(away_team=team)
+            ).first()
 
-        for match in matches:
-            team_games_won = None
-            opponent_games_won = None
-            result_label = ''
+            if week_match:
+                is_home = week_match.home_team_id == team.id
+                opponent = week_match.away_team if is_home else week_match.home_team
 
-            match_detail_rows = []
+                result_label = ''
+                match_detail_rows = []
 
-            if hasattr(match, 'result'):
-                home_games_won = 0
-                away_games_won = 0
+                if hasattr(week_match, 'result'):
+                    home_games_won = 0
+                    away_games_won = 0
 
-                for player_result in match.result.player_results.all():
-                    if player_result.represented_team_id == match.home_team_id:
-                        home_games_won += player_result.wins
-                    elif player_result.represented_team_id == match.away_team_id:
-                        away_games_won += player_result.wins
+                    for player_result in week_match.result.player_results.all():
+                        if player_result.represented_team_id == week_match.home_team_id:
+                            home_games_won += player_result.wins
+                        elif player_result.represented_team_id == week_match.away_team_id:
+                            away_games_won += player_result.wins
 
-                    match_detail_rows.append({
-                        'player': player_result.player.name,
-                        'represented_team': player_result.represented_team.name,
-                        'wins': player_result.wins,
-                        'losses': player_result.losses,
-                        'runouts': player_result.runouts,
-                        'eights': player_result.eight_on_the_breaks,
-                        'sweeps': player_result.won_all_games,
-                    })
+                        match_detail_rows.append({
+                            'player': player_result.player.name,
+                            'represented_team': player_result.represented_team.name,
+                            'wins': player_result.wins,
+                            'losses': player_result.losses,
+                            'runouts': player_result.runouts,
+                            'eights': player_result.eight_on_the_breaks,
+                            'sweeps': player_result.won_all_games,
+                        })
 
-                if team.id == match.home_team_id:
-                    team_games_won = home_games_won
-                    opponent_games_won = away_games_won
-                else:
-                    team_games_won = away_games_won
-                    opponent_games_won = home_games_won
+                    team_games_won = home_games_won if is_home else away_games_won
+                    opponent_games_won = away_games_won if is_home else home_games_won
+                    result_label = f'{team_games_won}-{opponent_games_won}'
 
-                result_label = f'{team_games_won}-{opponent_games_won}'
-
-            team_schedule.append({
-                'match_id': match.id,
-                'week': match.week,
-                'is_home': match.home_team_id == team.id,
-                'opponent': match.away_team if match.home_team_id == team.id else match.home_team,
-                'location': match.location,
-                'result_label': result_label,
-                'match_detail_rows': match_detail_rows,
-            })
+                team_schedule.append({
+                    'match_id': week_match.id,
+                    'week': week,
+                    'is_home': is_home,
+                    'opponent': opponent,
+                    'location': week_match.location,
+                    'result_label': result_label,
+                    'match_detail_rows': match_detail_rows,
+                    'is_bye': False,
+                    'is_holiday': False,
+                })
+            else:
+                team_schedule.append({
+                    'match_id': None,
+                    'week': week,
+                    'is_home': False,
+                    'opponent': 'Bye',
+                    'location': '',
+                    'result_label': '',
+                    'match_detail_rows': [],
+                    'is_bye': True,
+                    'is_holiday': is_holiday_week,
+                })
 
     return render(request, 'team_detail.html', {
         'active_league': active_league,
@@ -668,6 +682,7 @@ def team_detail(request, team_id):
         'team_schedule': team_schedule,
     })
 
+# ... existing code ...
 def build_player_vs_team_stats(player, active_season, through_week=None):
     results = (
         PlayerMatchResult.objects.filter(

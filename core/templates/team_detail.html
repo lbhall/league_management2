@@ -130,7 +130,11 @@
                                             </td>
                                             <td>{{ entry.location }}</td>
                                             <td>
-                                                {% if entry.result_label %}
+                                                {% if entry.is_holiday %}
+
+                                                {% elif entry.is_bye %}
+
+                                                {% elif entry.result_label %}
                                                     <a
                                                         href="#"
                                                         data-bs-toggle="modal"
@@ -139,7 +143,7 @@
                                                         {{ entry.result_label }}
                                                     </a>
                                                 {% else %}
-                                                    <span class="text-muted">No result</span>
+                                                    No Result
                                                 {% endif %}
                                             </td>
                                         </tr>

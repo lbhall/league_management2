@@ -1,0 +1,587 @@
+{
+    "season_name": "Active",
+    "weeks": [
+        {
+            "number": 1,
+            "date": "2026-04-13",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Mr And Miss Cue",
+                    "away_team": "Chalk It Up",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Predators",
+                    "away_team": "Bus Boys",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Let's Do This",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Bam Bitches",
+                    "away_team": "Here for Beer",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "K Train",
+                    "venue": "BYE"
+                }
+            ]
+        },
+        {
+            "number": 2,
+            "date": "2026-04-20",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Chalk It Up",
+                    "away_team": "Predators",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "8 Balls & A Nice Rack",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Here for Beer",
+                    "away_team": "Bus Boys",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "K Train",
+                    "away_team": "Let's Do This",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Bam Bitches",
+                    "venue": "BYE"
+                }
+            ]
+        },
+        {
+            "number": 3,
+            "date": "2026-04-27",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Chalk It Up",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Predators",
+                    "away_team": "Here for Beer",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Mr And Miss Cue",
+                    "away_team": "K Train",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Bus Boys",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Let's Do This",
+                    "away_team": "Bam Bitches",
+                    "venue": "Half Dollar"
+                }
+            ]
+        },
+        {
+            "number": 4,
+            "date": "2026-05-04",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Here for Beer",
+                    "away_team": "Chalk It Up",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "8 Balls & A Nice Rack",
+                    "away_team": "K Train",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Predators",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Bam Bitches",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Let's Do This",
+                    "away_team": "Bus Boys",
+                    "venue": "Half Dollar"
+                }
+            ]
+        },
+        {
+            "number": 5,
+            "date": "2026-05-11",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Chalk It Up",
+                    "away_team": "K Train",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Here for Beer",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Bam Bitches",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Predators",
+                    "away_team": "Let's Do This",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Mr And Miss Cue",
+                    "away_team": "Bus Boys",
+                    "venue": "Cue Club"
+                }
+            ]
+        },
+        {
+            "number": 6,
+            "date": "2026-05-18",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "BYE",
+                    "away_team": "Chalk It Up",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Bam Bitches",
+                    "away_team": "K Train",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Here for Beer",
+                    "away_team": "Let's Do This",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Bus Boys",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Mr And Miss Cue",
+                    "away_team": "Predators",
+                    "venue": "Cue Club"
+                }
+            ]
+        },
+        {
+            "number": 0,
+            "date": "2026-05-25",
+            "notes": "Memorial Day",
+            "matches": []
+        },
+        {
+            "number": 7,
+            "date": "2026-06-01",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Chalk It Up",
+                    "away_team": "Bam Bitches",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Let's Do This",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "K Train",
+                    "away_team": "Bus Boys",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Here for Beer",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "8 Balls & A Nice Rack",
+                    "away_team": "Predators",
+                    "venue": "Cue Club"
+                }
+            ]
+        },
+        {
+            "number": 8,
+            "date": "2026-06-08",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Let's Do This",
+                    "away_team": "Chalk It Up",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Bus Boys",
+                    "away_team": "Bam Bitches",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Predators",
+                    "away_team": "K Train",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "8 Balls & A Nice Rack",
+                    "away_team": "Here for Beer",
+                    "venue": "Cue Club"
+                }
+            ]
+        },
+        {
+            "number": 9,
+            "date": "2026-06-15",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Chalk It Up",
+                    "away_team": "Bus Boys",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Mr And Miss Cue",
+                    "away_team": "Let's Do This",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Predators",
+                    "away_team": "Bam Bitches",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "K Train",
+                    "away_team": "Here for Beer",
+                    "venue": "Half Dollar"
+                }
+            ]
+        },
+        {
+            "number": 10,
+            "date": "2026-06-22",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Chalk It Up",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Bus Boys",
+                    "away_team": "Predators",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "8 Balls & A Nice Rack",
+                    "away_team": "Let's Do This",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Here for Beer",
+                    "away_team": "Bam Bitches",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "K Train",
+                    "venue": "BYE"
+                }
+            ]
+        },
+        {
+            "number": 11,
+            "date": "2026-06-29",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Predators",
+                    "away_team": "Chalk It Up",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Mr And Miss Cue",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Bus Boys",
+                    "away_team": "Here for Beer",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Let's Do This",
+                    "away_team": "K Train",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Bam Bitches",
+                    "venue": "BYE"
+                }
+            ]
+        },
+        {
+            "number": 12,
+            "date": "2026-07-06",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "8 Balls & A Nice Rack",
+                    "away_team": "Chalk It Up",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Here for Beer",
+                    "away_team": "Predators",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "K Train",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Bus Boys",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Bam Bitches",
+                    "away_team": "Let's Do This",
+                    "venue": "Half Dollar"
+                }
+            ]
+        },
+        {
+            "number": 13,
+            "date": "2026-07-13",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Chalk It Up",
+                    "away_team": "Here for Beer",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "K Train",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Predators",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Mr And Miss Cue",
+                    "away_team": "Bam Bitches",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Bus Boys",
+                    "away_team": "Let's Do This",
+                    "venue": "Half Dollar"
+                }
+            ]
+        },
+        {
+            "number": 14,
+            "date": "2026-07-20",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "K Train",
+                    "away_team": "Chalk It Up",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Here for Beer",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "8 Balls & A Nice Rack",
+                    "away_team": "Bam Bitches",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Let's Do This",
+                    "away_team": "Predators",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Bus Boys",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "Half Dollar"
+                }
+            ]
+        },
+        {
+            "number": 15,
+            "date": "2026-07-27",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "BYE",
+                    "away_team": "Chalk It Up",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "K Train",
+                    "away_team": "Bam Bitches",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Let's Do This",
+                    "away_team": "Here for Beer",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "8 Balls & A Nice Rack",
+                    "away_team": "Bus Boys",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Predators",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "Cue Club"
+                }
+            ]
+        },
+        {
+            "number": 16,
+            "date": "2026-08-03",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Bam Bitches",
+                    "away_team": "Chalk It Up",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Let's Do This",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Bus Boys",
+                    "away_team": "K Train",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Mr And Miss Cue",
+                    "away_team": "Here for Beer",
+                    "venue": "Cue Club"
+                },
+                {
+                    "home_team": "Predators",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "Cue Club"
+                }
+            ]
+        },
+        {
+            "number": 17,
+            "date": "2026-08-10",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Chalk It Up",
+                    "away_team": "Let's Do This",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Bam Bitches",
+                    "away_team": "Bus Boys",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "K Train",
+                    "away_team": "Predators",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Here for Beer",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "Cue Club"
+                }
+            ]
+        },
+        {
+            "number": 18,
+            "date": "2026-08-17",
+            "notes": "",
+            "matches": [
+                {
+                    "home_team": "Bus Boys",
+                    "away_team": "Chalk It Up",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Let's Do This",
+                    "away_team": "Mr And Miss Cue",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "Bam Bitches",
+                    "away_team": "Predators",
+                    "venue": "Half Dollar"
+                },
+                {
+                    "home_team": "BYE",
+                    "away_team": "8 Balls & A Nice Rack",
+                    "venue": "BYE"
+                },
+                {
+                    "home_team": "Here for Beer",
+                    "away_team": "K Train",
+                    "venue": "Cue Club"
+                }
+            ]
+        }
+    ]
+}
