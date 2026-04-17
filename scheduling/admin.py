@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils.html import format_html
+from django.template.response import TemplateResponse
 
 from core.models import League, Team
 from .models import Holiday, Match, Season, Week
@@ -21,7 +22,6 @@ from .services import (
     rebalance_season_matches,
     recreate_season_schedule,
 )
-
 
 
 def get_user_league(request):
@@ -156,6 +156,21 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path(
+                'schedule/',
+                self.admin_site.admin_view(self.schedule_redirect_view),
+                name='scheduling_schedule',
+            ),
+            path(
+                '<path:object_id>/manage-schedule/',
+                self.admin_site.admin_view(self.manage_schedule_view),
+                name='scheduling_season_manage_schedule',
+            ),
+            path(
+                '<path:object_id>/manage-schedule/',
+                self.admin_site.admin_view(self.manage_schedule_view),
+                name='scheduling_season_manage_schedule',
+            ),
+            path(
                 '<path:object_id>/recreate-schedule/',
                 self.admin_site.admin_view(self.recreate_schedule_view),
                 name='scheduling_season_recreate_schedule',
@@ -208,6 +223,46 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         ]
         return custom_urls + urls
 
+    def schedule_redirect_view(self, request):
+        user_league = get_user_league(request)
+
+        if user_league is not None:
+            season = Season.objects.filter(
+                league=user_league,
+                status=Season.Status.ACTIVE,
+            ).order_by('id').first()
+
+            if season:
+                return HttpResponseRedirect(
+                    reverse('admin:scheduling_season_manage_schedule', args=[season.pk])
+                )
+
+            return HttpResponseRedirect(reverse('admin:scheduling_season_changelist'))
+
+        leagues = League.objects.order_by('name')
+        league_rows = []
+        for league in leagues:
+            season = Season.objects.filter(
+                league=league,
+                status=Season.Status.ACTIVE,
+            ).order_by('id').first()
+
+            if season:
+                league_rows.append({
+                    'league': league,
+                    'url': reverse('admin:scheduling_season_manage_schedule', args=[season.pk]),
+                })
+
+        return TemplateResponse(
+            request,
+            'admin/scheduling/schedule_selector.html',
+            {
+                **self.admin_site.each_context(request),
+                'title': 'Choose a League Schedule',
+                'league_rows': league_rows,
+            },
+        )
+
     def _get_league_scoped_object(self, request, object_id):
         queryset = self.get_queryset(request)
         return queryset.get(pk=object_id)
@@ -249,11 +304,48 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
 
         return weeks
 
+    def _get_redirect_url(self, request, season):
+        next_url = request.POST.get('next')
+        if next_url:
+            return HttpResponseRedirect(next_url)
+        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+
+    def manage_schedule_view(self, request, object_id):
+        season = self._get_league_scoped_object(request, object_id)
+        league = season.league
+
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'season': season,
+            'league': league,
+            'schedule_weeks': self._get_schedule_data(season),
+            'start_date_choices': self._get_start_date_choices(season),
+            'recreate_schedule_url': reverse('admin:scheduling_season_recreate_schedule', args=[season.pk]),
+            'mirror_schedule_url': reverse('admin:scheduling_season_mirror_schedule', args=[season.pk]),
+            'rebalance_schedule_url': reverse('admin:scheduling_season_rebalance_schedule', args=[season.pk]),
+            'swap_match_url_name': 'admin:scheduling_season_swap_match',
+            'update_match_location_url_name': 'admin:scheduling_season_update_match_location',
+            'move_match_url_name': 'admin:scheduling_season_move_match',
+        }
+
+        if season.status == Season.Status.WORKING:
+            context['move_live_url'] = reverse('admin:scheduling_season_move_live', args=[season.pk])
+
+        if season.status == Season.Status.ACTIVE:
+            context['archive_season_url'] = reverse('admin:scheduling_season_archive', args=[season.pk])
+
+        return TemplateResponse(
+            request,
+            'admin/scheduling/season/manage_schedule.html',
+            context
+        )
+
     def move_week_up_view(self, request, object_id, week_id):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         week = get_object_or_404(Week, pk=week_id, season=season)
 
@@ -261,16 +353,16 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             move_week_up(week)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         self.message_user(request, 'Week moved up successfully.', level=messages.SUCCESS)
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
     def move_week_down_view(self, request, object_id, week_id):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         week = get_object_or_404(Week, pk=week_id, season=season)
 
@@ -278,52 +370,12 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             move_week_down(week)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         self.message_user(request, 'Week moved down successfully.', level=messages.SUCCESS)
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
-        extra_context = extra_context or {}
-
-        if object_id:
-            season = self._get_league_scoped_object(request, object_id)
-            if season:
-                league = season.league
-            else:
-                league = None
-
-            extra_context['start_date_choices'] = self._get_start_date_choices(season)
-            extra_context['recreate_schedule_url'] = reverse(
-                'admin:scheduling_season_recreate_schedule',
-                args=[season.pk],
-            )
-            extra_context['mirror_schedule_url'] = reverse(
-                'admin:scheduling_season_mirror_schedule',
-                args=[season.pk],
-            )
-            extra_context['rebalance_schedule_url'] = reverse(
-                'admin:scheduling_season_rebalance_schedule',
-                args=[season.pk],
-            )
-            extra_context['schedule_weeks'] = self._get_schedule_data(season)
-            extra_context['swap_match_url_name'] = 'admin:scheduling_season_swap_match'
-            extra_context['update_match_location_url_name'] = 'admin:scheduling_season_update_match_location'
-            extra_context['move_match_url_name'] = 'admin:scheduling_season_move_match'
-            extra_context['league'] = league
-
-            if season.status == Season.Status.WORKING:
-                extra_context['move_live_url'] = reverse(
-                    'admin:scheduling_season_move_live',
-                    args=[season.pk],
-                )
-
-            if season.status == Season.Status.ACTIVE:
-                extra_context['archive_season_url'] = reverse(
-                    'admin:scheduling_season_archive',
-                    args=[season.pk],
-                )
-
         return super().changeform_view(
             request,
             object_id=object_id,
@@ -335,13 +387,13 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         try:
             archived_season = archive_season(season)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         self.message_user(
             request,
@@ -354,18 +406,18 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         start_date_value = request.POST.get('start_date')
         if not start_date_value:
             self.message_user(request, 'Please choose a start date before recreating the schedule.', level=messages.ERROR)
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         try:
             start_date = date.fromisoformat(start_date_value)
         except ValueError:
             self.message_user(request, 'Invalid start date selected.', level=messages.ERROR)
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         created_weeks = recreate_season_schedule(season, start_date=start_date)
 
@@ -374,13 +426,13 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             f'Schedule recreated successfully with {len(created_weeks)} week(s).',
             level=messages.SUCCESS,
         )
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
     def mirror_schedule_view(self, request, object_id):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         created_weeks = create_mirrored_season_schedule(season)
 
@@ -389,17 +441,17 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             f'Mirrored schedule created successfully with {len(created_weeks)} week(s).',
             level=messages.SUCCESS,
         )
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
     def move_live_view(self, request, object_id):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         if season.status != Season.Status.WORKING:
             self.message_user(request, 'Only a working season can be moved live.', level=messages.ERROR)
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         Season.objects.filter(
             league=season.league,
@@ -410,13 +462,13 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         season.save(update_fields=['status'])
 
         self.message_user(request, 'Season moved live successfully.', level=messages.SUCCESS)
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
     def rebalance_schedule_view(self, request, object_id):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         moved_matches = rebalance_season_matches(season)
 
@@ -425,13 +477,13 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             f'Rebalanced schedule successfully. Moved {len(moved_matches)} match(es).',
             level=messages.SUCCESS,
         )
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
     def swap_match_view(self, request, object_id, match_id):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         match = get_object_or_404(
             Match.objects.select_related('week__season', 'home_team__venue', 'away_team__venue'),
@@ -453,7 +505,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 f'Cannot swap teams because venue "{new_home.venue.name}" would exceed its max home teams limit for this week.',
                 level=messages.ERROR,
             )
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         match.home_team = original_away
         match.away_team = original_home
@@ -465,13 +517,13 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         match.save()
 
         self.message_user(request, 'Match home and away teams were swapped.', level=messages.SUCCESS)
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
     def update_match_location_view(self, request, object_id, match_id):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         match = get_object_or_404(
             Match.objects.select_related('week__season'),
@@ -484,13 +536,13 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         match.save(update_fields=['location'])
 
         self.message_user(request, 'Match location updated.', level=messages.SUCCESS)
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
     def move_match_view(self, request, object_id, match_id):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         match = get_object_or_404(
             Match.objects.select_related('week__season', 'home_team__venue'),
@@ -501,7 +553,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         target_week_id = request.POST.get('target_week')
         if not target_week_id:
             self.message_user(request, 'Please choose a destination week.', level=messages.ERROR)
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         try:
             if target_week_id == 'new':
@@ -516,10 +568,10 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             move_match_to_week(match, target_week)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
-            return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+            return self._get_redirect_url(request, season)
 
         self.message_user(request, 'Match moved successfully.', level=messages.SUCCESS)
-        return HttpResponseRedirect(reverse('admin:scheduling_season_change', args=[season.pk]))
+        return self._get_redirect_url(request, season)
 
 @admin.register(Week)
 class WeekAdmin(admin.ModelAdmin):

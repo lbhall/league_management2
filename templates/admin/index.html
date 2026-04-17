@@ -1,0 +1,14 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+    <div class="module">
+        <h2>Custom</h2>
+        <ul>
+            <li>
+                <a href="{% url 'admin:scheduling_schedule' %}">Schedule</a>
+            </li>
+        </ul>
+    </div>
+
+    {{ block.super }}
+{% endblock %}

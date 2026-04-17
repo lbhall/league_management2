@@ -1,0 +1,31 @@
+{% load i18n %}
+
+{% if available_apps %}
+    <nav id="nav-sidebar">
+        {% for app in available_apps %}
+            <div class="module">
+                <table>
+                    <caption>
+                        <a href="{{ app.app_url }}">{{ app.name }}</a>
+                    </caption>
+                    {% for model in app.models %}
+                        <tr>
+                            <th scope="row">
+                                <a href="{{ model.admin_url }}">{{ model.name }}</a>
+                            </th>
+                        </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        {% endfor %}
+
+        <div class="module">
+            <h2>Custom</h2>
+            <ul>
+                <li>
+                    <a href="{% url 'admin:scheduling_schedule' %}">Schedule</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+{% endif %}

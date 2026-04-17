@@ -5,6 +5,7 @@ from django.db.models import Prefetch, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
+from django.utils import timezone
 
 from content.models import NewsItem, Rule
 from results.models import PlayerMatchResult
@@ -316,7 +317,7 @@ def build_player_stats(active_league, active_season, through_week=None):
 
 def home(request):
     active_league = get_active_league(request)
-    today = date.today()
+    today = timezone.localdate()
 
     news_items = NewsItem.objects.none()
     current_schedule = []
@@ -556,6 +557,7 @@ def rules(request):
         'rule_blocks': rule_blocks,
     })
 
+# ... existing code ...
 def team_detail(request, team_id):
     active_league = get_active_league(request)
     active_season = get_active_season(active_league)
@@ -582,11 +584,7 @@ def team_detail(request, team_id):
                 games_lost = standing['games_lost']
                 break
 
-    all_player_stats = build_player_stats(team.league, active_season)
-    team_player_stats = [
-        stat for stat in all_player_stats
-        if stat['team'] == team.name and (stat['wins'] > 0 or stat['losses'] > 0 or stat['runs'] > 0 or stat['sweeps'] > 0 or stat['eights'] > 0)
-    ]
+    team_player_stats = build_team_player_stats(active_season, team)
 
     team_schedule = []
     if active_season:
@@ -594,8 +592,7 @@ def team_detail(request, team_id):
             Week.objects.filter(
                 season=active_season,
                 date__week_day=2,
-            )
-            .prefetch_related(
+            )            .prefetch_related(
                 Prefetch(
                     'matches',
                     queryset=Match.objects.select_related(
@@ -956,3 +953,65 @@ def archived_seasons(request):
         'archived_team_standings': archived_team_standings,
         'archived_player_standings': archived_player_standings,
     })
+
+def build_team_player_stats(active_season, team, through_week=None):
+    if not active_season:
+        return []
+
+    results = (
+        PlayerMatchResult.objects.filter(
+            match_result__match__week__season=active_season,
+            represented_team=team,
+        )
+        .select_related(
+            'player',
+            'represented_team',
+            'match_result__match__week',
+        )
+        .order_by('player__name', 'match_result__match__week__date', 'match_result__match__sort_order', 'id')
+    )
+
+    if through_week is not None:
+        results = results.filter(
+            match_result__match__week__date__lte=through_week.date,
+        )
+
+    player_map = {}
+
+    for player_result in results:
+        player_id = player_result.player_id
+
+        if player_id not in player_map:
+            player_map[player_id] = {
+                'player_id': player_id,
+                'player': player_result.player.name,
+                'team': player_result.represented_team.name,
+                'male': player_result.player.male,
+                'wins': 0,
+                'losses': 0,
+                'percentage': 0.0,
+                'runs': 0,
+                'sweeps': 0,
+                'eights': 0,
+                'tie_breaker': 0,
+            }
+
+        player_map[player_id]['wins'] += player_result.wins
+        player_map[player_id]['losses'] += player_result.losses
+        player_map[player_id]['runs'] += player_result.runouts
+        player_map[player_id]['sweeps'] += 1 if player_result.won_all_games else 0
+        player_map[player_id]['eights'] += player_result.eight_on_the_breaks
+
+    for stat in player_map.values():
+        stat['tie_breaker'] = stat['sweeps'] + stat['eights'] + stat['runs']
+        total = stat['wins'] + stat['losses']
+        stat['percentage'] = ((stat['wins'] / total) * 100) if total > 0 else 0.0
+
+    return sorted(
+        player_map.values(),
+        key=lambda stat: (
+            -stat['wins'],
+            -stat['tie_breaker'],
+            stat['player'],
+        ),
+    )
