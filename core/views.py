@@ -585,7 +585,7 @@ def team_detail(request, team_id):
     all_player_stats = build_player_stats(team.league, active_season)
     team_player_stats = [
         stat for stat in all_player_stats
-        if stat['team'] == team.name and (stat['wins'] > 0 or stat['losses'] > 0 or stat['runs'] > 0 or stat['sweeps'] > 0 or stat['eights'] > 0)
+        if stat['team'] == team.name
     ]
 
     team_schedule = []
@@ -682,7 +682,6 @@ def team_detail(request, team_id):
         'team_schedule': team_schedule,
     })
 
-# ... existing code ...
 def build_player_vs_team_stats(player, active_season, through_week=None):
     results = (
         PlayerMatchResult.objects.filter(
