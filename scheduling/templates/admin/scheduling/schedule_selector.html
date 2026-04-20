@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+    <div class="module">
+        <h2>Choose a League Schedule</h2>
+
+        {% if league_rows %}
+            <ul>
+                {% for row in league_rows %}
+                    <li>
+                        <a href="{{ row.url }}">{{ row.league.name }}</a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No active league schedules are available.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

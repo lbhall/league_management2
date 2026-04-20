@@ -1,0 +1,409 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        #content {
+            width: 100%;
+        }
+
+        #content.colMS {
+            margin-left: 0;
+        }
+
+        #nav-sidebar {
+            display: none;
+        }
+
+        .schedule-week-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            background: #fff;
+        }
+
+        .schedule-week-card.schedule-week-holiday {
+            border: 1px solid #d6b656;
+            background: #fff8db;
+        }
+
+        .schedule-week-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+            background: #f8f8f8;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .schedule-week-card.schedule-week-holiday .schedule-week-header {
+            background: #f7e7a8;
+            border-bottom: 1px solid #d6b656;
+        }
+
+        .schedule-week-header-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .schedule-week-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .schedule-week-title {
+            color: #1f1f1f;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .schedule-week-card.schedule-week-holiday .schedule-week-title {
+            color: #6b5200;
+        }
+
+        .schedule-week-body {
+            padding: 16px;
+        }
+
+        .schedule-match-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .schedule-match-table th,
+        .schedule-match-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+            vertical-align: top;
+        }
+
+        .schedule-match-table th {
+            text-align: left;
+            background: #fafafa;
+            color: #1f1f1f;
+        }
+
+        .schedule-inline-form {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .schedule-location-input {
+            min-width: 220px;
+        }
+
+        .schedule-empty {
+            color: #777;
+            margin: 0;
+        }
+
+        .schedule-meta {
+            color: #333;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .schedule-meta.schedule-home-venue {
+            color: #8a8a8a;
+            font-weight: 400;
+        }
+
+        .schedule-bye-list {
+            margin: 12px 0 0;
+            padding-left: 18px;
+            color: #666;
+        }
+
+        .schedule-bye-list li {
+            margin-bottom: 4px;
+        }
+
+        .schedule-disabled-note {
+            color: #666;
+            font-size: 12px;
+            font-style: italic;
+        }
+
+        .schedule-score-status {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .schedule-score-status.scored {
+            color: #2e7d32;
+        }
+
+        .schedule-score-status.not-scored {
+            color: #8a6d3b;
+        }
+
+        .schedule-holiday-label {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: #c58b00;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .schedule-holiday-note {
+            color: #5a4600;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .object-tools {
+            margin-bottom: 20px;
+        }
+    </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+&rsaquo; <a href="{% url opts|admin_urlname:'change' season.pk %}">{{ season.name }}</a>
+&rsaquo; {% translate 'Manage Schedule' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <ul class="object-tools">
+        {% if start_date_choices and recreate_schedule_url %}
+            <li>
+                <form action="{{ recreate_schedule_url }}" method="post" style="display: inline-flex; gap: 8px; align-items: center; margin-right: 8px;">
+                    {% csrf_token %}
+                    <select name="start_date" required>
+                        {% for choice in start_date_choices %}
+                            <option value="{{ choice.value }}">{{ choice.label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="button">Recreate Schedule</button>
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                </form>
+            </li>
+        {% endif %}
+
+        {% if rebalance_schedule_url %}
+            <li>
+                <form action="{{ rebalance_schedule_url }}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="button">Rebalance Schedule</button>
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                </form>
+            </li>
+        {% endif %}
+
+        {% if mirror_schedule_url %}
+            <li>
+                <form action="{{ mirror_schedule_url }}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="button">Create Mirrored Season</button>
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                </form>
+            </li>
+        {% endif %}
+
+        {% if move_live_url %}
+            <li>
+                <form action="{{ move_live_url }}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="button">Move Season Live</button>
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                </form>
+            </li>
+        {% endif %}
+
+        {% if archive_season_url %}
+            <li>
+                <form action="{{ archive_season_url }}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="button">Archive Season</button>
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                </form>
+            </li>
+        {% endif %}
+    </ul>
+
+    <div class="module aligned">
+        <h2>Schedule for {{ season.name }} ({{ season.league.name }})</h2>
+
+        {% if schedule_weeks %}
+            {% for week in schedule_weeks %}
+                <div class="schedule-week-card {% if week.number is None %}schedule-week-holiday{% endif %}">
+                    <div class="schedule-week-header">
+                        <div class="schedule-week-header-main">
+                            <div class="schedule-week-title">
+                                {% if week.number %}
+                                    Week {{ week.number }}
+                                {% else %}
+                                    Holiday / No Matches
+                                {% endif %}
+                            </div>
+
+                            <div class="schedule-meta">{{ week.date }}</div>
+
+                            {% if week.number is None %}
+                                <div class="schedule-holiday-label">Holiday Week</div>
+                            {% endif %}
+
+                            {% if week.notes %}
+                                {% if week.number is None %}
+                                    <p class="schedule-holiday-note">Holiday: {{ week.notes }}</p>
+                                {% else %}
+                                    <div class="schedule-meta">Notes: {{ week.notes }}</div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+
+                        {% if week.number is not None %}
+                            <div class="schedule-week-actions">
+                                {% if week.can_move_up %}
+                                    <form action="{% url 'admin:scheduling_season_move_week_up' season.pk week.pk %}" method="post" style="display: inline;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="button">Move Up</button>
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    </form>
+                                {% endif %}
+                                {% if week.can_move_down %}
+                                    <form action="{% url 'admin:scheduling_season_move_week_down' season.pk week.pk %}" method="post" style="display: inline;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="button">Move Down</button>
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    </form>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="schedule-week-body">
+                        {% if week.number is None %}
+                            <p class="schedule-empty">No matches scheduled because this is a holiday week.</p>
+                        {% elif week.matches.all %}
+                            <table class="schedule-match-table">
+                                <thead>
+                                    <tr>
+                                        <th>Match</th>
+                                        {% if season.league.results_type != 'one_pocket' %}
+                                        <th>Location</th>
+                                        <th>Swap</th>
+                                        <th>Move</th>
+                                        {% endif %}
+                                        <th>Score</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for match in week.matches.all %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ match.home_team }}</strong> vs <strong>{{ match.away_team }}</strong>
+                                                <div class="schedule-meta schedule-home-venue">
+                                                    Home venue: {{ match.home_team.venue.name }}
+                                                </div>
+                                            </td>
+                                            {% if season.league.results_type != 'one_pocket' %}
+                                            <td>
+                                                <form
+                                                    action="{% url update_match_location_url_name season.pk match.pk %}"
+                                                    method="post"
+                                                    class="schedule-inline-form"
+                                                >
+                                                    {% csrf_token %}
+                                                    <input
+                                                        type="text"
+                                                        name="location"
+                                                        value="{{ match.location }}"
+                                                        class="schedule-location-input"
+                                                    >
+                                                    <button type="submit" class="button">Update</button>
+                                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                </form>
+                                            </td>
+                                            <td>
+                                                <form
+                                                    action="{% url swap_match_url_name season.pk match.pk %}"
+                                                    method="post"
+                                                    class="schedule-inline-form"
+                                                >
+                                                    {% csrf_token %}
+                                                    <label class="schedule-inline-form">
+                                                        <input type="checkbox" name="keep_location" value="1">
+                                                        Keep location
+                                                    </label>
+                                                    <button type="submit" class="button">Swap Home/Away</button>
+                                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                </form>
+                                            </td>
+                                            <td>
+                                                <form
+                                                    action="{% url move_match_url_name season.pk match.pk %}"
+                                                    method="post"
+                                                    class="schedule-inline-form"
+                                                >
+                                                    {% csrf_token %}
+                                                    <select name="target_week" required>
+                                                        {% for destination_week in match.valid_destination_weeks %}
+                                                            <option value="{{ destination_week.pk }}">
+                                                                {{ destination_week }}
+                                                            </option>
+                                                        {% endfor %}
+                                                        <option value="new">Add to new week at end of season</option>
+                                                    </select>
+                                                    <button type="submit" class="button">Move</button>
+                                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                </form>
+                                            </td>
+                                            {% endif %}
+                                            <td>
+                                            {% if season.status == 'active' %}
+                                                {% if match.has_result %}
+                                                    <span class="schedule-score-status scored">✅ Scored</span>
+                                                {% else %}
+                                                    <span class="schedule-score-status not-scored">📝 Not scored</span>
+                                                {% endif %}
+                                                <a class="button" href="{% url 'admin:results_matchresult_enter_score' match.pk %}?next={{ request.get_full_path }}">
+                                                    Enter Score
+                                                </a>
+                                            {% else %}
+                                                <span class="schedule-disabled-note">Available when season is live</span>
+                                            {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+
+                            {% if week.bye_teams %}
+                                <div class="schedule-meta" style="margin-top: 12px; font-weight: 600;">
+                                    Bye teams:
+                                </div>
+                                <ul class="schedule-bye-list">
+                                    {% for team in week.bye_teams %}
+                                        <li>{{ team.name }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        {% else %}
+                            <p class="schedule-empty">No matches scheduled for this week.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="schedule-empty">No schedule has been generated for this season yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
