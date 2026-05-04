@@ -1,4 +1,5 @@
 from datetime import date
+import logging
 
 from django.conf import settings
 from django.db.models import Prefetch, Q
@@ -30,6 +31,22 @@ ONE_POCKET_RACE_ROWS = [
     {'higher_rank': 2, 'lower_rank': 1, 'higher_race': 9, 'lower_race': 7},
     {'higher_rank': 1, 'lower_rank': 1, 'higher_race': 8, 'lower_race': 8},
 ]
+
+
+logging.basicConfig(
+    filename='league.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
 
 
 def get_active_league(request):
@@ -316,6 +333,7 @@ def build_player_stats(active_league, active_season, through_week=None):
 
 
 def home(request):
+    logging.info(f'active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
     today = timezone.localdate()
 
@@ -394,6 +412,7 @@ def home(request):
     })
 
 def schedule(request):
+    logging.info(f'active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
     active_season = get_active_season(active_league)
 

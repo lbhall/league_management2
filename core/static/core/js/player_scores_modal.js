@@ -12,6 +12,11 @@
             },
         });
 
+        if (!response.ok) {
+            console.error('Unable to load player scores modal.', response.status, response.statusText);
+            return;
+        }
+
         const data = await response.json();
 
         let modalContainer = document.getElementById('player-scores-modal-container');
@@ -24,6 +29,11 @@
         modalContainer.innerHTML = data.html;
 
         const modalElement = document.getElementById('playerScoresModal');
+        if (!modalElement || typeof bootstrap === 'undefined') {
+            console.error('Player scores modal could not be initialized.');
+            return;
+        }
+
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
     }
