@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -40,6 +41,11 @@ class MatchResultAdmin(admin.ModelAdmin):
                 'enter-score/<int:match_id>/',
                 self.admin_site.admin_view(self.enter_score_view),
                 name='results_matchresult_enter_score',
+            ),
+            path(
+                'create-player/<int:match_id>/',
+                self.admin_site.admin_view(self.create_player_view),
+                name='results_matchresult_create_player',
             ),
         ]
         return custom_urls + urls
@@ -129,6 +135,28 @@ class MatchResultAdmin(admin.ModelAdmin):
             )
             player_result.full_clean()
             player_result.save()
+
+    def create_player_view(self, request, match_id):
+        if request.method != 'POST':
+            return JsonResponse({'error': 'Method not allowed.'}, status=405)
+
+        match = self._get_scoped_match(request, match_id)
+        league = match.week.season.league
+
+        name = request.POST.get('name', '').strip()
+        male = request.POST.get('male', 'true').lower() != 'false'
+
+        if not name:
+            return JsonResponse({'error': 'Name is required.'}, status=400)
+
+        if Player.objects.filter(league=league, name__iexact=name).exists():
+            return JsonResponse(
+                {'error': f'A player named "{name}" already exists in this league.'},
+                status=400,
+            )
+
+        player = Player.objects.create(league=league, name=name, male=male)
+        return JsonResponse({'id': player.id, 'name': player.name})
 
     def _enter_score_view_eight_ball(self, request, match, league):
         next_url = request.GET.get('next') or request.POST.get('next')
@@ -291,6 +319,7 @@ class MatchResultAdmin(admin.ModelAdmin):
             'away_player_rows': away_player_rows,
             'home_totals': self._calculate_team_totals(home_player_rows),
             'away_totals': self._calculate_team_totals(away_player_rows),
+            'create_player_url': reverse('admin:results_matchresult_create_player', args=[match.id]),
         }
 
         return TemplateResponse(
