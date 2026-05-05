@@ -98,7 +98,7 @@
                         <h2 class="h4 mb-3">Current Schedule</h2>
                         {% if current_schedule_week %}
                             <p class="text-muted mb-3">
-                                {{ current_schedule_week.date }}
+                                {% if not current_schedule_is_holiday %}Week {{ current_schedule_week.number }} &mdash; {% endif %}{{ current_schedule_week.date }}
                                 {% if active_league.results_type == 'one_pocket' and not current_schedule_is_holiday %}
                                     (<a href="#" data-one-pocket-full-schedule-modal>full schedule</a>)
                                 {% endif %}
