@@ -333,7 +333,7 @@ def build_player_stats(active_league, active_season, through_week=None):
 
 
 def home(request):
-    logging.info(f'active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
+    logging.info(f'Home Page -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
     today = timezone.localdate()
 
@@ -412,7 +412,7 @@ def home(request):
     })
 
 def schedule(request):
-    logging.info(f'active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
+    logging.info(f'Schedule -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
     active_season = get_active_season(active_league)
 
@@ -450,6 +450,7 @@ def schedule(request):
 
 
 def standings(request):
+    logging.info(f'Standings -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
     active_season = get_active_season(active_league)
 
@@ -485,6 +486,7 @@ def standings(request):
 
 
 def player_stats(request):
+    logging.info(f'Player Status -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
     active_season = get_active_season(active_league)
 
@@ -519,6 +521,7 @@ def player_stats(request):
     })
 
 def contact_info(request):
+    logging.info(f'Contact Info -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
 
     teams = Team.objects.none()
@@ -536,6 +539,7 @@ def contact_info(request):
     })
 
 def rules(request):
+    logging.info(f'Rules -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
 
     raw_rules = Rule.objects.none()
@@ -578,6 +582,7 @@ def rules(request):
 
 # ... existing code ...
 def team_detail(request, team_id):
+    logging.info(f'Team Detail -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
     active_season = get_active_season(active_league)
 
@@ -912,6 +917,7 @@ def one_pocket_full_schedule_modal(request):
 
 
 def archived_seasons(request):
+    logging.info(f'Archived Seasons -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
 
     archived_season_options = []
