@@ -8,6 +8,7 @@ from django.contrib import admin
 from django.urls import path
 
 from core.views import (
+    archived_player_history,
     archived_seasons,
     contact_info,
     home,
@@ -27,6 +28,7 @@ urlpatterns = [
     path('standings/', standings, name='standings'),
     path('player-stats/', player_stats, name='player_stats'),
     path('archived-seasons/', archived_seasons, name='archived_seasons'),
+    path('archived-player-history/<int:archived_season_id>/<str:player_name>/', archived_player_history, name='archived_player_history'),
     path('contact-info/', contact_info, name='contact_info'),
     path('rules/', rules, name='rules'),
     path('teams/<int:team_id>/', team_detail, name='team_detail'),

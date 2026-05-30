@@ -92,7 +92,20 @@
                                         {% for standing in archived_player_standings %}
                                             <tr>
                                                 <td>{{ forloop.counter }}</td>
-                                                <td>{{ standing.player_name }}</td>
+                                                <td>
+                                                    {% if selected_archived_season.league.results_type == 'one_pocket' %}
+                                                        <a
+                                                            href="#"
+                                                            data-archived-player-history-modal
+                                                            data-season-id="{{ selected_archived_season.id }}"
+                                                            data-player-name="{{ standing.player_name }}"
+                                                        >
+                                                            {{ standing.player_name }}
+                                                        </a>
+                                                    {% else %}
+                                                        {{ standing.player_name }}
+                                                    {% endif %}
+                                                </td>
                                                 <td>{{ standing.team_name|default:"-" }}</td>
                                                 <td>{{ standing.games_won }}</td>
                                                 <td>{{ standing.games_lost }}</td>

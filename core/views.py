@@ -10,7 +10,14 @@ from django.utils import timezone
 
 from content.models import NewsItem, Rule
 from results.models import PlayerMatchResult
-from scheduling.models import Match, Season, Week
+from scheduling.models import (
+    ArchivedMatch,
+    ArchivedPlayerMatchResult,
+    ArchivedSeason,
+    Match,
+    Season,
+    Week,
+)
 from .models import League, Player, Team
 
 
@@ -179,7 +186,9 @@ def build_team_standings(active_league, active_season, through_week=None):
             standings_map.values(),
             key=lambda standing: (
                 -standing['matches_won'],
+                standing['matches_lost'],
                 -standing['games_won'],
+                standing['games_lost'],
                 standing['team'],
             ),
         )
@@ -255,7 +264,9 @@ def build_team_standings(active_league, active_season, through_week=None):
         standings_map.values(),
         key=lambda standing: (
             -standing['matches_won'],
+            standing['matches_lost'],
             -standing['games_won'],
+            standing['games_lost'],
             standing['team'],
         ),
     )
@@ -954,7 +965,13 @@ def archived_seasons(request):
             for team in selected_archived_season.teams.all()
         ]
         archived_team_standings.sort(
-            key=lambda row: (-row['matches_won'], -row['games_won'], row['team_name'])
+            key=lambda row: (
+                -row['matches_won'],
+                row['matches_lost'],
+                -row['games_won'],
+                row['games_lost'],
+                row['team_name'],
+            )
         )
 
         archived_player_standings = [
@@ -981,6 +998,55 @@ def archived_seasons(request):
         'archived_team_standings': archived_team_standings,
         'archived_player_standings': archived_player_standings,
     })
+
+
+def archived_player_history(request, archived_season_id, player_name):
+    archived_season = get_object_or_404(ArchivedSeason, pk=archived_season_id)
+
+    player_results = ArchivedPlayerMatchResult.objects.filter(
+        archived_match__archived_season=archived_season,
+        player_name=player_name
+    ).select_related('archived_match').order_by('archived_match__date')
+
+    history = []
+    for pr in player_results:
+        match = pr.archived_match
+
+        # Get all players in this match to find opponents
+        all_results = list(match.player_results.all())
+        opponent_results = [r for r in all_results if r.player_name != player_name]
+
+        opponent_names = ", ".join([opr.player_name for opr in opponent_results])
+        if not opponent_names:
+            if pr.team_name == match.home_team_name:
+                opponent_names = match.away_team_name
+            else:
+                opponent_names = match.home_team_name
+
+        if pr.team_name == match.home_team_name:
+            team_score = match.home_team_score
+            opp_score = match.away_team_score
+        else:
+            team_score = match.away_team_score
+            opp_score = match.home_team_score
+
+        history.append({
+            'date': match.date,
+            'opponent': opponent_names,
+            'team_score': team_score,
+            'opp_score': opp_score,
+            'wins': pr.wins,
+            'losses': pr.losses,
+            'runouts': pr.runouts,
+            'eight_on_the_breaks': pr.eight_on_the_breaks,
+        })
+
+    html = render_to_string('archived_player_history_modal.html', {
+        'player_name': player_name,
+        'season_name': archived_season.name,
+        'history': history,
+    }, request=request)
+    return JsonResponse({'html': html})
 
 def build_team_player_stats(active_season, team, through_week=None):
     if not active_season:

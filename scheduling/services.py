@@ -2,19 +2,21 @@ from datetime import date, timedelta
 import random
 
 from django.db import transaction
-from django.db.models import Sum, F, Value, Q
-from django.db.models.functions import Coalesce
+from django.db.models import Sum, F, Value, Q, IntegerField
+from django.db.models.functions import Coalesce, Cast
 
 from core.models import Team, Player
 from scheduling.models import (
     ArchivedPlayer,
+    ArchivedMatch,
+    ArchivedPlayerMatchResult,
     ArchivedSeason,
     ArchivedTeam,
     Holiday,
     Match,
     Week,
 )
-from results.models import PlayerMatchResult
+from results.models import PlayerMatchResult, MatchResult
 
 
 DAY_NAME_TO_WEEKDAY = {
@@ -431,6 +433,46 @@ def archive_season(season):
             sweeps=stats.get('sweeps', 0),
         )
 
+    # Archive Matches and PlayerMatchResults if it's one_pocket
+    if season.league.results_type == 'one_pocket':
+        for week in weeks:
+            for match in week.matches.all():
+                try:
+                    res = match.result
+                except MatchResult.DoesNotExist:
+                    res = None
+
+                archived_match = ArchivedMatch.objects.create(
+                    archived_season=archived_season,
+                    date=week.date,
+                    home_team_name=match.home_team.name,
+                    away_team_name=match.away_team.name,
+                    home_team_score=res.home_team_score if res else None,
+                    away_team_score=res.away_team_score if res else None,
+                )
+
+                if res:
+                    # For one_pocket, we use the team's player (since team_size is 1)
+                    hp = Player.objects.filter(team=match.home_team).first()
+                    ap = Player.objects.filter(team=match.away_team).first()
+
+                    if hp:
+                        ArchivedPlayerMatchResult.objects.create(
+                            archived_match=archived_match,
+                            player_name=hp.name,
+                            team_name=match.home_team.name,
+                            wins=res.home_team_score or 0,
+                            losses=res.away_team_score or 0,
+                        )
+                    if ap:
+                        ArchivedPlayerMatchResult.objects.create(
+                            archived_match=archived_match,
+                            player_name=ap.name,
+                            team_name=match.away_team.name,
+                            wins=res.away_team_score or 0,
+                            losses=res.home_team_score or 0,
+                        )
+
     season.delete()
     return archived_season
 
@@ -453,6 +495,33 @@ def build_team_archive_stats(season):
 
 
 def build_player_archive_stats(season):
+    if season.league.results_type == 'one_pocket':
+        # For one_pocket, calculate stats from MatchResults because PlayerMatchResults might not exist
+        player_stats = {}
+        matches = Match.objects.filter(week__season=season).select_related('result', 'home_team', 'away_team')
+        for match in matches:
+            if not hasattr(match, 'result'):
+                continue
+            
+            res = match.result
+            # Home player
+            hp = Player.objects.filter(team=match.home_team).first()
+            if hp:
+                if hp.id not in player_stats:
+                    player_stats[hp.id] = {'games_won': 0, 'games_lost': 0, 'run_outs': 0, 'eight_on_the_breaks': 0, 'sweeps': 0}
+                player_stats[hp.id]['games_won'] += res.home_team_score or 0
+                player_stats[hp.id]['games_lost'] += res.away_team_score or 0
+            
+            # Away player
+            ap = Player.objects.filter(team=match.away_team).first()
+            if ap:
+                if ap.id not in player_stats:
+                    player_stats[ap.id] = {'games_won': 0, 'games_lost': 0, 'run_outs': 0, 'eight_on_the_breaks': 0, 'sweeps': 0}
+                player_stats[ap.id]['games_won'] += res.away_team_score or 0
+                player_stats[ap.id]['games_lost'] += res.home_team_score or 0
+        
+        return player_stats
+
     player_results = (
         PlayerMatchResult.objects.filter(match_result__match__week__season=season)
         .values('player_id')
@@ -461,7 +530,7 @@ def build_player_archive_stats(season):
             games_lost=Coalesce(Sum('losses'), 0),
             run_outs=Coalesce(Sum('runouts'), 0),
             eight_on_the_breaks=Coalesce(Sum('eight_on_the_breaks'), 0),
-            sweeps=Coalesce(Sum('won_all_games'), 0),
+            sweeps=Coalesce(Sum(Cast('won_all_games', IntegerField())), 0),
         )
     )
 

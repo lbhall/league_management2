@@ -18,8 +18,8 @@ class MatchResult(models.Model):
 
     def clean(self):
         super().clean()
-        if self.match.week.season.league.results_type != '8_ball':
-            raise ValidationError('MatchResult entry is currently only supported for 8-ball leagues.')
+        if self.match.week.season.league.results_type not in ['8_ball', 'one_pocket']:
+            raise ValidationError('MatchResult entry is currently only supported for 8-ball and one-pocket leagues.')
 
     def __str__(self):
         return f"{self.match.home_team} vs {self.match.away_team}"

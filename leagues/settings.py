@@ -127,4 +127,4 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-FRONTEND_LEAGUE_ID = os.environ.get('FRONTEND_LEAGUE_ID', 1)
+FRONTEND_LEAGUE_ID = int(os.environ.get('FRONTEND_LEAGUE_ID') or 1)

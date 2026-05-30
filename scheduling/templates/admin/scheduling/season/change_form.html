@@ -157,6 +157,12 @@
         <li>
             <a href="{% url 'admin:scheduling_season_manage_schedule' original.pk %}" class="historylink">Manage Schedule</a>
         </li>
+        <li>
+            <form action="{% url 'admin:scheduling_season_archive' original.pk %}" method="post" onsubmit="return confirm('Are you sure you want to archive this season? This will delete the live season data and create a point-in-time archive.');" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="button" style="background: #ba2121; color: white; height: 35px; line-height: 15px;">Archive Season</button>
+            </form>
+        </li>
     {% endif %}
 {% endblock %}
 

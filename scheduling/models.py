@@ -207,3 +207,43 @@ class ArchivedPlayer(models.Model):
 
     def __str__(self):
         return f'{self.archived_season.name} - {self.player_name}'
+
+
+class ArchivedMatch(models.Model):
+    archived_season = models.ForeignKey(
+        ArchivedSeason,
+        on_delete=models.CASCADE,
+        related_name='matches',
+    )
+    date = models.DateField()
+    home_team_name = models.CharField(max_length=255)
+    away_team_name = models.CharField(max_length=255)
+    home_team_score = models.PositiveIntegerField(null=True, blank=True)
+    away_team_score = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['date', 'home_team_name']
+
+    def __str__(self):
+        return f'{self.date}: {self.home_team_name} vs {self.away_team_name}'
+
+
+class ArchivedPlayerMatchResult(models.Model):
+    archived_match = models.ForeignKey(
+        ArchivedMatch,
+        on_delete=models.CASCADE,
+        related_name='player_results',
+    )
+    player_name = models.CharField(max_length=255)
+    team_name = models.CharField(max_length=255)
+    wins = models.PositiveIntegerField(default=0)
+    losses = models.PositiveIntegerField(default=0)
+    runouts = models.PositiveIntegerField(default=0)
+    eight_on_the_breaks = models.PositiveIntegerField(default=0)
+    won_all_games = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['team_name', 'player_name']
+
+    def __str__(self):
+        return f'{self.player_name} ({self.team_name})'
