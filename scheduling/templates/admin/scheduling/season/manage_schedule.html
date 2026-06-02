@@ -165,6 +165,26 @@
         .object-tools {
             margin-bottom: 20px;
         }
+
+        .schedule-filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 12px 16px;
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        .schedule-filter-bar label {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .schedule-filter-bar select {
+            min-width: 200px;
+        }
     </style>
 {% endblock %}
 
@@ -237,6 +257,20 @@
         {% endif %}
     </ul>
 
+    {% if all_teams %}
+    <div class="schedule-filter-bar">
+        <label for="player-filter">Filter by Player:</label>
+        <select id="player-filter">
+            <option value="">— All Players —</option>
+            {% for team in all_teams %}
+                <option value="{{ team.id }}">{{ team.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="button" id="player-filter-btn">Search</button>
+        <button type="button" class="button" id="player-filter-clear" style="display:none;">Clear</button>
+    </div>
+    {% endif %}
+
     <div class="module aligned">
         <h2>Schedule for {{ season.name }} ({{ season.league.name }})</h2>
 
@@ -306,7 +340,7 @@
                                 </thead>
                                 <tbody>
                                     {% for match in week.matches.all %}
-                                        <tr>
+                                        <tr data-home-team="{{ match.home_team.id }}" data-away-team="{{ match.away_team.id }}">
                                             <td>
                                                 <strong>{{ match.home_team }}</strong> vs <strong>{{ match.away_team }}</strong>
                                                 <div class="schedule-meta schedule-home-venue">
@@ -406,4 +440,49 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+(function () {
+    var filterBtn = document.getElementById('player-filter-btn');
+    var clearBtn = document.getElementById('player-filter-clear');
+    var select = document.getElementById('player-filter');
+
+    if (!filterBtn) return;
+
+    function applyFilter() {
+        var teamId = select.value;
+
+        document.querySelectorAll('.schedule-week-card').forEach(function (card) {
+            if (!teamId) {
+                card.style.display = '';
+                card.querySelectorAll('tbody tr').forEach(function (row) { row.style.display = ''; });
+                return;
+            }
+
+            var rows = card.querySelectorAll('tbody tr[data-home-team]');
+            var anyVisible = false;
+            rows.forEach(function (row) {
+                var matches = row.dataset.homeTeam === teamId || row.dataset.awayTeam === teamId;
+                row.style.display = matches ? '' : 'none';
+                if (matches) anyVisible = true;
+            });
+            card.style.display = anyVisible ? '' : 'none';
+        });
+
+        clearBtn.style.display = teamId ? '' : 'none';
+    }
+
+    filterBtn.addEventListener('click', applyFilter);
+
+    select.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') applyFilter();
+    });
+
+    clearBtn.addEventListener('click', function () {
+        select.value = '';
+        applyFilter();
+    });
+}());
+</script>
 {% endblock %}
+

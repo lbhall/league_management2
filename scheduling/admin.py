@@ -320,6 +320,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             'season': season,
             'league': league,
             'schedule_weeks': self._get_schedule_data(season),
+            'all_teams': list(league.teams.order_by('name')),
             'start_date_choices': self._get_start_date_choices(season),
             'recreate_schedule_url': reverse('admin:scheduling_season_recreate_schedule', args=[season.pk]),
             'mirror_schedule_url': reverse('admin:scheduling_season_mirror_schedule', args=[season.pk]),

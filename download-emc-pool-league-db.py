@@ -16,12 +16,24 @@ DEFAULT_LOCAL_DB = "db.sqlite3"
 DEFAULT_BACKUP_DIR = "database_backups"
 
 # Environment configurations: environment name -> domain mapping
+# Environment configurations: environment name -> domain mapping
 ENVIRONMENTS = {
     "pool": "emcfunleague.com",
     "bogies": "bogies.emcfunleague.com",
     "coed-darts": "coed.emcfunleague.com",
 }
 
+LOCAL_DB_IMPORT_ENVIRONMENTS = {
+    "pool": ENVIRONMENTS["pool"],
+}
+
+DARTS_IMPORT_ENVIRONMENTS = {
+    "coed-darts": ENVIRONMENTS["coed-darts"],
+}
+
+ONE_POCKET_IMPORT_ENVIRONMENTS = {
+    "bogies": ENVIRONMENTS["bogies"],
+}
 
 def get_remote_db_path(args, domain):
     """Build the remote path to the production SQLite database."""
@@ -61,7 +73,7 @@ def backup_existing_local_db(local_db_path, backup_dir):
 def download_environment_to_local_db(environment_name, args):
     """Download one environment's production database and use it as the local database."""
     project_root = Path(__file__).resolve().parent
-    domain = ENVIRONMENTS[environment_name]
+    domain = LOCAL_DB_IMPORT_ENVIRONMENTS[environment_name]
 
     local_db_path = Path(args.local_db).expanduser()
     if not local_db_path.is_absolute():
@@ -202,8 +214,8 @@ def main():
     )
     use_local_parser.add_argument(
         "environment",
-        choices=ENVIRONMENTS.keys(),
-        help="Production environment to download and use locally.",
+        choices=LOCAL_DB_IMPORT_ENVIRONMENTS.keys(),
+        help="Production environment to download and use as the local pool league database.",
     )
     use_local_parser.add_argument(
         "--local-db",

@@ -926,17 +926,23 @@ def one_pocket_full_schedule_modal(request):
     )
     return JsonResponse({'html': html})
 
-
 def archived_seasons(request):
     logging.info(f'Archived Seasons -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
 
+    is_pool_league = (
+        active_league
+        and (
+            active_league.results_type == League.ResultsType.EIGHT_BALL
+            or 'pool' in active_league.name.lower()
+        )
+    )
     archived_season_options = []
     selected_archived_season = None
     archived_team_standings = []
     archived_player_standings = []
 
-    if active_league:
+    if is_pool_league:
         archived_seasons_qs = active_league.archived_seasons.prefetch_related(
             'teams',
             'players',
@@ -993,6 +999,7 @@ def archived_seasons(request):
     return render(request, 'archived_seasons.html', {
         'active_league': active_league,
         'league_name': active_league.name if active_league else 'League Name',
+        'is_pool_league': is_pool_league,
         'archived_season_options': archived_season_options,
         'selected_archived_season': selected_archived_season,
         'archived_team_standings': archived_team_standings,

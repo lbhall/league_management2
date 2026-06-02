@@ -6,7 +6,7 @@
     <div class="mb-4">
         <h1 class="h2 mb-2">Archived Seasons</h1>
 
-        {% if archived_season_options %}
+        {% if is_pool_league and archived_season_options %}
             <form method="get" class="row g-2 align-items-end mb-4">
                 <div class="col-sm-6 col-md-4">
                     <label for="season" class="form-label">Archived Season</label>
@@ -25,11 +25,17 @@
         {% endif %}
     </div>
 
-    {% if selected_archived_season %}
+    {% if not is_pool_league %}
+        <p class="text-muted mb-0">
+            Archived standings are currently only available for pool leagues.
+            {% if active_league %}
+                Current league: {{ active_league.name }} / {{ active_league.results_type }}
+            {% endif %}
+        </p>
+    {% elif selected_archived_season %}
         <div class="row g-4">
             <div class="col-lg-6">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header">
+                <div class="card shadow-sm h-100">                    <div class="card-header">
                         <strong>Archived Team Standings</strong>
                     </div>
                     <div class="card-body">
