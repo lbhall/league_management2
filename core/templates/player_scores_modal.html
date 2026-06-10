@@ -15,17 +15,23 @@
                         <table class="table table-striped align-middle mb-0">
                             <thead>
                                 <tr>
+                                    {% if not player.team %}
+                                        <th>Team</th>
+                                    {% endif %}
                                     <th>Opponent</th>
                                     <th>Wins</th>
                                     <th>Losses</th>
                                     <th>Runs</th>
-                                    <th>{{ active_season.league.team_size }} / 0</th>
+                                    <th>{{ active_season.league.team_size }}/0</th>
                                     <th>8s</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for row in matchup_rows %}
                                     <tr>
+                                        {% if not player.team %}
+                                            <td>{{ row.represented_team_name }}</td>
+                                        {% endif %}
                                         <td><a href="/teams/{{ row.team_id }}/">{{ row.team_name }}</a></td>
                                         <td>{{ row.wins }}</td>
                                         <td>{{ row.losses }}</td>

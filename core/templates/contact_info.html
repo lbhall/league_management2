@@ -17,7 +17,7 @@
                     <table class="table table-striped align-middle mb-0">
                         <thead>
                             <tr>
-                                <th scope="col">Team</th>
+                                <th scope="col">{% if active_league.results_type == 'one_pocket' %}Player{% else %}Team{% endif %}</th>
                                 <th scope="col">Captain</th>
                                 <th scope="col">Phone</th>
                             </tr>

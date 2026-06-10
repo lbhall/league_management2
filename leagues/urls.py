@@ -11,6 +11,7 @@ from core.views import (
     archived_player_history,
     archived_seasons,
     contact_info,
+    finance,
     home,
     one_pocket_full_schedule_modal,
     player_scores_modal,
@@ -24,6 +25,7 @@ from core.views import (
 
 urlpatterns = [
     path('', home, name='home'),
+    path('finance/', finance, name='finance'),
     path('schedule/', schedule, name='schedule'),
     path('standings/', standings, name='standings'),
     path('player-stats/', player_stats, name='player_stats'),

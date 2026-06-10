@@ -11,7 +11,7 @@ DEFAULT_HOST = "emcfunleague.com"
 DEFAULT_USER = "bhall"
 DEFAULT_PORT = "56"
 DEFAULT_REMOTE_PREFIX = "/var/www"
-DEFAULT_REMOTE_DB_DIR = "source"
+DEFAULT_REMOTE_DB_DIR = None
 DEFAULT_LOCAL_DB = "db.sqlite3"
 DEFAULT_BACKUP_DIR = "database_backups"
 
@@ -21,6 +21,12 @@ ENVIRONMENTS = {
     "pool": "emcfunleague.com",
     "bogies": "bogies.emcfunleague.com",
     "coed-darts": "coed.emcfunleague.com",
+}
+
+ENV_REMOTE_DB_DIRS = {
+    "pool": "source",
+    "bogies": "database",
+    "coed-darts": "database",
 }
 
 LOCAL_DB_IMPORT_ENVIRONMENTS = {
@@ -35,9 +41,15 @@ ONE_POCKET_IMPORT_ENVIRONMENTS = {
     "bogies": ENVIRONMENTS["bogies"],
 }
 
-def get_remote_db_path(args, domain):
+def get_remote_db_path(args, domain, environment_name):
     """Build the remote path to the production SQLite database."""
-    return f"{args.remote_prefix}/{domain}/{args.remote_db_dir}/db.sqlite3"
+    remote_db_dir = args.remote_db_dir
+    if remote_db_dir is None:
+        remote_db_dir = ENV_REMOTE_DB_DIRS.get(environment_name, "source")
+
+    if remote_db_dir:
+        return f"{args.remote_prefix}/{domain}/{remote_db_dir}/db.sqlite3"
+    return f"{args.remote_prefix}/{domain}/db.sqlite3"
 
 
 def run_scp_download(remote_path, local_path, args):
@@ -83,10 +95,7 @@ def download_environment_to_local_db(environment_name, args):
     if not backup_dir.is_absolute():
         backup_dir = project_root / backup_dir
 
-    if environment_name == "pool":
-        remote_path = f"{args.remote_prefix}/{domain}/source/db.sqlite3"
-    else:
-        remote_path = f"{args.remote_prefix}/{domain}/database/db.sqlite3"
+    remote_path = get_remote_db_path(args, domain, environment_name)
     temp_download_path = project_root / f".{environment_name}.db.sqlite3.download"
 
     print(f"Downloading '{environment_name}' production database to use as local database...")
@@ -131,7 +140,7 @@ def download_environment_backup(environment_name, domain, date_str, args):
     environment_backup_dir = backup_dir / environment_name
     environment_backup_dir.mkdir(parents=True, exist_ok=True)
 
-    remote_path = f"{args.remote_prefix}/{domain}/database/db.sqlite3"
+    remote_path = get_remote_db_path(args, domain, environment_name)
     local_path = environment_backup_dir / f"{date_str}.db.sqlite3"
 
     print(f"Downloading '{environment_name}' production database backup...")
@@ -190,6 +199,11 @@ def add_common_arguments(parser):
         "--remote-prefix",
         default=DEFAULT_REMOTE_PREFIX,
         help=f"Remote base directory (default: {DEFAULT_REMOTE_PREFIX})",
+    )
+    parser.add_argument(
+        "--remote-db-dir",
+        default=DEFAULT_REMOTE_DB_DIR,
+        help="Remote database directory (default: varies by environment)",
     )
     parser.add_argument(
         "--backup-dir",

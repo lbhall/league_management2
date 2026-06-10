@@ -95,13 +95,17 @@
             <div class="col-lg-7">
                 <div class="card shadow-sm mb-4">
                     <div class="card-body">
-                        <h2 class="h4 mb-3">Current Schedule</h2>
+                        <h2 class="h4 mb-3">
+                            Current Schedule
+                            {% if active_league.results_type == 'one_pocket' %}
+                                <small class="ms-2">
+                                    (<a href="#" class="text-decoration-none" data-one-pocket-full-schedule-modal>full schedule</a>)
+                                </small>
+                            {% endif %}
+                        </h2>
                         {% if current_schedule_week %}
                             <p class="text-muted mb-3">
                                 {% if not current_schedule_is_holiday %}Week {{ current_schedule_week.number }} &mdash; {% endif %}{{ current_schedule_week.date }}
-                                {% if active_league.results_type == 'one_pocket' and not current_schedule_is_holiday %}
-                                    (<a href="#" data-one-pocket-full-schedule-modal>full schedule</a>)
-                                {% endif %}
                             </p>
                         {% endif %}
 
@@ -113,41 +117,48 @@
                         {% elif current_schedule %}
                             <ul class="list-group list-group-flush">
                                 {% for entry in current_schedule %}
-                                    <li class="list-group-item">
-                                        <div class="fw-semibold">
-                                            {% if active_league.results_type == 'one_pocket' %}
-                                                <a
-                                                    href="/teams/{{ entry.home_team.id }}/schedule-modal/"
-                                                    data-team-schedule-modal
-                                                    data-team-id="{{ entry.home_team.id }}"
-                                                >
-                                                    {{ entry.home_team.name }}
-                                                </a>
-                                            {% else %}
-                                                <a href="{% url 'team_detail' entry.home_team.id %}">{{ entry.home_team }}</a>
-                                            {% endif %}
-                                            vs
-                                            {% if entry.is_bye %}
-                                                {{ entry.away_team }}
-                                            {% else %}
-                                            {% if active_league.results_type == 'one_pocket' %}
-                                                <a
-                                                    href="/teams/{{ entry.away_team.id }}/schedule-modal/"
-                                                    data-team-schedule-modal
-                                                    data-team-id="{{ entry.away_team.id }}"
-                                                >
-                                                    {{ entry.away_team.name }}
-                                                </a>
-                                            {% else %}
-                                                <a href="{% url 'team_detail' entry.away_team.id %}">{{ entry.away_team }}</a>
-                                            {% endif %}
-                                            {% endif %}
-                                            {% if active_league.results_type == 'one_pocket' and entry.race_label %}
-                                                <span class="text-muted"> {{ entry.race_label }}</span>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fw-semibold">
+                                                {% if active_league.results_type == 'one_pocket' %}
+                                                    <a
+                                                        href="/teams/{{ entry.home_team.id }}/schedule-modal/"
+                                                        data-team-schedule-modal
+                                                        data-team-id="{{ entry.home_team.id }}"
+                                                    >
+                                                        {{ entry.home_team.name }}
+                                                    </a>
+                                                {% else %}
+                                                    <a href="{% url 'team_detail' entry.home_team.id %}">{{ entry.home_team }}</a>
+                                                {% endif %}
+                                                vs
+                                                {% if entry.is_bye %}
+                                                    {{ entry.away_team }}
+                                                {% else %}
+                                                {% if active_league.results_type == 'one_pocket' %}
+                                                    <a
+                                                        href="/teams/{{ entry.away_team.id }}/schedule-modal/"
+                                                        data-team-schedule-modal
+                                                        data-team-id="{{ entry.away_team.id }}"
+                                                    >
+                                                        {{ entry.away_team.name }}
+                                                    </a>
+                                                {% else %}
+                                                    <a href="{% url 'team_detail' entry.away_team.id %}">{{ entry.away_team }}</a>
+                                                {% endif %}
+                                                {% endif %}
+                                                {% if active_league.results_type == 'one_pocket' and entry.race_label %}
+                                                    <span class="text-muted"> {{ entry.race_label }}</span>
+                                                {% endif %}
+                                            </div>
+                                            {% if active_league.results_type != 'one_pocket' and entry.location %}
+                                                <div class="text-muted small">{{ entry.location }}</div>
                                             {% endif %}
                                         </div>
-                                        {% if active_league.results_type != 'one_pocket' and entry.location %}
-                                            <div class="text-muted small">{{ entry.location }}</div>
+                                        {% if entry.result_label %}
+                                            <div class="fw-bold">
+                                                {{ entry.result_label }}
+                                            </div>
                                         {% endif %}
                                     </li>
                                 {% endfor %}
@@ -237,7 +248,8 @@
                                 <table class="table table-striped align-middle mb-0">
                                     <thead>
                                         <tr>
-                                            <th scope="col">Team</th>
+                                            <th scope="col">Rank</th>
+                                            <th scope="col">{% if active_league.results_type == 'one_pocket' %}Player{% else %}Team{% endif %}</th>
                                             <th scope="col">Matches Won</th>
                                             <th scope="col">Matches Lost</th>
                                             <th scope="col">Games Won</th>
@@ -247,6 +259,7 @@
                                     <tbody>
                                         {% for standing in team_standings %}
                                             <tr>
+                                                <td>{{ forloop.counter }}</td>
                                                 <td>
                                                     {% if active_league.results_type == 'one_pocket' %}
                                                     <a

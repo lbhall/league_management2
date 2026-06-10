@@ -5,8 +5,8 @@
 {% block content %}
     <div class="mb-4">
         <h1 class="h2 mb-2">Player Stats</h1>
-        {% if available_weeks %}
-            <form method="get" class="row g-2 align-items-end">
+        <form method="get" class="row g-2 align-items-end">
+            {% if available_weeks %}
                 <div class="col-sm-6 col-md-4">
                     <select id="week" name="week" class="form-select" onchange="this.form.submit()">
                         {% for week in available_weeks %}
@@ -19,8 +19,15 @@
                         {% endfor %}
                     </select>
                 </div>
-            </form>
-        {% endif %}
+            {% endif %}
+            <div class="col-sm-6 col-md-3">
+                <select id="gender" name="gender" class="form-select" onchange="this.form.submit()">
+                    <option value="all" {% if selected_gender == 'all' %}selected{% endif %}>All Players</option>
+                    <option value="male" {% if selected_gender == 'male' %}selected{% endif %}>Male Players</option>
+                    <option value="female" {% if selected_gender == 'female' %}selected{% endif %}>Female Players</option>
+                </select>
+            </div>
+        </form>
     </div>
 
     <div class="card shadow-sm">
@@ -31,14 +38,54 @@
                         <thead>
                             <tr>
                                 <th scope="col">Rank</th>
-                                <th scope="col">Player</th>
-                                <th scope="col">Team</th>
-                                <th scope="col">Wins</th>
-                                <th scope="col">Losses</th>
-                                <th scope="col">Percentage</th>
-                                <th scope="col">Runs</th>
-                                <th scope="col">{{ active_league.team_size }} / 0</th>
-                                <th scope="col">8s</th>
+                                <th scope="col">
+                                    <a href="?week={{ selected_week.id }}&gender={{ selected_gender }}&sort=player&dir={% if sort_col == 'player' and sort_dir == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                        Player
+                                        {% if sort_col == 'player' %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                    </a>
+                                </th>
+                                <th scope="col">
+                                    <a href="?week={{ selected_week.id }}&gender={{ selected_gender }}&sort=team&dir={% if sort_col == 'team' and sort_dir == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                        Team
+                                        {% if sort_col == 'team' %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                    </a>
+                                </th>
+                                <th scope="col">
+                                    <a href="?week={{ selected_week.id }}&gender={{ selected_gender }}&sort=wins&dir={% if sort_col == 'wins' and sort_dir == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                        Wins
+                                        {% if sort_col == 'wins' %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                    </a>
+                                </th>
+                                <th scope="col">
+                                    <a href="?week={{ selected_week.id }}&gender={{ selected_gender }}&sort=losses&dir={% if sort_col == 'losses' and sort_dir == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                        Losses
+                                        {% if sort_col == 'losses' %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                    </a>
+                                </th>
+                                <th scope="col">
+                                    <a href="?week={{ selected_week.id }}&gender={{ selected_gender }}&sort=percentage&dir={% if sort_col == 'percentage' and sort_dir == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                        Percentage
+                                        {% if sort_col == 'percentage' %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                    </a>
+                                </th>
+                                <th scope="col">
+                                    <a href="?week={{ selected_week.id }}&gender={{ selected_gender }}&sort=runs&dir={% if sort_col == 'runs' and sort_dir == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                        Runs
+                                        {% if sort_col == 'runs' %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                    </a>
+                                </th>
+                                <th scope="col">
+                                    <a href="?week={{ selected_week.id }}&gender={{ selected_gender }}&sort=sweeps&dir={% if sort_col == 'sweeps' and sort_dir == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                        {{ active_league.team_size }}/0
+                                        {% if sort_col == 'sweeps' %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                    </a>
+                                </th>
+                                <th scope="col">
+                                    <a href="?week={{ selected_week.id }}&gender={{ selected_gender }}&sort=eights&dir={% if sort_col == 'eights' and sort_dir == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                        8s
+                                        {% if sort_col == 'eights' %}{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                                    </a>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>

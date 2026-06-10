@@ -3,29 +3,45 @@
 {% block content %}
 <div class="module">
   <p><strong>League:</strong> {{ league.name }}</p>
+  <div style="margin-bottom: 20px;">
+    <div style="font-size: 1.2em; font-weight: bold; color: #28a745;">
+      Current League Balance: ${{ current_balance|floatformat:2 }}
+    </div>
+    <div style="font-size: 0.9em; color: #6c757d;">
+      Based on {{ weeks_played }} weeks of results played.
+    </div>
+  </div>
 
   <table>
     <tr><th>Total Teams</th><td>{{ team_count }}</td></tr>
+    <tr><th>Weeks Scheduled</th><td>{{ weeks }}</td></tr>
+    <tr><th>Weeks Played</th><td>{{ weeks_played }}</td></tr>
     <tr><th>Signup Fee</th><td>${{ signup_fee|floatformat:2 }}</td></tr>
     <tr><th>Fee Per Player</th><td>${{ fee_per_player|floatformat:2 }}</td></tr>
     <tr><th>Greens Fee Per Player</th><td>${{ greens_fee|floatformat:2 }}</td></tr>
-    <tr><th>Tournament Target Per Team</th><td>${{ tournament_target|floatformat:2 }}</td></tr>
-    <tr><th>Weeks</th><td>{{ weeks }}</td></tr>
-    <tr><th>Total Fees Collected</th><td>${{ total_weekly_collected|floatformat:2 }}</td></tr>
-    <tr><th>Total Payout Pool</th><td>${{ total_weekly_payout_pool|floatformat:2 }}</td></tr>
-    <tr><th>Total Payout Amount</th><td>${{ total_payout_amount|floatformat:2 }}</td></tr>
-    <tr><th>Payout Rate</th><td>${{ payout_rate|floatformat:2 }} / game</td></tr>
+    <tr><th>Operator Pay Per Player</th><td>${{ operator_pay_per_player|floatformat:2 }}</td></tr>
+    <tr><th>Tournament Target</th><td>${{ tournament_money|floatformat:2 }}</td></tr>
+    <tr><th>Individual Awards Total</th><td>${{ total_awards_amount|floatformat:2 }}</td></tr>
+    <tr><th>Total Fees Collected (Full Season)</th><td>${{ total_weekly_collected|floatformat:2 }}</td></tr>
+    <tr><th>Total Operator Fees (Full Season)</th><td>${{ total_operator_fees|floatformat:2 }}</td></tr>
+    <tr><th>Net Collection (Excl. Operator)</th><td>${{ total_net_collection|floatformat:2 }}</td></tr>
+    <tr><th>Total Payout Pool (Full Season)</th><td>${{ total_weekly_payout_pool|floatformat:2 }}</td></tr>
+    <tr><th>Total Payout Amount (Excl. Signup Fees - Tournament - Awards)</th><td>${{ total_payout_amount|floatformat:2 }}</td></tr>
+    <tr><th>Projected Payout Rate (Full Season)</th><td>${{ projected_payout_rate|floatformat:2 }} / game</td></tr>
+    <tr style="background-color: #f8f9fa;"><th>Current Payout Rate (To Date)</th><td style="font-weight: bold; color: #0d6efd;">${{ payout_rate|floatformat:2 }} / game</td></tr>
   </table>
 </div>
 
 <div class="module">
-  <h2>Standings</h2>
+  <h2>Current Payouts (To Date)</h2>
   <table class="admin-table">
     <thead>
       <tr>
         <th>Team</th>
         <th>Games Won</th>
-        <th style="text-align:right;">Payout</th>
+        <th style="text-align:right;">Current Payout</th>
+        <th>Proj. Wins</th>
+        <th style="text-align:right;">Proj. Payout</th>
       </tr>
     </thead>
     <tbody>
@@ -34,9 +50,20 @@
         <td>{{ row.team }}</td>
         <td>{{ row.games_won }}</td>
         <td style="text-align:right;">${{ row.payout|floatformat:2 }}</td>
+        <td>{{ row.projected_games_won|floatformat:0 }}</td>
+        <td style="text-align:right;">${{ row.projected_payout|floatformat:2 }}</td>
       </tr>
       {% endfor %}
     </tbody>
+    <tfoot>
+      <tr style="font-weight: bold; border-top: 2px solid #ccc;">
+        <td>Totals</td>
+        <td>{{ total_games_won }}</td>
+        <td style="text-align:right;">${{ total_current_payout|floatformat:2 }}</td>
+        <td>{{ total_projected_games_won|floatformat:0 }}</td>
+        <td style="text-align:right;">${{ total_projected_payout|floatformat:2 }}</td>
+      </tr>
+    </tfoot>
   </table>
 </div>
 
@@ -55,8 +82,8 @@
       <tr>
         <td>{{ award.label }}</td>
         <td>
-          {% if award.player %}
-            {{ award.player.player }}{% if award.player.team %} ({{ award.player.team }}){% endif %}
+          {% if award.players %}
+            {% for p in award.players %}{{ p.player }}{% if p.team %} ({{ p.team }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
           {% else %}
             —
           {% endif %}

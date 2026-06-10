@@ -45,7 +45,7 @@
                                     <thead>
                                         <tr>
                                             <th scope="col">Rank</th>
-                                            <th scope="col">Team</th>
+                                            <th scope="col">{% if selected_archived_season.league.results_type == 'one_pocket' %}Player{% else %}Team{% endif %}</th>
                                             <th scope="col">Matches Won</th>
                                             <th scope="col">Matches Lost</th>
                                             <th scope="col">Games Won</th>
@@ -91,7 +91,7 @@
                                             <th scope="col">Games Lost</th>
                                             <th scope="col">Run Outs</th>
                                             <th scope="col">8 on the Breaks</th>
-                                            <th scope="col">Sweeps</th>
+                                            <th scope="col">{{ selected_archived_season.league.team_size }}/0</th>
                                         </tr>
                                     </thead>
                                     <tbody>

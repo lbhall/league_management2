@@ -10,7 +10,7 @@ class Command(BaseCommand):
     help = 'Imports Bogies One Pocket League data from old SQLite database'
 
     def handle(self, *args, **options):
-        db_path = 'database_backups/bogies/20260525-200953.db.sqlite3'
+        db_path = 'database_backups/bogies/20260608-110817.db.sqlite3'
         try:
             conn = sqlite3.connect(db_path)
         except sqlite3.OperationalError as e:

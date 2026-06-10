@@ -47,14 +47,20 @@ class League(models.Model):
     tournament_target = models.DecimalField(
         max_digits=8,
         decimal_places=2,
-        default=90,
-        help_text='Target amount per team added to the end-of-season tournament.',
+        default=300,
+        help_text='Target amount added to the end-of-season tournament.',
     )
     signup_fee = models.DecimalField(
         max_digits=6,
         decimal_places=2,
         default=30,
         help_text='Signup fee charged per team.',
+    )
+    operator_pay_per_player = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+        help_text='Amount paid to the league operator per player.',
     )
 
     def __str__(self):
@@ -220,3 +226,18 @@ class Player(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class FailedLogin(models.Model):
+    username = models.CharField(max_length=255, null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Failed login for {self.username} from {self.ip_address} at {self.timestamp}"
+
+    class Meta:
+        verbose_name = 'Failed Login'
+        verbose_name_plural = 'Failed Logins'
+        ordering = ['-timestamp']

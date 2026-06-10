@@ -22,19 +22,22 @@
                                 {% if week_block.week.number %}
                                 <ul class="list-group">
                                     {% for entry in week_block.entries %}
-                                        <li class="list-group-item">
-                                            <div class="fw-semibold">
-                                                {{ entry.home_team }}
-                                                vs
-                                                {% if entry.is_bye %}
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span class="fw-semibold">
+                                                    {{ entry.home_team }}
+                                                    vs
                                                     {{ entry.away_team }}
-                                                {% else %}
-                                                    {{ entry.away_team }}
-                                                {% endif %}
+                                                </span>
                                                 {% if entry.race_label %}
                                                     <span class="text-muted"> {{ entry.race_label }}</span>
                                                 {% endif %}
                                             </div>
+                                            {% if entry.result_label %}
+                                                <div class="fw-bold">
+                                                    {{ entry.result_label }}
+                                                </div>
+                                            {% endif %}
                                         </li>
                                     {% endfor %}
                                 </ul>

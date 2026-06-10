@@ -12,6 +12,7 @@
     >
 </head>
 <body>
+    {% block navbar %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
             {% if active_league.results_type != 'one_pocket' %}
@@ -63,8 +64,13 @@
             </div>
         </div>
     </nav>
+    {% endblock %}
 
-    <main class="container mt-4">
+    <div class="container mt-4">
+        {% block breadcrumb %}{% endblock %}
+    </div>
+
+    <main class="container mt-3">
         {% block content %}{% endblock %}
     </main>
 

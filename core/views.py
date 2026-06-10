@@ -2,11 +2,14 @@ from datetime import date
 import logging
 
 from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Prefetch, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.utils import timezone
+
+from decimal import Decimal
 
 from content.models import NewsItem, Rule
 from results.models import PlayerMatchResult
@@ -121,13 +124,17 @@ def get_one_pocket_race_label(team_a, team_b):
     return f'{race[0]}/{race[1]}'
 
 
-def build_week_schedule_with_byes(active_league, week):
+def build_week_schedule_with_byes(active_league, week, team_standings=None):
     teams = list(
         Team.objects.filter(league=active_league).order_by('name')
     )
     matches = list(
         week.matches.all()
     )
+
+    rank_map = {}
+    if team_standings:
+        rank_map = {s['team_id']: s['league_rank'] for s in team_standings}
 
     scheduled_team_ids = set()
     for match in matches:
@@ -139,6 +146,7 @@ def build_week_schedule_with_byes(active_league, week):
         if team.id not in scheduled_team_ids:
             bye_entries.append({
                 'home_team': team,
+                'home_team_rank': rank_map.get(team.id),
                 'away_team': 'BYE',
                 'location': '',
                 'is_bye': True,
@@ -148,12 +156,19 @@ def build_week_schedule_with_byes(active_league, week):
     match_entries = [
         {
             'home_team': match.home_team,
+            'home_team_rank': rank_map.get(match.home_team_id),
             'away_team': match.away_team,
+            'away_team_rank': rank_map.get(match.away_team_id),
             'location': match.location,
             'is_bye': False,
             'race_label': (
                 get_one_pocket_race_label(match.home_team, match.away_team)
                 if active_league.results_type == League.ResultsType.ONE_POCKET
+                else ''
+            ),
+            'result_label': (
+                f'{match.result.home_team_score or 0}-{match.result.away_team_score or 0}'
+                if hasattr(match, 'result') and match.result.home_team_score is not None and match.result.away_team_score is not None
                 else ''
             ),
         }
@@ -260,7 +275,7 @@ def build_team_standings(active_league, active_season, through_week=None):
                 standings_map[match.away_team_id]['matches_won'] += 1
                 standings_map[match.home_team_id]['matches_lost'] += 1
 
-    return sorted(
+    sorted_standings = sorted(
         standings_map.values(),
         key=lambda standing: (
             -standing['matches_won'],
@@ -270,6 +285,11 @@ def build_team_standings(active_league, active_season, through_week=None):
             standing['team'],
         ),
     )
+
+    for i, standing in enumerate(sorted_standings, start=1):
+        standing['league_rank'] = i
+
+    return sorted_standings
 
 
 def build_player_stats(active_league, active_season, through_week=None):
@@ -338,9 +358,192 @@ def build_player_stats(active_league, active_season, through_week=None):
         key=lambda stat: (
             -stat['wins'],
             -stat['tie_breaker'],
+            -stat['percentage'],
             stat['player'],
         ),
     )
+
+
+@staff_member_required
+def finance(request):
+    logging.info(f'Finance Page -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers.get("Host")}, user-agent: {request.headers.get("User-Agent")}, method: {request.method}, path: {request.path}')
+    active_league = get_active_league(request)
+    active_season = get_active_season(active_league)
+
+    if not active_league:
+        raise Http404("No active league found.")
+
+    teams = active_league.teams.all().order_by('name')
+    team_count = teams.count()
+    team_size = active_league.team_size
+
+    weeks = active_season.weeks.filter(number__isnull=False).count() if active_season else 0
+    weeks_played = active_season.weeks.filter(
+        number__isnull=False,
+        matches__result__isnull=False
+    ).distinct().count() if active_season else 0
+
+    signup_fee = active_league.signup_fee
+    fee_per_player = active_league.fee_per_player
+    greens_fee = active_league.greens_fee
+    operator_pay_per_player = active_league.operator_pay_per_player
+    tournament_target = active_league.tournament_target
+
+    weekly_payout_pool_per_team = (fee_per_player - greens_fee - operator_pay_per_player) * Decimal(team_size)
+    total_signup_fees = signup_fee * Decimal(team_count)
+    total_matches_in_season = Match.objects.filter(week__season=active_season, week__number__isnull=False).count()
+    total_weekly_payout_pool = weekly_payout_pool_per_team * Decimal(total_matches_in_season) * Decimal('2')
+    tournament_money = tournament_target
+
+    # Current money calculation
+    total_matches_played = Match.objects.filter(
+        week__season=active_season,
+        week__number__isnull=False,
+        result__isnull=False
+    ).count()
+    current_weekly_net = weekly_payout_pool_per_team * Decimal(total_matches_played) * Decimal('2')
+    current_balance = current_weekly_net
+
+    standings_data = []
+    player_stats_data = []
+    if active_season:
+        standings_data = build_team_standings(active_league, active_season)
+        player_stats_data = build_player_stats(active_league, active_season)
+
+    def get_top_players(players, predicate=None, stat_key='wins', tie_breakers=[]):
+        filtered = [
+            p for p in players
+            if (predicate(p) if predicate else True)
+               and (p['wins'] + p['losses']) > 0
+        ]
+        if not filtered:
+            return []
+
+        # Sort by all keys descending
+        sort_keys = [stat_key] + tie_breakers
+        filtered.sort(key=lambda p: tuple(-p.get(k, 0) for k in sort_keys))
+        
+        top_players = []
+        if filtered:
+            best = filtered[0]
+            if best.get(stat_key, 0) > 0:
+                for p in filtered:
+                    if all(p.get(k) == best.get(k) for k in sort_keys):
+                        top_players.append(p)
+                    else:
+                        break
+        return top_players
+
+    awards = [
+        {
+            'label': 'Top Male',
+            'amount': Decimal('100'),
+            'players': get_top_players(player_stats_data, lambda p: p['male'], 'wins', ['tie_breaker', 'percentage']),
+        },
+        {
+            'label': 'Top Female',
+            'amount': Decimal('100'),
+            'players': get_top_players(player_stats_data, lambda p: not p['male'], 'wins', ['tie_breaker', 'percentage']),
+        },
+        {
+            'label': 'Most Runouts',
+            'amount': Decimal('20'),
+            'players': get_top_players(player_stats_data, stat_key='runs'),
+        },
+        {
+            'label': 'Most 8 on the Breaks',
+            'amount': Decimal('20'),
+            'players': get_top_players(player_stats_data, stat_key='eights'),
+        },
+        {
+            'label': 'Most Sweeps',
+            'amount': Decimal('20'),
+            'players': get_top_players(player_stats_data, stat_key='sweeps'),
+        },
+    ]
+    total_awards_amount = sum(award['amount'] for award in awards)
+
+    # Current Payout Rate (based on money collected so far)
+    total_games_won_so_far = sum(row['games_won'] for row in standings_data)
+    current_payout_rate = Decimal('0')
+    if total_games_won_so_far > 0:
+        # User calculation: (Current Balance - Tournament - Awards) / Games Won So Far
+        # For pool: (1860 - 300 - 260) / 775 = 1.677
+        current_payout_rate = (current_balance - tournament_money - total_awards_amount) / Decimal(total_games_won_so_far)
+        if current_payout_rate < 0:
+            current_payout_rate = Decimal('0')
+
+    # Total payout amount available for games won (Projected Full Season)
+    total_payout_amount = total_weekly_payout_pool - tournament_money - total_awards_amount
+
+    # Project total games for the season
+    # For 8-ball, it's exactly team_size * team_size (25)
+    # For one-pocket, it's variable. Use average games won per match so far.
+    if total_matches_played > 0:
+        average_games_per_match = Decimal(total_games_won_so_far) / Decimal(total_matches_played)
+    else:
+        average_games_per_match = Decimal(team_size * team_size)
+    
+    total_projected_games = average_games_per_match * Decimal(total_matches_in_season)
+
+    projected_payout_rate = Decimal('0')
+    if total_projected_games > 0:
+        projected_payout_rate = total_payout_amount / total_projected_games
+
+    matches_per_team = Decimal(total_matches_in_season) * Decimal('2') / Decimal(team_count)
+    total_games_per_team_season = matches_per_team * average_games_per_match
+
+    standings = []
+    for row in standings_data:
+        games_won = row['games_won']
+        games_lost = row['games_lost']
+        games_played = games_won + games_lost
+
+        if games_played > 0:
+            win_percent = Decimal(games_won) / Decimal(games_played)
+        else:
+            win_percent = Decimal('0.5')
+
+        projected_games_won = win_percent * total_games_per_team_season
+        projected_payout = projected_games_won * projected_payout_rate
+
+        standings.append({
+            'team': row['team'],
+            'games_won': games_won,
+            'payout': Decimal(games_won) * current_payout_rate,
+            'projected_games_won': projected_games_won,
+            'projected_payout': projected_payout,
+        })
+
+    total_current_payout = sum(item['payout'] for item in standings)
+    total_games_won = sum(item['games_won'] for item in standings)
+    total_projected_games_won = sum(item['projected_games_won'] for item in standings)
+    total_projected_payout = sum(item['projected_payout'] for item in standings)
+
+    return render(request, 'finance.html', {
+        'active_league': active_league,
+        'league_name': active_league.name if active_league else 'League Name',
+        'active_season': active_season,
+        'team_count': team_count,
+        'weeks_played': weeks_played,
+        'total_matches_played': total_matches_played,
+        'current_balance': current_balance,
+        'total_payout_amount': total_payout_amount,
+        'payout_rate': current_payout_rate,
+        'projected_payout_rate': projected_payout_rate,
+        'standings': standings,
+        'total_current_payout': total_current_payout,
+        'total_games_won': total_games_won,
+        'total_projected_games_won': total_projected_games_won,
+        'total_projected_payout': total_projected_payout,
+        'awards': awards,
+        'signup_fee': signup_fee,
+        'fee_per_player': fee_per_player,
+        'greens_fee': greens_fee,
+        'operator_pay_per_player': operator_pay_per_player,
+        'tournament_money': tournament_money,
+        'total_awards_amount': total_awards_amount,
+    })
 
 
 def home(request):
@@ -374,6 +577,8 @@ def home(request):
             one_pocket_race_rows_left = ONE_POCKET_RACE_ROWS[:midpoint]
             one_pocket_race_rows_right = ONE_POCKET_RACE_ROWS[midpoint:]
 
+        team_standings = build_team_standings(active_league, active_season)
+
         if active_season:
             next_week = (
                 Week.objects.filter(
@@ -386,6 +591,7 @@ def home(request):
                         queryset=Match.objects.select_related(
                             'home_team',
                             'away_team',
+                            'result',
                         ).order_by('sort_order', 'id'),
                     )
                 )
@@ -399,9 +605,7 @@ def home(request):
                 current_schedule_holiday_note = (next_week.notes or '').strip()
 
                 if not current_schedule_is_holiday:
-                    current_schedule = build_week_schedule_with_byes(active_league, next_week)
-
-        team_standings = build_team_standings(active_league, active_season)
+                    current_schedule = build_week_schedule_with_byes(active_league, next_week, team_standings=team_standings)
 
         all_player_stats = build_player_stats(active_league, active_season)
         top_male_players = [stat for stat in all_player_stats if stat['male'] and (stat['wins'] + stat['losses']) > 0][:5]
@@ -430,6 +634,7 @@ def schedule(request):
     schedule_weeks = []
 
     if active_season and active_league:
+        team_standings = build_team_standings(active_league, active_season)
         weeks = (
             Week.objects.filter(season=active_season)
             .prefetch_related(
@@ -438,6 +643,7 @@ def schedule(request):
                     queryset=Match.objects.select_related(
                         'home_team',
                         'away_team',
+                        'result',
                     ).order_by('sort_order', 'id'),
                 )
             )
@@ -447,7 +653,7 @@ def schedule(request):
         schedule_weeks = [
             {
                 'week': week,
-                'entries': build_week_schedule_with_byes(active_league, week),
+                'entries': build_week_schedule_with_byes(active_league, week, team_standings=team_standings),
             }
             for week in weeks
         ]
@@ -515,12 +721,43 @@ def player_stats(request):
         if selected_week is None:
             selected_week = available_weeks.last()
 
+    gender = request.GET.get('gender', 'all')
+    sort_col = request.GET.get('sort', 'wins')
+    sort_dir = request.GET.get('dir', 'desc')
+
     if active_league:
         player_stats_data = build_player_stats(
             active_league,
             active_season,
             through_week=selected_week,
         )
+
+        if gender == 'male':
+            player_stats_data = [p for p in player_stats_data if p['male']]
+        elif gender == 'female':
+            player_stats_data = [p for p in player_stats_data if not p['male']]
+
+        valid_sort_cols = {
+            'player': 'player',
+            'team': 'team',
+            'wins': 'wins',
+            'losses': 'losses',
+            'percentage': 'percentage',
+            'runs': 'runs',
+            'sweeps': 'sweeps',
+            'eights': 'eights',
+        }
+
+        if sort_col in valid_sort_cols:
+            key_field = valid_sort_cols[sort_col]
+            reverse = (sort_dir == 'desc')
+
+            if key_field == 'player':
+                player_stats_data.sort(key=lambda x: x['player'].lower(), reverse=reverse)
+            elif key_field == 'team':
+                player_stats_data.sort(key=lambda x: x['team'].lower(), reverse=reverse)
+            else:
+                player_stats_data.sort(key=lambda x: x[key_field], reverse=reverse)
 
     return render(request, 'player_stats.html', {
         'active_league': active_league,
@@ -529,6 +766,9 @@ def player_stats(request):
         'available_weeks': available_weeks,
         'selected_week': selected_week,
         'player_stats_data': player_stats_data,
+        'selected_gender': gender,
+        'sort_col': sort_col,
+        'sort_dir': sort_dir,
     })
 
 def contact_info(request):
@@ -619,11 +859,7 @@ def team_detail(request, team_id):
                 games_lost = standing['games_lost']
                 break
 
-    all_player_stats = build_player_stats(team.league, active_season)
-    team_player_stats = [
-        stat for stat in all_player_stats
-        if stat['team'] == team.name
-    ]
+    team_player_stats = build_team_player_stats(active_season, team)
 
     team_schedule = []
     if active_season:
@@ -661,21 +897,25 @@ def team_detail(request, team_id):
                     home_games_won = 0
                     away_games_won = 0
 
-                    for player_result in week_match.result.player_results.all():
+                    for player_result in week_match.result.player_results.select_related('player', 'represented_team').all():
                         if player_result.represented_team_id == week_match.home_team_id:
                             home_games_won += player_result.wins
                         elif player_result.represented_team_id == week_match.away_team_id:
                             away_games_won += player_result.wins
 
+                        is_home_row = player_result.represented_team_id == week_match.home_team_id
                         match_detail_rows.append({
                             'player': player_result.player.name,
                             'represented_team': player_result.represented_team.name,
+                            'is_home': is_home_row,
                             'wins': player_result.wins,
                             'losses': player_result.losses,
                             'runouts': player_result.runouts,
                             'eights': player_result.eight_on_the_breaks,
                             'sweeps': player_result.won_all_games,
                         })
+
+                    match_detail_rows.sort(key=lambda r: (0 if r['is_home'] else 1, r['player']))
 
                     team_games_won = home_games_won if is_home else away_games_won
                     opponent_games_won = away_games_won if is_home else home_games_won
@@ -739,7 +979,6 @@ def build_player_vs_team_stats(player, active_season, through_week=None):
         )
 
     team_map = {}
-
     for player_result in results:
         match = player_result.match_result.match
 
@@ -748,8 +987,13 @@ def build_player_vs_team_stats(player, active_season, through_week=None):
         else:
             opponent = match.home_team
 
-        if opponent.id not in team_map:
-            team_map[opponent.id] = {
+        # Use (represented_team, opponent) as key to separate stats if sub played for different teams
+        key = (player_result.represented_team_id, opponent.id)
+
+        if key not in team_map:
+            team_map[key] = {
+                'represented_team_id': player_result.represented_team_id,
+                'represented_team_name': player_result.represented_team.name,
                 'team_id': opponent.id,
                 'team_name': opponent.name,
                 'wins': 0,
@@ -759,11 +1003,11 @@ def build_player_vs_team_stats(player, active_season, through_week=None):
                 'eights': 0,
             }
 
-        team_map[opponent.id]['wins'] += player_result.wins
-        team_map[opponent.id]['losses'] += player_result.losses
-        team_map[opponent.id]['runs'] += player_result.runouts
-        team_map[opponent.id]['sweeps'] += 1 if player_result.won_all_games else 0
-        team_map[opponent.id]['eights'] += player_result.eight_on_the_breaks
+        team_map[key]['wins'] += player_result.wins
+        team_map[key]['losses'] += player_result.losses
+        team_map[key]['runs'] += player_result.runouts
+        team_map[key]['sweeps'] += 1 if player_result.won_all_games else 0
+        team_map[key]['eights'] += player_result.eight_on_the_breaks
 
     return sorted(team_map.values(), key=lambda row: row['team_name'])
 
@@ -831,6 +1075,9 @@ def team_schedule_modal(request, team_id):
     today = date.today()
 
     if active_season:
+        team_standings = build_team_standings(active_league, active_season)
+        rank_map = {s['team_id']: s['league_rank'] for s in team_standings}
+
         matches = (
             Match.objects.filter(
                 week__season=active_season,
@@ -858,15 +1105,19 @@ def team_schedule_modal(request, team_id):
                     (match.result.home_team_score or 0)
                 )
 
+                opponent_label = opponent.name
+
                 results_rows.append({
                     'date': match.week.date,
-                    'opponent': opponent.name,
+                    'opponent': opponent_label,
                     'result': f'{team_score}-{opponent_score}',
                 })
             else:
+                opponent_label = opponent.name
+
                 row = {
                     'date': match.week.date,
-                    'opponent': opponent.name,
+                    'opponent': opponent_label,
                 }
 
                 if match.week.date < today:
@@ -878,6 +1129,7 @@ def team_schedule_modal(request, team_id):
         'team_schedule_modal.html',
         {
             'team': team,
+            'team_league_rank': rank_map.get(team.id) if active_season else None,
             'results_rows': results_rows,
             'makeup_rows': makeup_rows,
             'upcoming_rows': upcoming_rows,
@@ -898,12 +1150,13 @@ def one_pocket_full_schedule_modal(request):
     schedule_weeks = []
 
     if active_season:
+        team_standings = build_team_standings(active_league, active_season)
         weeks = (
             Week.objects.filter(season=active_season)
             .prefetch_related(
                 Prefetch(
                     'matches',
-                    queryset=Match.objects.select_related('home_team', 'away_team').order_by('sort_order', 'id'),
+                    queryset=Match.objects.select_related('home_team', 'away_team', 'result').order_by('sort_order', 'id'),
                 )
             )
             .order_by('date', 'number')
@@ -912,7 +1165,7 @@ def one_pocket_full_schedule_modal(request):
         schedule_weeks = [
             {
                 'week': week,
-                'entries': build_week_schedule_with_byes(active_league, week),
+                'entries': build_week_schedule_with_byes(active_league, week, team_standings=team_standings),
             }
             for week in weeks
         ]
@@ -1059,6 +1312,23 @@ def build_team_player_stats(active_season, team, through_week=None):
     if not active_season:
         return []
 
+    player_map = {
+        player.id: {
+            'player_id': player.id,
+            'player': player.name,
+            'team': team.name,
+            'male': player.male,
+            'wins': 0,
+            'losses': 0,
+            'percentage': 0.0,
+            'runs': 0,
+            'sweeps': 0,
+            'eights': 0,
+            'tie_breaker': 0,
+        }
+        for player in team.players.all()
+    }
+
     results = (
         PlayerMatchResult.objects.filter(
             match_result__match__week__season=active_season,
@@ -1077,8 +1347,6 @@ def build_team_player_stats(active_season, team, through_week=None):
             match_result__match__week__date__lte=through_week.date,
         )
 
-    player_map = {}
-
     for player_result in results:
         player_id = player_result.player_id
 
@@ -1086,7 +1354,7 @@ def build_team_player_stats(active_season, team, through_week=None):
             player_map[player_id] = {
                 'player_id': player_id,
                 'player': player_result.player.name,
-                'team': player_result.represented_team.name,
+                'team': team.name,
                 'male': player_result.player.male,
                 'wins': 0,
                 'losses': 0,

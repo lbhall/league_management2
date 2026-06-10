@@ -6,9 +6,10 @@ from django.forms.models import BaseInlineFormSet
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
+from django.utils.html import format_html
 
-from .models import League, LeagueAdminAccess, Player, Team, Venue
-from scheduling.models import Season
+from .models import FailedLogin, League, LeagueAdminAccess, Player, Team, Venue
+from scheduling.models import Match, Season
 
 def get_user_league(request):
     if request.user.is_superuser:
@@ -189,24 +190,50 @@ class TeamPlayerInline(admin.TabularInline):
 @admin.register(League)
 class LeagueAdmin(admin.ModelAdmin):
     search_fields = ('name',)
-    list_display = ('name', 'team_size', 'results_type', 'day_of_week')
+    list_display = ('name', 'team_size', 'results_type', 'day_of_week', 'financial_breakdown_link')
     list_filter = ('results_type', 'day_of_week')
     change_form_template = 'admin/core/league/change_form.html'
 
+    def financial_breakdown_link(self, obj):
+        url = reverse('admin:core_league_financial_breakdown', args=[obj.pk])
+        return format_html('<a href="{}">Financial Breakdown</a>', url)
+    financial_breakdown_link.short_description = 'Finance'
+
     def has_module_permission(self, request):
-        return request.user.is_superuser
+        return request.user.is_superuser or hasattr(request.user, 'league_admin_access')
 
     def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser
+        if request.user.is_superuser:
+            return True
+        if hasattr(request.user, 'league_admin_access'):
+            if obj is None:
+                return True
+            return obj == request.user.league_admin_access.league
+        return False
 
     def has_add_permission(self, request):
         return request.user.is_superuser
 
     def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if hasattr(request.user, 'league_admin_access'):
+            if obj is None:
+                return True
+            return obj == request.user.league_admin_access.league
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
 
-    def has_delete_Fpermission(self, request, obj=None):
-        return request.user.is_superuser
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        league = get_user_league(request)
+        if league:
+            return qs.filter(pk=league.pk)
+        return qs.none()
 
     def get_urls(self):
         urls = super().get_urls()
@@ -223,12 +250,11 @@ class LeagueAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         if object_id:
             league = get_object_or_404(League, pk=object_id)
-            if league.results_type == League.ResultsType.EIGHT_BALL:
-                extra_context['financial_breakdown_url'] = reverse(
-                    'admin:core_league_financial_breakdown',
-                    args=[league.pk],
-                )
-                extra_context['show_financial_breakdown'] = True
+            extra_context['financial_breakdown_url'] = reverse(
+                'admin:core_league_financial_breakdown',
+                args=[league.pk],
+            )
+            extra_context['show_financial_breakdown'] = True
         return super().changeform_view(
             request,
             object_id=object_id,
@@ -238,7 +264,7 @@ class LeagueAdmin(admin.ModelAdmin):
 
 
     def financial_breakdown_view(self, request, object_id):
-        league = get_object_or_404(League, pk=object_id, results_type=League.ResultsType.EIGHT_BALL)
+        league = get_object_or_404(League, pk=object_id)
 
         teams = league.teams.all().order_by('name')
         team_count = teams.count()
@@ -246,23 +272,42 @@ class LeagueAdmin(admin.ModelAdmin):
 
         active_season = league.seasons.all().filter(status=Season.Status.ACTIVE).first()
         weeks = active_season.weeks.filter(number__isnull=False).count() if active_season else 0
+        weeks_played = active_season.weeks.filter(
+            number__isnull=False,
+            matches__result__isnull=False
+        ).distinct().count() if active_season else 0
 
         signup_fee = league.signup_fee
         fee_per_player = league.fee_per_player
         greens_fee = league.greens_fee
+        operator_pay_per_player = league.operator_pay_per_player
         tournament_target = league.tournament_target
 
         weekly_collection_per_team = fee_per_player * Decimal(team_size)
         weekly_greens_total_per_team = greens_fee * Decimal(team_size)
-        weekly_payout_pool_per_team = (fee_per_player - greens_fee) * Decimal(team_size)
+        weekly_operator_total_per_team = operator_pay_per_player * Decimal(team_size)
+        weekly_payout_pool_per_team = (fee_per_player - greens_fee - operator_pay_per_player) * Decimal(team_size)
 
         total_signup_fees = signup_fee * Decimal(team_count)
-        total_weekly_collected = weekly_collection_per_team * Decimal(team_count)
-        total_greens_fees = weekly_greens_total_per_team * Decimal(team_count)
-        total_weekly_payout_pool = weekly_payout_pool_per_team * Decimal(team_count)
-        tournament_money = tournament_target * Decimal(team_count)
-        print(f"tournament_money: {tournament_money}")
+        total_matches_in_season = Match.objects.filter(week__season=active_season, week__number__isnull=False).count()
+        total_weekly_collected = weekly_collection_per_team * Decimal(total_matches_in_season) * Decimal('2')
+        total_greens_fees = weekly_greens_total_per_team * Decimal(total_matches_in_season) * Decimal('2')
+        total_operator_fees = weekly_operator_total_per_team * Decimal(total_matches_in_season) * Decimal('2')
+        total_net_collection = total_weekly_collected - total_operator_fees
+        total_weekly_payout_pool = weekly_payout_pool_per_team * Decimal(total_matches_in_season) * Decimal('2')
+        tournament_money = tournament_target
 
+        # Current money calculation (fees - operator costs - greens fees)
+        total_matches_played = Match.objects.filter(
+            week__season=active_season,
+            week__number__isnull=False,
+            result__isnull=False
+        ).count()
+        current_weekly_net = weekly_payout_pool_per_team * Decimal(total_matches_played) * Decimal('2')
+        current_balance = current_weekly_net
+
+        # Total payout amount available for games won
+        # Based on: Weekly Net - Tournament Money
         total_payout_amount = total_weekly_payout_pool - tournament_money
 
         standings_data = []
@@ -272,57 +317,112 @@ class LeagueAdmin(admin.ModelAdmin):
             standings_data = build_team_standings(league, active_season)
             player_stats_data = build_player_stats(league, active_season)
 
-        total_games_won = sum(Decimal(row['games_won']) for row in standings_data) if standings_data else Decimal('0')
-
-        payout_rate = Decimal('0')
-        if total_games_won > 0:
-            payout_rate = total_payout_amount / total_games_won
-
-        standings = []
-        for row in standings_data:
-            standings.append({
-                'team': row['team'],
-                'games_won': row['games_won'],
-                'payout': Decimal(row['games_won']) * payout_rate,
-            })
-
-        def top_player(players, predicate=None, stat_key='wins'):
+        def get_top_players(players, predicate=None, stat_key='wins', tie_breakers=[]):
             filtered = [
                 p for p in players
                 if (predicate(p) if predicate else True)
                    and (p['wins'] + p['losses']) > 0
             ]
             if not filtered:
-                return None
-            return max(filtered, key=lambda p: (p.get(stat_key, 0), p['wins'], p['player']))
+                return []
+
+            # Sort by all keys descending
+            sort_keys = [stat_key] + tie_breakers
+            filtered.sort(key=lambda p: tuple(-p.get(k, 0) for k in sort_keys))
+            
+            top_players = []
+            if filtered:
+                best = filtered[0]
+                if best.get(stat_key, 0) > 0:
+                    for p in filtered:
+                        if all(p.get(k) == best.get(k) for k in sort_keys):
+                            top_players.append(p)
+                        else:
+                            break
+            return top_players
 
         awards = [
             {
                 'label': 'Top Male',
                 'amount': Decimal('100'),
-                'player': top_player(player_stats_data, lambda p: p['male']),
+                'players': get_top_players(player_stats_data, lambda p: p['male'], 'wins', ['tie_breaker', 'percentage']),
             },
             {
                 'label': 'Top Female',
                 'amount': Decimal('100'),
-                'player': top_player(player_stats_data, lambda p: not p['male']),
+                'players': get_top_players(player_stats_data, lambda p: not p['male'], 'wins', ['tie_breaker', 'percentage']),
             },
             {
                 'label': 'Most Runouts',
                 'amount': Decimal('20'),
-                'player': top_player(player_stats_data, stat_key='runs'),
+                'players': get_top_players(player_stats_data, stat_key='runs'),
             },
             {
                 'label': 'Most 8 on the Breaks',
                 'amount': Decimal('20'),
-                'player': top_player(player_stats_data, stat_key='eights'),
+                'players': get_top_players(player_stats_data, stat_key='eights'),
             },
             {
                 'label': 'Most Sweeps',
                 'amount': Decimal('20'),
-                'player': top_player(player_stats_data, stat_key='sweeps'),
+                'players': get_top_players(player_stats_data, stat_key='sweeps'),
             },
         ]
+        total_awards_amount = sum(award['amount'] for award in awards)
+
+        # Current Payout Rate (based on money collected so far)
+        total_games_won_so_far = sum(Decimal(row['games_won']) for row in standings_data) if standings_data else Decimal('0')
+        current_payout_rate = Decimal('0')
+        if total_games_won_so_far > 0:
+            current_payout_rate = (current_balance - tournament_money - total_awards_amount) / total_games_won_so_far
+            if current_payout_rate < 0:
+                current_payout_rate = Decimal('0')
+
+        # Update total payout with awards subtraction (Projected Full Season)
+        total_payout_amount -= total_awards_amount
+
+        # Project total games for the season
+        # Use average games won per match so far for projection
+        if total_matches_played > 0:
+            average_games_per_match = Decimal(total_games_won_so_far) / Decimal(total_matches_played)
+        else:
+            average_games_per_match = Decimal(team_size * team_size)
+        
+        total_projected_games = average_games_per_match * Decimal(total_matches_in_season)
+
+        projected_payout_rate = Decimal('0')
+        if total_projected_games > 0:
+            projected_payout_rate = total_payout_amount / total_projected_games
+
+        matches_per_team = Decimal(total_matches_in_season) * Decimal('2') / Decimal(team_count)
+        total_games_per_team_season = matches_per_team * average_games_per_match
+
+        standings = []
+        for row in standings_data:
+            games_won = row['games_won']
+            games_lost = row['games_lost']
+            games_played = games_won + games_lost
+
+            if games_played > 0:
+                win_percent = Decimal(games_won) / Decimal(games_played)
+            else:
+                win_percent = Decimal('0.5')
+
+            projected_games_won = win_percent * total_games_per_team_season
+            projected_payout = projected_games_won * projected_payout_rate
+
+            standings.append({
+                'team': row['team'],
+                'games_won': games_won,
+                'payout': Decimal(games_won) * current_payout_rate,
+                'projected_games_won': projected_games_won,
+                'projected_payout': projected_payout,
+            })
+
+        total_current_payout = sum(item['payout'] for item in standings)
+        total_games_won = sum(item['games_won'] for item in standings)
+        total_projected_games_won = sum(item['projected_games_won'] for item in standings)
+        total_projected_payout = sum(item['projected_payout'] for item in standings)
 
         return render(request, 'admin/core/league/financial_breakdown.html', {
             'title': f'Financial Breakdown: {league.name}',
@@ -330,21 +430,33 @@ class LeagueAdmin(admin.ModelAdmin):
             'team_count': team_count,
             'team_size': team_size,
             'weeks': weeks,
+            'weeks_played': weeks_played,
+            'current_balance': current_balance,
             'fee_per_player': fee_per_player,
             'greens_fee': greens_fee,
+            'operator_pay_per_player': operator_pay_per_player,
             'signup_fee': signup_fee,
             'tournament_target': tournament_target,
             'weekly_collection_per_team': weekly_collection_per_team,
             'weekly_greens_total_per_team': weekly_greens_total_per_team,
+            'weekly_operator_total_per_team': weekly_operator_total_per_team,
             'weekly_payout_pool_per_team': weekly_payout_pool_per_team,
             'total_signup_fees': total_signup_fees,
             'total_weekly_collected': total_weekly_collected,
             'total_greens_fees': total_greens_fees,
+            'total_operator_fees': total_operator_fees,
+            'total_net_collection': total_net_collection,
             'total_weekly_payout_pool': total_weekly_payout_pool,
             'tournament_money': tournament_money,
+            'total_awards_amount': total_awards_amount,
             'total_payout_amount': total_payout_amount,
-            'payout_rate': payout_rate,
+            'payout_rate': current_payout_rate,
+            'projected_payout_rate': projected_payout_rate,
             'standings': standings,
+            'total_current_payout': total_current_payout,
+            'total_games_won': total_games_won,
+            'total_projected_games_won': total_projected_games_won,
+            'total_projected_payout': total_projected_payout,
             'awards': awards,
         })
 
@@ -512,3 +624,17 @@ class LeagueScopedTeamFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(team_id=self.value())
         return queryset
+
+
+@admin.register(FailedLogin)
+class FailedLoginAdmin(admin.ModelAdmin):
+    list_display = ('username', 'ip_address', 'timestamp', 'user_agent')
+    list_filter = ('timestamp',)
+    search_fields = ('username', 'ip_address')
+    readonly_fields = ('username', 'ip_address', 'user_agent', 'timestamp')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

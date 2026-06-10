@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}League Finances - {{ active_league.name }}{% endblock %}
+{% block navbar %}{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/admin/">Back</a></li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5 fw-bold">{{ active_league.name }} Finances</h1>
+            <p class="lead">Season: {{ active_season.name }}</p>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0 bg-success text-white">
+                <div class="card-body text-center">
+                    <h5 class="card-title opacity-75">Current League Balance</h5>
+                    <p class="display-6 fw-bold mb-0">${{ current_balance|floatformat:2 }}</p>
+                    <small class="opacity-75">Based on {{ weeks_played }} weeks ({{ total_matches_played }} total matches)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-muted">Projected Total Payout</h5>
+                    <p class="display-6 fw-bold mb-0 text-primary">${{ total_payout_amount|floatformat:2 }}</p>
+                    <small class="text-muted">
+                        Excl. signup fees - deductions<br>
+                        (Proj. Rate: ${{ projected_payout_rate|floatformat:2 }}/game)
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-muted">Current Payout Rate</h5>
+                    <p class="display-6 fw-bold mb-0 text-info">${{ payout_rate|floatformat:2 }}</p>
+                    <small class="text-muted">Per game win</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Team Payouts (To Date)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Team</th>
+                                    <th class="text-center">Games Won</th>
+                                    <th class="text-end pe-4">Current Payout</th>
+                                    <th class="text-center">Proj. Wins</th>
+                                    <th class="text-end pe-4">Proj. Payout</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in standings %}
+                                <tr>
+                                    <td class="fw-bold">{{ item.team }}</td>
+                                    <td class="text-center">{{ item.games_won }}</td>
+                                    <td class="text-end pe-4 text-success fw-bold">${{ item.payout|floatformat:2 }}</td>
+                                    <td class="text-center">{{ item.projected_games_won|floatformat:0 }}</td>
+                                    <td class="text-end pe-4 text-primary fw-bold">${{ item.projected_payout|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light border-top-0">
+                                <tr>
+                                    <td class="fw-bold">Totals</td>
+                                    <td class="text-center fw-bold">{{ total_games_won }}</td>
+                                    <td class="text-end pe-4 text-success fw-bold">${{ total_current_payout|floatformat:2 }}</td>
+                                    <td class="text-center fw-bold">{{ total_projected_games_won|floatformat:0 }}</td>
+                                    <td class="text-end pe-4 text-primary fw-bold">${{ total_projected_payout|floatformat:2 }}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Individual Awards (Projected)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        {% for award in awards %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                            <div>
+                                <div class="fw-bold text-muted small text-uppercase">{{ award.label }}</div>
+                                <div class="fw-bold">
+                                    {% if award.players %}
+                                        {% for p in award.players %}{{ p.player }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">TBD</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <span class="badge bg-primary rounded-pill text-white">${{ award.amount|floatformat:2 }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">League Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Signup Fee:</span>
+                        <span class="fw-bold">${{ signup_fee|floatformat:2 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Fee per Player:</span>
+                        <span class="fw-bold">${{ fee_per_player|floatformat:2 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Greens Fee:</span>
+                        <span class="fw-bold">${{ greens_fee|floatformat:2 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Operator Pay:</span>
+                        <span class="fw-bold">${{ operator_pay_per_player|floatformat:2 }}</span>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Tournament Target:</span>
+                        <span class="fw-bold">${{ tournament_money|floatformat:2 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Individual Awards:</span>
+                        <span class="fw-bold">${{ total_awards_amount|floatformat:2 }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
