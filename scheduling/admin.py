@@ -147,10 +147,15 @@ class HolidayAdmin(admin.ModelAdmin):
 @admin.register(Season)
 class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
     change_form_template = 'admin/scheduling/season/change_form.html'
-    list_display = ('name', 'league', 'status')
+    list_display = ('name', 'league', 'status', 'tournament_players_link')
     search_fields = ('name', 'league__name')
     ordering = ('league__name', 'name')
     inlines = [WeekInline]
+
+    def tournament_players_link(self, obj):
+        url = reverse('tournament_players') + f'?league={obj.league_id}'
+        return format_html('<a href="{}">Tournament Players</a>', url)
+    tournament_players_link.short_description = 'Tournaments'
 
     def get_urls(self):
         urls = super().get_urls()

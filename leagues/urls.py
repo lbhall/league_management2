@@ -22,10 +22,13 @@ from core.views import (
     team_detail,
     team_schedule_modal,
 )
+from tournaments.views import export_tournament_teams, tournament_players
 
 urlpatterns = [
     path('', home, name='home'),
     path('finance/', finance, name='finance'),
+    path('tournament-players/', tournament_players, name='tournament_players'),
+    path('tournament-players/export/', export_tournament_teams, name='export_tournament_teams'),
     path('schedule/', schedule, name='schedule'),
     path('standings/', standings, name='standings'),
     path('player-stats/', player_stats, name='player_stats'),

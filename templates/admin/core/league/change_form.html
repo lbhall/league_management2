@@ -1,0 +1,15 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    {% if show_financial_breakdown and financial_breakdown_url %}
+      <li>
+        <a href="{{ financial_breakdown_url }}" class="historylink" style="background-color: #28a745; color: white !important;">💰 Financial Breakdown</a>
+      </li>
+    {% endif %}
+    {% if show_tournament_players and tournament_players_url %}
+      <li>
+        <a href="{{ tournament_players_url }}" class="historylink" style="background-color: #ffc107; color: black !important;">🏆 Tournament Players</a>
+      </li>
+    {% endif %}
+{% endblock %}

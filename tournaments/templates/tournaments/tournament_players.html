@@ -1,0 +1,239 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Tournament Players - {{ active_league.name }}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    › Tournament Players: {{ active_league.name }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5 fw-bold">Tournament Players</h1>
+            <p class="lead">Season: {{ active_season.name }}</p>
+            <p class="text-muted">Showing players with at least 2 appearances in the current season.</p>
+        </div>
+    </div>
+
+    {% if messages %}
+    <div class="row mb-4">
+        <div class="col">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if existing_teams %}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">🎱 Tournament Teams ({{ existing_teams|length }})</h5>
+            <div class="d-flex gap-2">
+                <a href="{% url 'export_tournament_teams' %}" class="btn btn-success btn-sm">⬇ Export CSV</a>
+                <form method="post" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" name="regenerate_teams" value="1" class="btn btn-warning btn-sm" onclick="return confirm('Regenerate teams with new random pairings?')">Regenerate</button>
+                </form>
+                <form method="post" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" name="clear_teams" value="1" class="btn btn-outline-light btn-sm" onclick="return confirm('Clear all teams?')">Clear Teams</button>
+                </form>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center" style="width:60px;">#</th>
+                        <th>A Player</th>
+                        <th>B Player</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for team in existing_teams %}
+                    <tr>
+                        <td class="text-center fw-bold">{{ team.team_number }}</td>
+                        <td><span class="badge bg-primary me-1">A</span> {{ team.a_player.name }}</td>
+                        <td><span class="badge bg-secondary me-1">B</span> {{ team.b_player.name }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif can_make_teams %}
+    <div class="d-flex justify-content-end mb-4">
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" name="make_teams" value="1" class="btn btn-success px-4">🎲 Make Teams</button>
+        </form>
+    </div>
+    {% elif selected_player_ids and a_players|length != b_players|length %}
+    <div class="alert alert-info mb-4">
+        A and B lists must be equal in size to generate teams (currently {{ a_players|length }} A vs {{ b_players|length }} B).
+    </div>
+    {% endif %}
+
+    {% if selected_player_ids %}
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-primary text-white py-3">
+                    <h5 class="mb-0">A Players ({{ a_players|length }})</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Player</th>
+                                <th>Team</th>
+                                <th class="text-center">W</th>
+                                <th class="text-center">L</th>
+                                <th class="text-center">Win %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in a_players %}
+                            {% with total=p.total_wins|add:p.total_losses wins=p.total_wins|default:0 losses=p.total_losses|default:0 %}
+                            <tr>
+                                <td class="text-muted">{{ forloop.counter }}</td>
+                                <td class="fw-bold">{{ p.name }}</td>
+                                <td>{{ p.team.name|default:"Sub" }}</td>
+                                <td class="text-center">{{ wins }}</td>
+                                <td class="text-center">{{ losses }}</td>
+                                <td class="text-center">
+                                    {% if total %}{{ wins }} / {{ total }}{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% empty %}
+                            <tr><td colspan="6" class="text-center text-muted py-3">None</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-secondary text-white py-3">
+                    <h5 class="mb-0">B Players ({{ b_players|length }})</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Player</th>
+                                <th>Team</th>
+                                <th class="text-center">W</th>
+                                <th class="text-center">L</th>
+                                <th class="text-center">Win %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in b_players %}
+                            {% with total=p.total_wins|add:p.total_losses wins=p.total_wins|default:0 losses=p.total_losses|default:0 %}
+                            <tr>
+                                <td class="text-muted">{{ forloop.counter }}</td>
+                                <td class="fw-bold">{{ p.name }}</td>
+                                <td>{{ p.team.name|default:"Sub" }}</td>
+                                <td class="text-center">{{ wins }}</td>
+                                <td class="text-center">{{ losses }}</td>
+                                <td class="text-center">
+                                    {% if total %}{{ wins }} / {{ total }}{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% empty %}
+                            <tr><td colspan="6" class="text-center text-muted py-3">None</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning mb-4">No players added to the tournament yet.</div>
+    {% endif %}
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Add Players to Tournament</h5>
+            {% if selected_player_ids %}
+            <form method="post" class="d-inline" onsubmit="return confirm('Remove all players from the tournament?')">
+                {% csrf_token %}
+                <button type="submit" name="clear_all" value="1" class="btn btn-outline-danger btn-sm">Clear All</button>
+            </form>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" id="select-all" class="form-check-input">
+                                </th>
+                                <th>Player Name</th>
+                                <th>Team</th>
+                                <th class="text-center">Appearances</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for player in players %}
+                            {% if player.id not in selected_player_ids %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="player_ids" value="{{ player.id }}" class="form-check-input player-checkbox">
+                                </td>
+                                <td class="fw-bold">{{ player.name }}</td>
+                                <td>{{ player.team.name|default:"Sub" }}</td>
+                                <td class="text-center">{{ player.appearances }}</td>
+                            </tr>
+                            {% endif %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4">No eligible players found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary px-4">Add Selected Players</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const selectAll = document.getElementById('select-all');
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.player-checkbox');
+            checkboxes.forEach(cb => cb.checked = this.checked);
+        });
+    }
+</script>
+{% endblock %}

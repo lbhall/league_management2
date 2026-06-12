@@ -1,31 +1,23 @@
 {% load i18n %}
+<button class="sticky toggle-nav-sidebar" id="toggle-nav-sidebar" aria-label="{% translate 'Toggle navigation' %}"></button>
+<nav class="sticky" id="nav-sidebar" aria-label="{% translate 'Sidebar' %}">
+  <input type="search" id="nav-filter"
+         placeholder="{% translate 'Start typing to filter…' %}"
+         aria-label="{% translate 'Filter navigation items' %}">
+  {% include 'admin/app_list.html' with app_list=available_apps show_changelinks=False %}
 
-{% if available_apps %}
-    <nav id="nav-sidebar">
-        {% for app in available_apps %}
-            <div class="module">
-                <table>
-                    <caption>
-                        <a href="{{ app.app_url }}">{{ app.name }}</a>
-                    </caption>
-                    {% for model in app.models %}
-                        <tr>
-                            <th scope="row">
-                                <a href="{{ model.admin_url }}">{{ model.name }}</a>
-                            </th>
-                        </tr>
-                    {% endfor %}
-                </table>
-            </div>
-        {% endfor %}
-
-        <div class="module">
-            <h2>Custom</h2>
-            <ul>
-                <li>
-                    <a href="{% url 'admin:scheduling_schedule' %}">Schedule</a>
-                </li>
-            </ul>
-        </div>
-    </nav>
-{% endif %}
+  <div class="module">
+      <h2 style="padding: 8px 10px; margin: 0; background: var(--secondary); color: var(--header-link-color);">League Management</h2>
+      <ul style="margin: 0; padding: 0;">
+          <li style="list-style-type: none; border-bottom: 1px solid var(--border-color); padding: 8px 10px;">
+              <a href="{% url 'admin:scheduling_schedule' %}" style="font-weight: bold;">📅 Schedule View</a>
+          </li>
+          <li style="list-style-type: none; border-bottom: 1px solid var(--border-color); padding: 8px 10px;">
+              <a href="{% url 'finance' %}" style="font-weight: bold;">💰 Finance Breakdown</a>
+          </li>
+          <li style="list-style-type: none; border-bottom: 1px solid var(--border-color); padding: 8px 10px;">
+              <a href="{% url 'tournament_players' %}" style="font-weight: bold; color: #ffc107;">🏆 Tournament Players</a>
+          </li>
+      </ul>
+  </div>
+</nav>

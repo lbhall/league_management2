@@ -190,7 +190,7 @@ class TeamPlayerInline(admin.TabularInline):
 @admin.register(League)
 class LeagueAdmin(admin.ModelAdmin):
     search_fields = ('name',)
-    list_display = ('name', 'team_size', 'results_type', 'day_of_week', 'financial_breakdown_link')
+    list_display = ('name', 'team_size', 'results_type', 'day_of_week', 'financial_breakdown_link', 'tournament_players_link')
     list_filter = ('results_type', 'day_of_week')
     change_form_template = 'admin/core/league/change_form.html'
 
@@ -198,6 +198,11 @@ class LeagueAdmin(admin.ModelAdmin):
         url = reverse('admin:core_league_financial_breakdown', args=[obj.pk])
         return format_html('<a href="{}">Financial Breakdown</a>', url)
     financial_breakdown_link.short_description = 'Finance'
+
+    def tournament_players_link(self, obj):
+        url = reverse('tournament_players')
+        return format_html('<a href="{}">Tournament Players</a>', url)
+    tournament_players_link.short_description = 'Tournaments'
 
     def has_module_permission(self, request):
         return request.user.is_superuser or hasattr(request.user, 'league_admin_access')
@@ -255,6 +260,10 @@ class LeagueAdmin(admin.ModelAdmin):
                 args=[league.pk],
             )
             extra_context['show_financial_breakdown'] = True
+            
+            extra_context['tournament_players_url'] = reverse('tournament_players')
+            extra_context['show_tournament_players'] = True
+
         return super().changeform_view(
             request,
             object_id=object_id,
