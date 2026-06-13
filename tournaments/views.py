@@ -7,7 +7,16 @@ from django.http import HttpResponse
 from django.contrib import messages
 from core.models import Player, League
 from scheduling.models import Season
-from .models import Tournament, TournamentPlayer, TournamentTeam
+from .models import Tournament, TournamentPlayer, TournamentTeam, BracketMatch
+from .bracket import (
+    generate_bracket,
+    set_winner,
+    can_undo,
+    undo_winner,
+    compute_placements,
+    compute_payouts,
+    _sync_tournament_completion,
+)
 from core.views import get_active_league, get_active_season
 
 @staff_member_required
@@ -57,9 +66,17 @@ def tournament_players(request):
             messages.success(request, "Teams generated.")
             return redirect('tournament_players')
         player_ids = request.POST.getlist('player_ids')
-        for p_id in player_ids:
-            TournamentPlayer.objects.get_or_create(tournament=tournament, player_id=p_id)
-        messages.success(request, "Tournament players updated.")
+        if player_ids:
+            teams_existed = TournamentTeam.objects.filter(tournament=tournament).exists()
+            if teams_existed:
+                TournamentTeam.objects.filter(tournament=tournament).delete()
+                BracketMatch.objects.filter(tournament=tournament).delete()
+            for p_id in player_ids:
+                TournamentPlayer.objects.get_or_create(tournament=tournament, player_id=p_id)
+            if teams_existed:
+                messages.success(request, "Tournament players added. Existing teams and bracket were cleared.")
+            else:
+                messages.success(request, "Tournament players updated.")
         return redirect('tournament_players')
 
     eligible_players = Player.objects.filter(
@@ -135,3 +152,221 @@ def export_tournament_teams(request):
         ])
 
     return response
+
+
+@staff_member_required
+def tournament_bracket(request):
+    active_league = get_active_league(request)
+    if not active_league:
+        messages.error(request, "No active league found.")
+        return redirect('home')
+
+    active_season = get_active_season(active_league)
+    if not active_season:
+        messages.error(request, "No active season found.")
+        return redirect('home')
+
+    tournament = Tournament.objects.filter(season=active_season).first()
+    if not tournament:
+        messages.error(request, "No tournament exists yet. Create tournament teams first.")
+        return redirect('tournament_players')
+
+    if request.method == 'POST':
+        if 'generate' in request.POST:
+            if not TournamentTeam.objects.filter(tournament=tournament).exists():
+                messages.error(request, "Generate tournament teams before building the bracket.")
+                return redirect('tournament_players')
+            generate_bracket(tournament)
+            messages.success(request, "Bracket generated.")
+            return redirect('tournament_bracket')
+
+        if 'clear_bracket' in request.POST:
+            BracketMatch.objects.filter(tournament=tournament).delete()
+            if tournament.completed_at is not None:
+                tournament.completed_at = None
+                tournament.save(update_fields=['completed_at'])
+            messages.success(request, "Bracket cleared.")
+            return redirect('tournament_bracket')
+
+        undo_id = request.POST.get('undo_match_id')
+        if undo_id:
+            match = get_object_or_404(BracketMatch, id=undo_id, tournament=tournament)
+            try:
+                undo_winner(match)
+                messages.success(request, "Match result undone.")
+            except ValueError as e:
+                messages.error(request, str(e))
+            return redirect('tournament_bracket')
+
+        if 'mark_complete' in request.POST:
+            from django.utils import timezone
+            tournament.completed_at = timezone.now()
+            tournament.save(update_fields=['completed_at'])
+            messages.success(request, "Tournament marked complete. Now visible on the public page.")
+            return redirect('tournament_bracket')
+
+        if 'mark_in_progress' in request.POST:
+            tournament.completed_at = None
+            tournament.save(update_fields=['completed_at'])
+            messages.success(request, "Tournament marked in progress. Hidden from the public page.")
+            return redirect('tournament_bracket')
+
+        match_id = request.POST.get('match_id')
+        winner_id = request.POST.get('winner_id')
+        if match_id and winner_id:
+            match = get_object_or_404(BracketMatch, id=match_id, tournament=tournament)
+            if match.status == BracketMatch.STATUS_COMPLETE:
+                messages.error(request, "That match is already complete.")
+                return redirect('tournament_bracket')
+            if str(match.team1_id) == str(winner_id):
+                winner_team = match.team1
+            elif str(match.team2_id) == str(winner_id):
+                winner_team = match.team2
+            else:
+                messages.error(request, "Selected winner is not in that match.")
+                return redirect('tournament_bracket')
+            set_winner(match, winner_team)
+            return redirect('tournament_bracket')
+
+    # Reconcile completion state on each load: catches tournaments completed
+    # before the completed_at field existed, or whose match wins were applied
+    # outside the normal set_winner code path.
+    if BracketMatch.objects.filter(tournament=tournament).exists():
+        _sync_tournament_completion(tournament)
+        tournament.refresh_from_db()
+
+    matches = list(
+        BracketMatch.objects.filter(tournament=tournament)
+        .select_related('team1__a_player', 'team1__b_player', 'team2__a_player', 'team2__b_player',
+                        'winner__a_player', 'winner__b_player',
+                        'winner_next', 'loser_next')
+    )
+    for m in matches:
+        m.can_undo = can_undo(m)
+
+    def _columnize(side):
+        rounds = {}
+        for m in matches:
+            if m.bracket_side != side:
+                continue
+            rounds.setdefault(m.round_number, []).append(m)
+        for r in rounds:
+            rounds[r].sort(key=lambda x: x.position)
+        ordered = [rounds[r] for r in sorted(rounds.keys())]
+        # Annotate each round with merge type for connector rendering.
+        annotated = []
+        for i, ms in enumerate(ordered):
+            if i == len(ordered) - 1:
+                merge = 'merge-none'
+            else:
+                next_count = len(ordered[i + 1])
+                if next_count == len(ms):
+                    merge = 'merge-straight'
+                elif next_count * 2 == len(ms):
+                    merge = 'merge-halves'
+                else:
+                    merge = 'merge-none'
+            annotated.append({'matches': ms, 'merge_class': merge, 'label_index': i + 1})
+        return annotated
+
+    winner_rounds = _columnize(BracketMatch.SIDE_WINNER)
+    loser_rounds = _columnize(BracketMatch.SIDE_LOSER)
+    gf = next((m for m in matches if m.bracket_side == BracketMatch.SIDE_FINAL), None)
+    reset = next((m for m in matches if m.bracket_side == BracketMatch.SIDE_RESET), None)
+
+    placements = compute_placements(tournament) if matches else []
+    payout_info = compute_payouts(tournament, placements) if matches else None
+
+    return render(request, 'tournaments/tournament_bracket.html', {
+        'active_league': active_league,
+        'league_name': active_league.name if active_league else 'League Name',
+        'active_season': active_season,
+        'tournament': tournament,
+        'winner_rounds': winner_rounds,
+        'loser_rounds': loser_rounds,
+        'grand_final': gf,
+        'reset_match': reset,
+        'has_bracket': bool(matches),
+        'payout_info': payout_info,
+    })
+
+
+def end_of_season_tournament(request, tournament_id=None):
+    """Public read-only view of completed tournaments in the active league."""
+    active_league = get_active_league(request)
+    if not active_league:
+        messages.error(request, "No active league found.")
+        return redirect('home')
+
+    completed_tournaments = Tournament.objects.filter(
+        season__league=active_league,
+        completed_at__isnull=False,
+    ).select_related('season').order_by('-completed_at')
+
+    if not completed_tournaments.exists():
+        return render(request, 'tournaments/end_of_season_tournament.html', {
+            'active_league': active_league,
+            'league_name': active_league.name,
+            'completed_tournaments': [],
+            'selected_tournament': None,
+        })
+
+    if tournament_id:
+        selected = get_object_or_404(
+            Tournament, id=tournament_id, season__league=active_league,
+            completed_at__isnull=False,
+        )
+    else:
+        selected = completed_tournaments.first()
+
+    matches = list(
+        BracketMatch.objects.filter(tournament=selected)
+        .select_related('team1__a_player', 'team1__b_player', 'team2__a_player', 'team2__b_player',
+                        'winner__a_player', 'winner__b_player')
+    )
+    for m in matches:
+        m.can_undo = False  # Always read-only on the public page.
+
+    def _columnize(side):
+        rounds = {}
+        for m in matches:
+            if m.bracket_side != side:
+                continue
+            rounds.setdefault(m.round_number, []).append(m)
+        for r in rounds:
+            rounds[r].sort(key=lambda x: x.position)
+        ordered = [rounds[r] for r in sorted(rounds.keys())]
+        annotated = []
+        for i, ms in enumerate(ordered):
+            if i == len(ordered) - 1:
+                merge = 'merge-none'
+            else:
+                next_count = len(ordered[i + 1])
+                if next_count == len(ms):
+                    merge = 'merge-straight'
+                elif next_count * 2 == len(ms):
+                    merge = 'merge-halves'
+                else:
+                    merge = 'merge-none'
+            annotated.append({'matches': ms, 'merge_class': merge, 'label_index': i + 1})
+        return annotated
+
+    winner_rounds = _columnize(BracketMatch.SIDE_WINNER)
+    loser_rounds = _columnize(BracketMatch.SIDE_LOSER)
+    gf = next((m for m in matches if m.bracket_side == BracketMatch.SIDE_FINAL), None)
+    reset = next((m for m in matches if m.bracket_side == BracketMatch.SIDE_RESET), None)
+
+    placements = compute_placements(selected)
+    payout_info = compute_payouts(selected, placements)
+
+    return render(request, 'tournaments/end_of_season_tournament.html', {
+        'active_league': active_league,
+        'league_name': active_league.name,
+        'completed_tournaments': completed_tournaments,
+        'selected_tournament': selected,
+        'winner_rounds': winner_rounds,
+        'loser_rounds': loser_rounds,
+        'grand_final': gf,
+        'reset_match': reset,
+        'payout_info': payout_info,
+    })

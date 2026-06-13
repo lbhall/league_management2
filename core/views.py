@@ -188,6 +188,7 @@ def build_team_standings(active_league, active_season, through_week=None):
         team.id: {
             'team_id': team.id,
             'team': team.name,
+            'team_rank': team.team_rank,
             'matches_won': 0,
             'matches_lost': 0,
             'games_won': 0,
@@ -434,6 +435,9 @@ def finance(request):
                         break
         return top_players
 
+    runouts_top = get_top_players(player_stats_data, stat_key='runs')
+    eights_top = get_top_players(player_stats_data, stat_key='eights')
+    sweeps_top = get_top_players(player_stats_data, stat_key='sweeps')
     awards = [
         {
             'label': 'Top Male',
@@ -448,17 +452,20 @@ def finance(request):
         {
             'label': 'Most Runouts',
             'amount': Decimal('20'),
-            'players': get_top_players(player_stats_data, stat_key='runs'),
+            'players': runouts_top,
+            'count': runouts_top[0]['runs'] if runouts_top else 0,
         },
         {
             'label': 'Most 8 on the Breaks',
             'amount': Decimal('20'),
-            'players': get_top_players(player_stats_data, stat_key='eights'),
+            'players': eights_top,
+            'count': eights_top[0]['eights'] if eights_top else 0,
         },
         {
-            'label': 'Most Sweeps',
+            'label': 'Most 5/0s',
             'amount': Decimal('20'),
-            'players': get_top_players(player_stats_data, stat_key='sweeps'),
+            'players': sweeps_top,
+            'count': sweeps_top[0]['sweeps'] if sweeps_top else 0,
         },
     ]
     total_awards_amount = sum(award['amount'] for award in awards)

@@ -43,6 +43,7 @@
         <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
             <h5 class="mb-0">🎱 Tournament Teams ({{ existing_teams|length }})</h5>
             <div class="d-flex gap-2">
+                <a href="{% url 'tournament_bracket' %}" class="btn btn-primary btn-sm">View / Generate Bracket</a>
                 <a href="{% url 'export_tournament_teams' %}" class="btn btn-success btn-sm">⬇ Export CSV</a>
                 <form method="post" class="d-inline">
                     {% csrf_token %}
@@ -220,7 +221,11 @@
                 </div>
 
                 <div class="mt-4">
-                    <button type="submit" class="btn btn-primary px-4">Add Selected Players</button>
+                    <button
+                        type="submit"
+                        class="btn btn-primary px-4"
+                        {% if existing_teams %}onclick="return confirm('Adding players will clear the existing tournament teams and any generated bracket. Continue?');"{% endif %}
+                    >Add Selected Players</button>
                 </div>
             </form>
         </div>

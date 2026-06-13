@@ -1,0 +1,57 @@
+{% if winner_rounds %}
+<section class="bracket-section">
+    <h3>Winner Bracket</h3>
+    <div class="bracket-tree">
+        {% for round in winner_rounds %}
+        <div class="tree-round {{ round.merge_class }}">
+            <div class="tree-round-label">Winners Round {{ round.label_index }}</div>
+            <div class="tree-round-matches">
+                {% for match in round.matches %}
+                    {% include "tournaments/_bracket_match.html" with match=match read_only=read_only %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% if loser_rounds %}
+<section class="bracket-section">
+    <h3>Loser Bracket</h3>
+    <div class="bracket-tree">
+        {% for round in loser_rounds %}
+        <div class="tree-round {{ round.merge_class }}">
+            <div class="tree-round-label">Lower Round {{ round.label_index }}</div>
+            <div class="tree-round-matches">
+                {% for match in round.matches %}
+                    {% include "tournaments/_bracket_match.html" with match=match read_only=read_only %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<section class="bracket-section">
+    <h3>Grand Final</h3>
+    <div class="bracket-tree">
+        <div class="tree-round {% if reset_match and reset_match.status != 'skipped' %}merge-straight{% else %}merge-none{% endif %}">
+            <div class="tree-round-label">Grand Final</div>
+            <div class="tree-round-matches">
+                {% if grand_final %}
+                    {% include "tournaments/_bracket_match.html" with match=grand_final read_only=read_only %}
+                {% endif %}
+            </div>
+        </div>
+        {% if reset_match and reset_match.status != 'skipped' %}
+        <div class="tree-round merge-none">
+            <div class="tree-round-label">Reset</div>
+            <div class="tree-round-matches">
+                {% include "tournaments/_bracket_match.html" with match=reset_match read_only=read_only %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</section>

@@ -1,0 +1,330 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Tournament Bracket - {{ active_league.name }}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    /* ---- Bracket tree layout ---- */
+    .bracket-section { margin-bottom: 2.5rem; }
+    .bracket-section h3 { margin-bottom: 1rem; color: #2c3e50; }
+    .bracket-tree {
+        display: flex;
+        gap: 48px;            /* the connector channel between rounds */
+        align-items: stretch;
+        overflow-x: auto;
+        background: #f7f8fa;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        padding: 1rem 1.25rem 1.5rem;
+    }
+    .tree-round {
+        flex: 0 0 220px;
+        display: flex;
+        flex-direction: column;
+    }
+    .tree-round-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #6c757d;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.75rem;
+        text-align: left;
+    }
+    .tree-round-matches {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+    }
+    .tree-match-wrap {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        position: relative;
+        min-height: 84px;
+    }
+
+    /* ---- Match card ---- */
+    .tree-match {
+        width: 100%;
+        background: #2c3e50;
+        color: #ecf0f1;
+        border-radius: 4px;
+        padding: 4px 6px;
+        font-size: 0.78rem;
+        position: relative;
+        z-index: 1;
+        border: 1px solid #1f2c38;
+    }
+    .tree-match.ready  { border-color: #3498db; box-shadow: 0 0 0 1px rgba(52,152,219,0.4); }
+    .tree-match.complete { background: #34495e; }
+    .tree-match.bye    { opacity: 0.6; }
+    .tree-match.skipped { opacity: 0.3; }
+
+    .tree-match .slot {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 2px;
+    }
+    .tree-match .slot + .slot {
+        border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .tree-match .slot-name {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .tree-match .slot.winner .slot-name { color: #f1c40f; font-weight: 600; }
+    .tree-match .slot.loser .slot-name  { color: #7f8c8d; text-decoration: line-through; }
+    .tree-match .slot.tbd .slot-name    { color: #6c7a89; font-style: italic; }
+    .tree-match .team-number {
+        background: #e67e22;
+        color: white;
+        font-weight: 700;
+        font-size: 0.68rem;
+        padding: 0 5px;
+        border-radius: 2px;
+        min-width: 20px;
+        text-align: center;
+    }
+    .tree-match .slot.tbd .team-number { display: none; }
+    .tree-match .pick-btn {
+        background: #3498db;
+        color: white;
+        border: none;
+        border-radius: 2px;
+        padding: 0 5px;
+        font-size: 0.7rem;
+        line-height: 1.3;
+        cursor: pointer;
+    }
+    .tree-match .pick-btn:hover { background: #2980b9; }
+    .tree-match .match-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.62rem;
+        color: #95a5a6;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 0 2px 2px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        margin-bottom: 2px;
+    }
+    .tree-match .undo-btn {
+        background: transparent;
+        border: none;
+        color: #ff9b8e;
+        font-size: 0.72rem;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+    .tree-match .undo-btn:hover { color: #ffc6bf; text-decoration: underline; }
+
+    /* ---- Connectors ---- */
+    /* 2:1 merge: horizontal stub from each, vertical line bridging odd→even, continuation from merge point */
+    .tree-round.merge-halves .tree-match-wrap::after {
+        content: '';
+        position: absolute;
+        left: 100%;
+        top: calc(50% - 1px);
+        width: 24px;
+        height: 2px;
+        background: #b0b8c1;
+    }
+    .tree-round.merge-halves .tree-match-wrap:nth-child(odd)::before {
+        content: '';
+        position: absolute;
+        left: calc(100% + 24px);
+        top: 50%;
+        width: 2px;
+        height: 100%;
+        background: #b0b8c1;
+    }
+    .tree-round.merge-halves .tree-match-wrap:nth-child(even)::before {
+        content: '';
+        position: absolute;
+        left: calc(100% + 24px);
+        top: -1px;
+        width: 24px;
+        height: 2px;
+        background: #b0b8c1;
+    }
+
+    /* 1:1 straight: a single horizontal line across the gap */
+    .tree-round.merge-straight .tree-match-wrap::after {
+        content: '';
+        position: absolute;
+        left: 100%;
+        top: calc(50% - 1px);
+        width: 48px;
+        height: 2px;
+        background: #b0b8c1;
+    }
+
+    /* Last round: no outgoing line */
+    .tree-round.merge-none .tree-match-wrap::after,
+    .tree-round.merge-none .tree-match-wrap::before { display: none; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'tournament_players' %}">Tournament Players</a>
+    &rsaquo; Bracket: {{ active_league.name }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="display-6 fw-bold mb-1">Tournament Bracket</h1>
+            <p class="text-muted mb-0">Season: {{ active_season.name }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <form method="post" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" name="generate" value="1" class="btn btn-success"
+                        onclick="return confirm('{% if tournament.completed_at %}This tournament is COMPLETED and visible on the public page. Regenerating will wipe the archived bracket. Are you sure?{% elif has_bracket %}Regenerate bracket? Current results will be lost.{% else %}Generate a new bracket from the current tournament teams?{% endif %}');">
+                    {% if has_bracket %}Regenerate Bracket{% else %}Generate Bracket{% endif %}
+                </button>
+            </form>
+            {% if has_bracket %}
+            <form method="post" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" name="clear_bracket" value="1" class="btn btn-outline-danger"
+                        onclick="return confirm('{% if tournament.completed_at %}This tournament is COMPLETED and visible on the public page. Clearing will remove the archived bracket. Continue?{% else %}Clear the bracket entirely?{% endif %}');">
+                    Clear Bracket
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if tournament.completed_at %}
+    <div class="alert alert-success d-flex justify-content-between align-items-center">
+        <div>
+            <strong>Tournament complete</strong> as of {{ tournament.completed_at|date:"M j, Y" }} at {{ tournament.completed_at|time:"g:i A" }}.
+            Visible on the public <a href="{% url 'end_of_season_tournament' %}" class="alert-link">End of Season Tournament</a> page.
+        </div>
+        <form method="post" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" name="mark_in_progress" value="1" class="btn btn-sm btn-outline-secondary"
+                    onclick="return confirm('Hide this tournament from the public page?');">
+                Mark In Progress
+            </button>
+        </form>
+    </div>
+    {% elif has_bracket %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center">
+        <div>
+            Tournament is not marked complete. It won&rsquo;t appear on the public End of Season Tournament page.
+        </div>
+        <form method="post" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" name="mark_complete" value="1" class="btn btn-sm btn-success"
+                    onclick="return confirm('Publish this tournament to the public End of Season Tournament page?');">
+                Mark Complete
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if messages %}
+    <div class="mb-3">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not has_bracket %}
+    <div class="alert alert-info">
+        No bracket has been generated yet. Make sure tournament teams exist on the
+        <a href="{% url 'tournament_players' %}">Tournament Players</a> page, then click <strong>Generate Bracket</strong>.
+    </div>
+    {% else %}
+
+    {% include "tournaments/_bracket_tree.html" with read_only=False %}
+
+    {% if payout_info %}
+    <section class="bracket-section">
+        <h3>Placements &amp; Payouts</h3>
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-body">
+                <div class="row text-center g-3">
+                    <div class="col-md-3">
+                        <div class="text-muted small text-uppercase">Players</div>
+                        <div class="fs-5 fw-bold">{{ payout_info.player_count }}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-muted small text-uppercase">League Contribution</div>
+                        <div class="fs-5 fw-bold">${{ payout_info.league_contribution|floatformat:2 }}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-muted small text-uppercase">Player Buy-In ($8 × players)</div>
+                        <div class="fs-5 fw-bold">${{ payout_info.player_buyin_total|floatformat:2 }}</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-muted small text-uppercase">Total Prize Pool</div>
+                        <div class="fs-5 fw-bold text-success">${{ payout_info.pool|floatformat:2 }}</div>
+                    </div>
+                </div>
+                {% if payout_info.flat_total %}
+                <p class="text-muted small mt-3 mb-0">
+                    Flat payouts of $20 to 7th &amp; 8th (${{ payout_info.flat_total|floatformat:2 }} total) are deducted from the pool first.
+                    Remaining pool distributed by percentage: ${{ payout_info.pool_after_flats|floatformat:2 }}.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width:80px;">Place</th>
+                            <th>Team</th>
+                            <th class="text-end" style="width:140px;">Payout</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for place, team, payout in payout_info.rows %}
+                        <tr>
+                            <td class="text-center fw-bold">{{ place }}</td>
+                            <td>#{{ team.team_number }} — {{ team.a_player.name }} / {{ team.b_player.name }}</td>
+                            <td class="text-end fw-bold text-success">${{ payout|floatformat:2 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-3">
+                                No teams have been eliminated yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

@@ -1,0 +1,55 @@
+<div class="tree-match-wrap">
+    <div class="tree-match {{ match.status }}{% if match.is_bye %} bye{% endif %}">
+        <div class="match-meta">
+            <span>
+                {% if match.is_bye %}Bye{% elif match.status == 'complete' %}Final{% elif match.status == 'ready' %}Ready{% elif match.status == 'skipped' %}—{% else %}Pending{% endif %}
+            </span>
+            {% if match.can_undo and not read_only %}
+            <form method="post" class="d-inline" style="margin:0;">
+                {% csrf_token %}
+                <input type="hidden" name="undo_match_id" value="{{ match.id }}">
+                <button type="submit" class="undo-btn"
+                        onclick="return confirm('Undo this match result?');"
+                        title="Undo this match result">Undo</button>
+            </form>
+            {% endif %}
+        </div>
+
+        {% if match.status == 'skipped' %}
+            <div class="slot tbd"><span class="slot-name">—</span></div>
+        {% else %}
+            <div class="slot {% if match.winner_id == match.team1_id and match.team1_id %}winner{% elif match.winner_id and match.team1_id %}loser{% elif not match.team1_id %}tbd{% endif %}">
+                {% if match.team1 %}
+                    <span class="team-number">{{ match.team1.team_number }}</span>
+                    <span class="slot-name" title="{{ match.team1.a_player.name }} / {{ match.team1.b_player.name }}">{{ match.team1.a_player.name }} / {{ match.team1.b_player.name }}</span>
+                {% else %}
+                    <span class="slot-name">{% if match.is_bye %}BYE{% else %}TBD{% endif %}</span>
+                {% endif %}
+                {% if match.status == 'ready' and match.team1_id and not read_only %}
+                <form method="post" class="d-inline" style="margin:0;">
+                    {% csrf_token %}
+                    <input type="hidden" name="match_id" value="{{ match.id }}">
+                    <input type="hidden" name="winner_id" value="{{ match.team1_id }}">
+                    <button type="submit" class="pick-btn" title="Pick this winner">Pick</button>
+                </form>
+                {% endif %}
+            </div>
+            <div class="slot {% if match.winner_id == match.team2_id and match.team2_id %}winner{% elif match.winner_id and match.team2_id %}loser{% elif not match.team2_id %}tbd{% endif %}">
+                {% if match.team2 %}
+                    <span class="team-number">{{ match.team2.team_number }}</span>
+                    <span class="slot-name" title="{{ match.team2.a_player.name }} / {{ match.team2.b_player.name }}">{{ match.team2.a_player.name }} / {{ match.team2.b_player.name }}</span>
+                {% else %}
+                    <span class="slot-name">{% if match.is_bye %}BYE{% else %}TBD{% endif %}</span>
+                {% endif %}
+                {% if match.status == 'ready' and match.team2_id and not read_only %}
+                <form method="post" class="d-inline" style="margin:0;">
+                    {% csrf_token %}
+                    <input type="hidden" name="match_id" value="{{ match.id }}">
+                    <input type="hidden" name="winner_id" value="{{ match.team2_id }}">
+                    <button type="submit" class="pick-btn" title="Pick this winner">Pick</button>
+                </form>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>

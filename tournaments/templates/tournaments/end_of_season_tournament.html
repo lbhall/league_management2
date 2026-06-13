@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}End of Season Tournament - {{ active_league.name }}{% endblock %}
+
+{% block content %}
+<style>
+    .bracket-section { margin-bottom: 2.5rem; }
+    .bracket-section h3 { margin-bottom: 1rem; color: #2c3e50; }
+    .bracket-tree {
+        display: flex;
+        gap: 48px;
+        align-items: stretch;
+        overflow-x: auto;
+        background: #f7f8fa;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        padding: 1rem 1.25rem 1.5rem;
+    }
+    .tree-round { flex: 0 0 220px; display: flex; flex-direction: column; }
+    .tree-round-label {
+        font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+        color: #6c757d; letter-spacing: 0.04em; margin-bottom: 0.75rem;
+    }
+    .tree-round-matches {
+        flex: 1; display: flex; flex-direction: column; justify-content: space-around;
+    }
+    .tree-match-wrap {
+        flex: 1; display: flex; align-items: center; position: relative; min-height: 84px;
+    }
+    .tree-match {
+        width: 100%; background: #2c3e50; color: #ecf0f1; border-radius: 4px;
+        padding: 4px 6px; font-size: 0.78rem; position: relative; z-index: 1;
+        border: 1px solid #1f2c38;
+    }
+    .tree-match.complete { background: #34495e; }
+    .tree-match.bye { opacity: 0.6; }
+    .tree-match.skipped { opacity: 0.3; }
+    .tree-match .slot { display: flex; align-items: center; gap: 4px; padding: 3px 2px; }
+    .tree-match .slot + .slot { border-top: 1px solid rgba(255,255,255,0.08); }
+    .tree-match .slot-name {
+        flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tree-match .slot.winner .slot-name { color: #f1c40f; font-weight: 600; }
+    .tree-match .slot.loser .slot-name { color: #7f8c8d; text-decoration: line-through; }
+    .tree-match .slot.tbd .slot-name { color: #6c7a89; font-style: italic; }
+    .tree-match .team-number {
+        background: #e67e22; color: white; font-weight: 700; font-size: 0.68rem;
+        padding: 0 5px; border-radius: 2px; min-width: 20px; text-align: center;
+    }
+    .tree-match .slot.tbd .team-number { display: none; }
+    .tree-match .match-meta {
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 0.62rem; color: #95a5a6; text-transform: uppercase;
+        letter-spacing: 0.04em; padding: 0 2px 2px;
+        border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 2px;
+    }
+
+    .tree-round.merge-halves .tree-match-wrap::after {
+        content: ''; position: absolute; left: 100%; top: calc(50% - 1px);
+        width: 24px; height: 2px; background: #b0b8c1;
+    }
+    .tree-round.merge-halves .tree-match-wrap:nth-child(odd)::before {
+        content: ''; position: absolute; left: calc(100% + 24px); top: 50%;
+        width: 2px; height: 100%; background: #b0b8c1;
+    }
+    .tree-round.merge-halves .tree-match-wrap:nth-child(even)::before {
+        content: ''; position: absolute; left: calc(100% + 24px); top: -1px;
+        width: 24px; height: 2px; background: #b0b8c1;
+    }
+    .tree-round.merge-straight .tree-match-wrap::after {
+        content: ''; position: absolute; left: 100%; top: calc(50% - 1px);
+        width: 48px; height: 2px; background: #b0b8c1;
+    }
+    .tree-round.merge-none .tree-match-wrap::after,
+    .tree-round.merge-none .tree-match-wrap::before { display: none; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h1 class="display-6 fw-bold mb-1">End of Season Tournament</h1>
+        {% if selected_tournament %}
+        <p class="text-muted mb-0">{{ selected_tournament.season.name }} &mdash; completed {{ selected_tournament.completed_at|date:"M j, Y" }}</p>
+        {% endif %}
+    </div>
+    {% if completed_tournaments %}
+    <form method="get" id="tournament-selector" class="d-flex align-items-center gap-2">
+        <label for="tournament-select" class="form-label mb-0 fw-bold">Tournament:</label>
+        <select name="tournament_id" id="tournament-select" class="form-select form-select-sm" style="width:auto;"
+                onchange="if (this.value) { window.location = '/end-of-season-tournament/' + this.value + '/'; } else { window.location = '/end-of-season-tournament/'; }">
+            {% for t in completed_tournaments %}
+            <option value="{{ t.id }}" {% if selected_tournament and selected_tournament.id == t.id %}selected{% endif %}>
+                {{ t.season.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+    {% endif %}
+</div>
+
+{% if not completed_tournaments %}
+<div class="alert alert-info">
+    No completed tournaments yet for this league.
+</div>
+{% else %}
+
+{% include "tournaments/_bracket_tree.html" with read_only=True %}
+
+{% if payout_info %}
+<section class="bracket-section">
+    <h3>Final Placements &amp; Payouts</h3>
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center" style="width:80px;">Place</th>
+                        <th>Team</th>
+                        <th class="text-end" style="width:140px;">Payout</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for place, team, payout in payout_info.rows %}
+                    <tr>
+                        <td class="text-center fw-bold">{{ place }}</td>
+                        <td>#{{ team.team_number }} &mdash; {{ team.a_player.name }} / {{ team.b_player.name }}</td>
+                        <td class="text-end fw-bold text-success">${{ payout|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% endif %}
+{% endblock %}

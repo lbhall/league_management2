@@ -5,7 +5,7 @@
 {% block content %}
 
     {% if active_league and active_league.wide_logo_url %}
-        <div class="text-center mb-4">
+        <div class="text-center mb-3">
             <img
                 src="{{ active_league.wide_logo_url }}"
                 alt="{{ active_league.name }} logo"
@@ -13,6 +13,10 @@
                 style="max-width: 100%; max-height: 240px; object-fit: contain;"
             >
         </div>
+    {% endif %}
+
+    {% if active_league.results_type == 'one_pocket' %}
+        <h1 class="display-5 fw-bold mb-4 text-center">{{ active_league.name }}</h1>
     {% endif %}
 
     {% if news_items %}
@@ -41,14 +45,26 @@
     {% endif %}
 
 {% if active_league and active_league.results_type == 'one_pocket' and one_pocket_race_rows_left %}
-    <section class="mt-4">
-        <div class="card shadow-sm mb-4">
-            <div class="card-body">
+    <style>
+        .race-by-rank h2 { color: #0c385f; }
+        .race-by-rank table { border-collapse: collapse; }
+        .race-by-rank table th,
+        .race-by-rank table td { border: none; box-shadow: none; }
+        .race-by-rank table thead th {
+            background-color: #0c385f;
+            color: #ffffff;
+        }
+        .race-by-rank table tbody tr:nth-of-type(odd) td { background-color: #5bc0de; }
+        .race-by-rank table tbody tr:nth-of-type(even) td { background-color: #ffffff; }
+    </style>
+    <section class="mt-4 race-by-rank">
+        <div class="mb-4">
+            <div>
                 <h2 class="h4 mb-3">Race by Rank</h2>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <div class="table-responsive">
-                            <table class="table table-striped align-middle mb-0">
+                            <table class="table align-middle mb-0">
                                 <thead>
                                     <tr>
                                         <th scope="col">Rank Matchup</th>
@@ -68,7 +84,7 @@
                     </div>
                     <div class="col-md-6">
                         <div class="table-responsive">
-                            <table class="table table-striped align-middle mb-0">
+                            <table class="table align-middle mb-0">
                                 <thead>
                                     <tr>
                                         <th scope="col">Rank Matchup</th>
@@ -242,8 +258,9 @@
             <div class="col-lg-5">
                 <div class="card shadow-sm h-100">
                     <div class="card-body">
-                        <h2 class="h4 mb-3">Current Standings</h2>
-                        <!-- ... existing code ... -->
+                        <h2 class="h4 mb-3">
+                            {% if active_league.results_type == 'one_pocket' %}Standings{% else %}Current Standings{% endif %}
+                        </h2>
                         {% if team_standings %}
                             <div class="table-responsive">
                                 <table class="table table-striped align-middle mb-0">
@@ -251,10 +268,15 @@
                                         <tr>
                                             <th scope="col">Rank</th>
                                             <th scope="col">{% if active_league.results_type == 'one_pocket' %}Player{% else %}Team{% endif %}</th>
-                                            <th scope="col">Matches Won</th>
-                                            <th scope="col">Matches Lost</th>
-                                            <th scope="col">Games Won</th>
-                                            <th scope="col">Games Lost</th>
+                                            {% if active_league.results_type == 'one_pocket' %}
+                                                <th scope="col">Matches (W-L)</th>
+                                                <th scope="col">Games (W-L)</th>
+                                            {% else %}
+                                                <th scope="col">Matches Won</th>
+                                                <th scope="col">Matches Lost</th>
+                                                <th scope="col">Games Won</th>
+                                                <th scope="col">Games Lost</th>
+                                            {% endif %}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -274,10 +296,15 @@
                                                     <a href="{% url 'team_detail' standing.team_id %}">{{ standing.team }}</a>
                                                 {% endif %}
                                                 </td>
-                                                <td>{{ standing.matches_won }}</td>
-                                                <td>{{ standing.matches_lost }}</td>
-                                                <td>{{ standing.games_won }}</td>
-                                                <td>{{ standing.games_lost }}</td>
+                                                {% if active_league.results_type == 'one_pocket' %}
+                                                    <td>{{ standing.matches_won }}-{{ standing.matches_lost }}</td>
+                                                    <td>{{ standing.games_won }}-{{ standing.games_lost }}</td>
+                                                {% else %}
+                                                    <td>{{ standing.matches_won }}</td>
+                                                    <td>{{ standing.matches_lost }}</td>
+                                                    <td>{{ standing.games_won }}</td>
+                                                    <td>{{ standing.games_lost }}</td>
+                                                {% endif %}
                                             </tr>
                                         {% endfor %}
                                     </tbody>
@@ -286,7 +313,6 @@
                         {% else %}
                             <p class="text-muted mb-0">No standings available.</p>
                         {% endif %}
-                        <!-- ... existing code ... -->
                     </div>
                 </div>
             </div>
