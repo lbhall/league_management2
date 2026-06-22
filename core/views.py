@@ -618,6 +618,8 @@ def home(request):
         top_male_players = [stat for stat in all_player_stats if stat['male'] and (stat['wins'] + stat['losses']) > 0][:5]
         top_female_players = [stat for stat in all_player_stats if not stat['male'] and (stat['wins'] + stat['losses']) > 0][:5]
 
+    has_archived_seasons = bool(active_league and active_league.archived_seasons.exists())
+
     return render(request, 'home.html', {
         'active_league': active_league,
         'league_name': active_league.name if active_league else 'League Name',
@@ -631,6 +633,7 @@ def home(request):
         'team_standings': team_standings,
         'one_pocket_race_rows_left': one_pocket_race_rows_left,
         'one_pocket_race_rows_right': one_pocket_race_rows_right,
+        'has_archived_seasons': has_archived_seasons,
     })
 
 def schedule(request):
@@ -1186,6 +1189,49 @@ def one_pocket_full_schedule_modal(request):
     )
     return JsonResponse({'html': html})
 
+def build_archived_standings(archived_season):
+    if archived_season is None:
+        return [], []
+
+    team_standings = [
+        {
+            'team_name': team.team_name,
+            'matches_won': team.matches_won,
+            'matches_lost': team.matches_lost,
+            'games_won': team.games_won,
+            'games_lost': team.games_lost,
+        }
+        for team in archived_season.teams.all()
+    ]
+    team_standings.sort(
+        key=lambda row: (
+            -row['matches_won'],
+            row['matches_lost'],
+            -row['games_won'],
+            row['games_lost'],
+            row['team_name'],
+        )
+    )
+
+    player_standings = [
+        {
+            'player_name': player.player_name,
+            'team_name': player.team_name,
+            'games_won': player.games_won,
+            'games_lost': player.games_lost,
+            'run_outs': player.run_outs,
+            'eight_on_the_breaks': player.eight_on_the_breaks,
+            'sweeps': player.sweeps,
+        }
+        for player in archived_season.players.all()
+    ]
+    player_standings.sort(
+        key=lambda row: (-row['games_won'], -row['sweeps'], row['player_name'])
+    )
+
+    return team_standings, player_standings
+
+
 def archived_seasons(request):
     logging.info(f'Archived Seasons -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
@@ -1219,42 +1265,9 @@ def archived_seasons(request):
         if selected_archived_season is None:
             selected_archived_season = archived_season_options[0] if archived_season_options else None
 
-    if selected_archived_season:
-        archived_team_standings = [
-            {
-                'team_name': team.team_name,
-                'matches_won': team.matches_won,
-                'matches_lost': team.matches_lost,
-                'games_won': team.games_won,
-                'games_lost': team.games_lost,
-            }
-            for team in selected_archived_season.teams.all()
-        ]
-        archived_team_standings.sort(
-            key=lambda row: (
-                -row['matches_won'],
-                row['matches_lost'],
-                -row['games_won'],
-                row['games_lost'],
-                row['team_name'],
-            )
-        )
-
-        archived_player_standings = [
-            {
-                'player_name': player.player_name,
-                'team_name': player.team_name,
-                'games_won': player.games_won,
-                'games_lost': player.games_lost,
-                'run_outs': player.run_outs,
-                'eight_on_the_breaks': player.eight_on_the_breaks,
-                'sweeps': player.sweeps,
-            }
-            for player in selected_archived_season.players.all()
-        ]
-        archived_player_standings.sort(
-            key=lambda row: (-row['games_won'], -row['sweeps'], row['player_name'])
-        )
+    archived_team_standings, archived_player_standings = build_archived_standings(
+        selected_archived_season
+    )
 
     return render(request, 'archived_seasons.html', {
         'active_league': active_league,
@@ -1265,6 +1278,49 @@ def archived_seasons(request):
         'archived_team_standings': archived_team_standings,
         'archived_player_standings': archived_player_standings,
     })
+
+
+def archived_standings_modal(request):
+    active_league = get_active_league(request)
+    if not active_league:
+        raise Http404('No active league found.')
+
+    archived_seasons_qs = active_league.archived_seasons.prefetch_related(
+        'teams',
+        'players',
+    ).order_by('-archived_at', '-id')
+
+    archived_season_options = list(archived_seasons_qs)
+    if not archived_season_options:
+        raise Http404('No archived seasons available.')
+
+    selected_archived_season_id = request.GET.get('season')
+    selected_archived_season = None
+    if selected_archived_season_id:
+        selected_archived_season = archived_seasons_qs.filter(
+            pk=selected_archived_season_id
+        ).first()
+
+    if selected_archived_season is None:
+        selected_archived_season = archived_season_options[0]
+
+    archived_team_standings, archived_player_standings = build_archived_standings(
+        selected_archived_season
+    )
+
+    html = render_to_string(
+        'archived_standings_modal.html',
+        {
+            'active_league': active_league,
+            'archived_season_options': archived_season_options,
+            'selected_archived_season': selected_archived_season,
+            'archived_team_standings': archived_team_standings,
+            'archived_player_standings': archived_player_standings,
+        },
+        request=request,
+    )
+
+    return JsonResponse({'html': html})
 
 
 def archived_player_history(request, archived_season_id, player_name):

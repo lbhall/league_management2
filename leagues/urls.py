@@ -10,6 +10,7 @@ from django.urls import path
 from core.views import (
     archived_player_history,
     archived_seasons,
+    archived_standings_modal,
     contact_info,
     finance,
     home,
@@ -41,6 +42,7 @@ urlpatterns = [
     path('standings/', standings, name='standings'),
     path('player-stats/', player_stats, name='player_stats'),
     path('archived-seasons/', archived_seasons, name='archived_seasons'),
+    path('archived-standings-modal/', archived_standings_modal, name='archived_standings_modal'),
     path('archived-player-history/<int:archived_season_id>/<str:player_name>/', archived_player_history, name='archived_player_history'),
     path('contact-info/', contact_info, name='contact_info'),
     path('rules/', rules, name='rules'),

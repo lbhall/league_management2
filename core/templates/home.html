@@ -260,6 +260,11 @@
                     <div class="card-body">
                         <h2 class="h4 mb-3">
                             {% if active_league.results_type == 'one_pocket' %}Standings{% else %}Current Standings{% endif %}
+                            {% if has_archived_seasons %}
+                                <small class="ms-2">
+                                    (<a href="#" class="text-decoration-none" data-archived-standings-modal>Archive</a>)
+                                </small>
+                            {% endif %}
                         </h2>
                         {% if team_standings %}
                             <div class="table-responsive">
