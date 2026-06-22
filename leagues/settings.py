@@ -79,10 +79,12 @@ WSGI_APPLICATION = 'leagues.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+PRODUCTION_DB_PATH = Path('/var/www/emcfunleague.com/source/db.sqlite3')
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': PRODUCTION_DB_PATH if PRODUCTION_DB_PATH.exists() else BASE_DIR / 'db.sqlite3',
     }
 }
 
