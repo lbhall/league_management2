@@ -41,7 +41,22 @@ def tournament_players(request):
             return redirect('tournament_players')
         if 'clear_teams' in request.POST:
             TournamentTeam.objects.filter(tournament=tournament).delete()
+            BracketMatch.objects.filter(tournament=tournament).delete()
             messages.success(request, "Teams cleared.")
+            return redirect('tournament_players')
+        if 'remove_player' in request.POST:
+            player_id = request.POST.get('remove_player')
+            TournamentPlayer.objects.filter(tournament=tournament, player_id=player_id).delete()
+            TournamentTeam.objects.filter(tournament=tournament).delete()
+            BracketMatch.objects.filter(tournament=tournament).delete()
+            messages.success(request, "Player removed. Teams and bracket cleared.")
+            return redirect('tournament_players')
+        if 'toggle_paid' in request.POST:
+            player_id = request.POST.get('toggle_paid')
+            tp = TournamentPlayer.objects.filter(tournament=tournament, player_id=player_id).first()
+            if tp:
+                tp.paid = not tp.paid
+                tp.save(update_fields=['paid'])
             return redirect('tournament_players')
         if 'make_teams' in request.POST or 'regenerate_teams' in request.POST:
             TournamentTeam.objects.filter(tournament=tournament).delete()
@@ -85,7 +100,9 @@ def tournament_players(request):
         appearances=Count('match_results', filter=Q(match_results__match_result__match__week__season=active_season))
     ).filter(appearances__gte=2).order_by('name')
 
-    selected_player_ids = set(TournamentPlayer.objects.filter(tournament=tournament).values_list('player_id', flat=True))
+    tournament_players_qs = TournamentPlayer.objects.filter(tournament=tournament)
+    selected_player_ids = set(tournament_players_qs.values_list('player_id', flat=True))
+    paid_player_ids = set(tournament_players_qs.filter(paid=True).values_list('player_id', flat=True))
 
     # Build sorted A/B player lists for selected players
     season_filter = Q(match_results__match_result__match__week__season=active_season)
@@ -119,6 +136,7 @@ def tournament_players(request):
         'b_players': b_players,
         'existing_teams': existing_teams,
         'can_make_teams': can_make_teams,
+        'paid_player_ids': paid_player_ids,
     })
 
 

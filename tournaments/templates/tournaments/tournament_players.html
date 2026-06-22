@@ -106,6 +106,8 @@
                                 <th class="text-center">W</th>
                                 <th class="text-center">L</th>
                                 <th class="text-center">Win %</th>
+                                <th class="text-center">Paid</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -120,10 +122,25 @@
                                 <td class="text-center">
                                     {% if total %}{{ wins }} / {{ total }}{% else %}—{% endif %}
                                 </td>
+                                <td class="text-center">
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" name="toggle_paid" value="{{ p.id }}"
+                                            class="btn btn-sm py-0 px-2 {% if p.id in paid_player_ids %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                                            {% if p.id in paid_player_ids %}✓{% else %}—{% endif %}
+                                        </button>
+                                    </form>
+                                </td>
+                                <td>
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" name="remove_player" value="{{ p.id }}" class="btn btn-outline-danger btn-sm py-0 px-2">✕</button>
+                                    </form>
+                                </td>
                             </tr>
                             {% endwith %}
                             {% empty %}
-                            <tr><td colspan="6" class="text-center text-muted py-3">None</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted py-3">None</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -145,6 +162,8 @@
                                 <th class="text-center">W</th>
                                 <th class="text-center">L</th>
                                 <th class="text-center">Win %</th>
+                                <th class="text-center">Paid</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -159,10 +178,25 @@
                                 <td class="text-center">
                                     {% if total %}{{ wins }} / {{ total }}{% else %}—{% endif %}
                                 </td>
+                                <td class="text-center">
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" name="toggle_paid" value="{{ p.id }}"
+                                            class="btn btn-sm py-0 px-2 {% if p.id in paid_player_ids %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                                            {% if p.id in paid_player_ids %}✓{% else %}—{% endif %}
+                                        </button>
+                                    </form>
+                                </td>
+                                <td>
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" name="remove_player" value="{{ p.id }}" class="btn btn-outline-danger btn-sm py-0 px-2">✕</button>
+                                    </form>
+                                </td>
                             </tr>
                             {% endwith %}
                             {% empty %}
-                            <tr><td colspan="6" class="text-center text-muted py-3">None</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted py-3">None</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>

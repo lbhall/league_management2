@@ -25,6 +25,7 @@ class TournamentPlayer(models.Model):
         on_delete=models.CASCADE,
         related_name='tournament_entries',
     )
+    paid = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
