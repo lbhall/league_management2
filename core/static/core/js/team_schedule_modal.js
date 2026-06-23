@@ -8,6 +8,11 @@
             },
         });
 
+        if (!response.ok) {
+            console.error('Unable to load team schedule modal.', response.status, response.statusText);
+            return;
+        }
+
         const data = await response.json();
 
         let modalContainer = document.getElementById('team-schedule-modal-container');
@@ -20,6 +25,11 @@
         modalContainer.innerHTML = data.html;
 
         const modalElement = document.getElementById('teamScheduleModal');
+        if (!modalElement || typeof bootstrap === 'undefined') {
+            console.error('Team schedule modal could not be initialized.');
+            return;
+        }
+
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
     }
@@ -34,7 +44,9 @@
 
         const teamId = trigger.getAttribute('data-team-id');
         if (teamId) {
-            loadTeamScheduleModal(teamId);
+            loadTeamScheduleModal(teamId).catch(function () {
+                // intentionally silent
+            });
         }
     });
 })();
