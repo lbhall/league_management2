@@ -14,6 +14,7 @@ from .services import (
     archive_season,
     create_mirrored_season_schedule,
     create_new_playable_week_at_end,
+    delete_week,
     get_next_start_dates,
     get_valid_destination_weeks,
     move_match_to_week,
@@ -21,6 +22,7 @@ from .services import (
     move_week_up,
     rebalance_season_matches,
     recreate_season_schedule,
+    renumber_weeks,
 )
 
 
@@ -225,6 +227,16 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 self.admin_site.admin_view(self.move_week_down_view),
                 name='scheduling_season_move_week_down',
             ),
+            path(
+                '<path:object_id>/delete-week/<int:week_id>/',
+                self.admin_site.admin_view(self.delete_week_view),
+                name='scheduling_season_delete_week',
+            ),
+            path(
+                '<path:object_id>/renumber-weeks/',
+                self.admin_site.admin_view(self.renumber_weeks_view),
+                name='scheduling_season_renumber_weeks',
+            ),
         ]
         return custom_urls + urls
 
@@ -306,6 +318,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             ]
             week.can_move_up = index > 0
             week.can_move_down = index < len(weeks) - 1
+            week.can_delete = week.number is not None and not week.matches.all()
 
         return weeks
 
@@ -330,6 +343,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             'recreate_schedule_url': reverse('admin:scheduling_season_recreate_schedule', args=[season.pk]),
             'mirror_schedule_url': reverse('admin:scheduling_season_mirror_schedule', args=[season.pk]),
             'rebalance_schedule_url': reverse('admin:scheduling_season_rebalance_schedule', args=[season.pk]),
+            'renumber_weeks_url': reverse('admin:scheduling_season_renumber_weeks', args=[season.pk]),
             'swap_match_url_name': 'admin:scheduling_season_swap_match',
             'update_match_location_url_name': 'admin:scheduling_season_update_match_location',
             'move_match_url_name': 'admin:scheduling_season_move_match',
@@ -379,6 +393,37 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             return self._get_redirect_url(request, season)
 
         self.message_user(request, 'Week moved down successfully.', level=messages.SUCCESS)
+        return self._get_redirect_url(request, season)
+
+    def delete_week_view(self, request, object_id, week_id):
+        season = self._get_league_scoped_object(request, object_id)
+
+        if request.method != 'POST':
+            return self._get_redirect_url(request, season)
+
+        week = get_object_or_404(Week, pk=week_id, season=season)
+
+        try:
+            delete_week(week)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return self._get_redirect_url(request, season)
+
+        self.message_user(request, 'Week deleted successfully.', level=messages.SUCCESS)
+        return self._get_redirect_url(request, season)
+
+    def renumber_weeks_view(self, request, object_id):
+        season = self._get_league_scoped_object(request, object_id)
+
+        if request.method != 'POST':
+            return self._get_redirect_url(request, season)
+
+        count = renumber_weeks(season)
+        self.message_user(
+            request,
+            f'Renumbered {count} week(s).',
+            level=messages.SUCCESS,
+        )
         return self._get_redirect_url(request, season)
 
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):

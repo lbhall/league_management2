@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Sum, F, Value, Q, IntegerField
 from django.db.models.functions import Coalesce, Cast
 
-from core.models import Team, Player
+from core.models import Team, Player, Venue
 from scheduling.models import (
     ArchivedPlayer,
     ArchivedMatch,
@@ -165,6 +165,25 @@ def _week_home_match_count(week, venue_id):
     return week.matches.filter(home_team__venue_id=venue_id).count()
 
 
+def _match_effective_venue(match):
+    home_venue = match.home_team.venue
+    location = (match.location or '').strip()
+    if not location or location == home_venue.name:
+        return home_venue
+    venue = Venue.objects.filter(
+        league_id=match.home_team.league_id,
+        name=location,
+    ).first()
+    return venue or home_venue
+
+
+def _week_match_count_at_effective_venue(week, venue_id, exclude_match_id=None):
+    matches = week.matches.select_related('home_team__venue')
+    if exclude_match_id is not None:
+        matches = matches.exclude(pk=exclude_match_id)
+    return sum(1 for m in matches if _match_effective_venue(m).id == venue_id)
+
+
 def _find_week_for_match(candidate_weeks, home_team, away_team):
     venue_id = home_team.venue_id
     max_home_teams = home_team.venue.max_home_teams
@@ -309,13 +328,41 @@ def create_mirrored_season_schedule(season):
 
 
 def get_valid_destination_weeks(season, match):
+    venue = _match_effective_venue(match)
     valid_weeks = []
     for week in season.weeks.order_by('date', 'number'):
         if week.number is None:
             continue
-        if _week_home_match_count(week, match.home_team.venue_id) < match.home_team.venue.max_home_teams:
+        if _week_match_count_at_effective_venue(week, venue.id) < venue.max_home_teams:
             valid_weeks.append(week)
     return valid_weeks
+
+
+def renumber_weeks(season):
+    with transaction.atomic():
+        weeks = list(season.weeks.order_by('date'))
+        if not weeks:
+            return 0
+
+        Week.objects.filter(pk__in=[w.id for w in weeks]).update(number=None)
+
+        next_number = 1
+        for w in weeks:
+            is_holiday = w.number is None or bool((w.notes or '').strip())
+            if is_holiday:
+                continue
+            Week.objects.filter(pk=w.id).update(number=next_number)
+            next_number += 1
+
+        return next_number - 1
+
+
+def delete_week(week):
+    if week.number is None:
+        raise ValueError('Holiday weeks cannot be deleted from the schedule view.')
+    if week.matches.exists():
+        raise ValueError('Cannot delete a week that still has matches scheduled.')
+    week.delete()
 
 
 def move_match_to_week(match, target_week):
@@ -325,11 +372,12 @@ def move_match_to_week(match, target_week):
     if target_week.number is None:
         raise ValueError('Matches cannot be moved onto a holiday week.')
 
-    current_count = target_week.matches.filter(
-        home_team__venue_id=match.home_team.venue_id
-    ).exclude(pk=match.pk).count()
+    venue = _match_effective_venue(match)
+    current_count = _week_match_count_at_effective_venue(
+        target_week, venue.id, exclude_match_id=match.pk,
+    )
 
-    if current_count >= match.home_team.venue.max_home_teams:
+    if current_count >= venue.max_home_teams:
         raise ValueError('Target week venue capacity would be exceeded.')
 
     match.week = target_week

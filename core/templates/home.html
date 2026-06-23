@@ -191,9 +191,10 @@
                             <div class="card-body">
                                 <h2 class="h5 mb-3">Top 5 {% if active_league.results_type != 'darts' %}Male {% endif %}Players</h2>
                                 {% if top_male_players %}
-                                    <ol class="mb-0">
+                                    <ul class="list-unstyled mb-0">
                                         {% for player in top_male_players %}
                                             <li>
+                                                <strong>{{ player.display_rank }}.</strong>
                                                 <a
                                                     href="#"
                                                     data-player-scores-modal
@@ -204,13 +205,13 @@
                                                 {% if player.team %}
                                                     <span class="text-muted">({{ player.team }})</span>
                                                 {% endif %}
-                                                <div class="text-muted small">
+                                                <div class="text-muted small ms-3">
                                                     {{ player.wins }}-{{ player.losses }} |
                                                     {{ player.percentage|floatformat:2 }} | {{ player.runs }} Runs | {{ player.eights }} 8s | {{ player.sweeps }} {{ active_league.team_size }}/0
                                                 </div>
                                             </li>
                                         {% endfor %}
-                                    </ol>
+                                    </ul>
                                 {% else %}
                                     <p class="text-muted mb-0">No player stats available.</p>
                                 {% endif %}
@@ -224,9 +225,10 @@
                             <div class="card-body">
                                 <h2 class="h5 mb-3">Top 5 Female Players</h2>
                                 {% if top_female_players %}
-                                    <ol class="mb-0">
+                                    <ul class="list-unstyled mb-0">
                                         {% for player in top_female_players %}
                                             <li>
+                                                <strong>{{ player.display_rank }}.</strong>
                                                 <a
                                                     href="#"
                                                     data-player-scores-modal
@@ -237,13 +239,13 @@
                                                 {% if player.team %}
                                                     <span class="text-muted">({{ player.team }})</span>
                                                 {% endif %}
-                                                <div class="text-muted small">
+                                                <div class="text-muted small ms-3">
                                                     {{ player.wins }}-{{ player.losses }} |
                                                     {{ player.percentage|floatformat:2 }} | {{ player.runs }} Runs | {{ player.eights }} 8s | {{ player.sweeps }} {{ active_league.team_size }}/0
                                                 </div>
                                             </li>
                                         {% endfor %}
-                                    </ol>
+                                    </ul>
                                 {% else %}
                                     <p class="text-muted mb-0">No player stats available.</p>
                                 {% endif %}

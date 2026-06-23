@@ -435,6 +435,16 @@ def finance(request):
                         break
         return top_players
 
+    def get_top_by_record(players, is_male):
+        candidates = [
+            p for p in players
+            if p['male'] == is_male and (p['wins'] + p['losses']) > 0
+        ]
+        if not candidates or candidates[0]['wins'] == 0:
+            return []
+        top_record = (candidates[0]['wins'], candidates[0]['losses'])
+        return [p for p in candidates if (p['wins'], p['losses']) == top_record]
+
     runouts_top = get_top_players(player_stats_data, stat_key='runs')
     eights_top = get_top_players(player_stats_data, stat_key='eights')
     sweeps_top = get_top_players(player_stats_data, stat_key='sweeps')
@@ -442,12 +452,12 @@ def finance(request):
         {
             'label': 'Top Male',
             'amount': Decimal('100'),
-            'players': get_top_players(player_stats_data, lambda p: p['male'], 'wins', ['tie_breaker', 'percentage']),
+            'players': get_top_by_record(player_stats_data, True),
         },
         {
             'label': 'Top Female',
             'amount': Decimal('100'),
-            'players': get_top_players(player_stats_data, lambda p: not p['male'], 'wins', ['tie_breaker', 'percentage']),
+            'players': get_top_by_record(player_stats_data, False),
         },
         {
             'label': 'Most Runouts',
@@ -553,6 +563,30 @@ def finance(request):
     })
 
 
+def _top_n_with_record_ties(stats, n):
+    if not stats or n <= 0:
+        return []
+    result = list(stats[:n])
+    if len(stats) > n:
+        cutoff_record = (stats[n - 1]['wins'], stats[n - 1]['losses'])
+        for stat in stats[n:]:
+            if (stat['wins'], stat['losses']) != cutoff_record:
+                break
+            result.append(stat)
+
+    prev_record = None
+    prev_rank = 0
+    for index, stat in enumerate(result, start=1):
+        record = (stat['wins'], stat['losses'])
+        if record == prev_record:
+            stat['display_rank'] = prev_rank
+        else:
+            stat['display_rank'] = index
+            prev_record = record
+            prev_rank = index
+    return result
+
+
 def home(request):
     logging.info(f'Home Page -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
@@ -615,8 +649,14 @@ def home(request):
                     current_schedule = build_week_schedule_with_byes(active_league, next_week, team_standings=team_standings)
 
         all_player_stats = build_player_stats(active_league, active_season)
-        top_male_players = [stat for stat in all_player_stats if stat['male'] and (stat['wins'] + stat['losses']) > 0][:5]
-        top_female_players = [stat for stat in all_player_stats if not stat['male'] and (stat['wins'] + stat['losses']) > 0][:5]
+        top_male_players = _top_n_with_record_ties(
+            [stat for stat in all_player_stats if stat['male'] and (stat['wins'] + stat['losses']) > 0],
+            5,
+        )
+        top_female_players = _top_n_with_record_ties(
+            [stat for stat in all_player_stats if not stat['male'] and (stat['wins'] + stat['losses']) > 0],
+            5,
+        )
 
     has_archived_seasons = bool(active_league and active_league.archived_seasons.exists())
 
@@ -988,7 +1028,7 @@ def build_player_vs_team_stats(player, active_season, through_week=None):
             match_result__match__week__date__lte=through_week.date,
         )
 
-    team_map = {}
+    rows = []
     for player_result in results:
         match = player_result.match_result.match
 
@@ -997,29 +1037,21 @@ def build_player_vs_team_stats(player, active_season, through_week=None):
         else:
             opponent = match.home_team
 
-        # Use (represented_team, opponent) as key to separate stats if sub played for different teams
-        key = (player_result.represented_team_id, opponent.id)
+        rows.append({
+            'represented_team_id': player_result.represented_team_id,
+            'represented_team_name': player_result.represented_team.name,
+            'team_id': opponent.id,
+            'team_name': opponent.name,
+            'week_number': match.week.number,
+            'week_date': match.week.date,
+            'wins': player_result.wins,
+            'losses': player_result.losses,
+            'runs': player_result.runouts,
+            'sweeps': 1 if player_result.won_all_games else 0,
+            'eights': player_result.eight_on_the_breaks,
+        })
 
-        if key not in team_map:
-            team_map[key] = {
-                'represented_team_id': player_result.represented_team_id,
-                'represented_team_name': player_result.represented_team.name,
-                'team_id': opponent.id,
-                'team_name': opponent.name,
-                'wins': 0,
-                'losses': 0,
-                'runs': 0,
-                'sweeps': 0,
-                'eights': 0,
-            }
-
-        team_map[key]['wins'] += player_result.wins
-        team_map[key]['losses'] += player_result.losses
-        team_map[key]['runs'] += player_result.runouts
-        team_map[key]['sweeps'] += 1 if player_result.won_all_games else 0
-        team_map[key]['eights'] += player_result.eight_on_the_breaks
-
-    return sorted(team_map.values(), key=lambda row: row['team_name'])
+    return sorted(rows, key=lambda row: row['week_date'])
 
 
 def player_scores_modal(request, player_id):

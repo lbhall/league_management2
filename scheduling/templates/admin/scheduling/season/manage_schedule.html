@@ -226,6 +226,16 @@
             </li>
         {% endif %}
 
+        {% if renumber_weeks_url %}
+            <li>
+                <form action="{{ renumber_weeks_url }}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="button">Renumber Weeks</button>
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                </form>
+            </li>
+        {% endif %}
+
         {% if mirror_schedule_url %}
             <li>
                 <form action="{{ mirror_schedule_url }}" method="post" style="display: inline;">
@@ -315,6 +325,13 @@
                                     <form action="{% url 'admin:scheduling_season_move_week_down' season.pk week.pk %}" method="post" style="display: inline;">
                                         {% csrf_token %}
                                         <button type="submit" class="button">Move Down</button>
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    </form>
+                                {% endif %}
+                                {% if week.can_delete %}
+                                    <form action="{% url 'admin:scheduling_season_delete_week' season.pk week.pk %}" method="post" style="display: inline;" onsubmit="return confirm('Delete Week {{ week.number }} ({{ week.date }})? This cannot be undone.');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="button">Delete</button>
                                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                     </form>
                                 {% endif %}

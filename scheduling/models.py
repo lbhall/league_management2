@@ -57,6 +57,21 @@ class Season(models.Model):
             ),
         ]
 
+    def clean(self):
+        super().clean()
+        if self.status != self.Status.WORKING or not self.league_id:
+            return
+        existing = Season.objects.filter(
+            league_id=self.league_id,
+            status=self.Status.WORKING,
+        )
+        if self.pk:
+            existing = existing.exclude(pk=self.pk)
+        if existing.exists():
+            raise ValidationError({
+                'status': 'A working season already exists for this league.',
+            })
+
     def __str__(self):
         return f'{self.league} - {self.name} ({self.get_status_display()})'
 

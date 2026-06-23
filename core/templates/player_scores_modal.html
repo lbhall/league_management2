@@ -18,6 +18,7 @@
                                     {% if not player.team %}
                                         <th>Team</th>
                                     {% endif %}
+                                    <th>Week</th>
                                     <th>Opponent</th>
                                     <th>Wins</th>
                                     <th>Losses</th>
@@ -32,6 +33,7 @@
                                         {% if not player.team %}
                                             <td>{{ row.represented_team_name }}</td>
                                         {% endif %}
+                                        <td>{{ row.week_number }}</td>
                                         <td><a href="/teams/{{ row.team_id }}/">{{ row.team_name }}</a></td>
                                         <td>{{ row.wins }}</td>
                                         <td>{{ row.losses }}</td>
