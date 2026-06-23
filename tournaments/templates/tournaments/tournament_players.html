@@ -76,6 +76,54 @@
             </table>
         </div>
     </div>
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-info text-white py-3">
+            <h5 class="mb-0">Create Tournament on OnTheHill</h5>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{% url 'create_onthehill_tournament' %}" class="row g-3">
+                {% csrf_token %}
+                <div class="col-md-6">
+                    <label class="form-label">API Token <span class="text-danger">*</span></label>
+                    <input type="password" name="api_token" class="form-control" required autocomplete="off">
+                    <div class="form-text">
+                        Generate at <a href="{{ onthehill_base_url }}/api-token/" target="_blank" rel="noopener">{{ onthehill_base_url }}/api-token/</a>.
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Tournament Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="{{ default_tournament_name }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date</label>
+                    <input type="date" name="date" class="form-control" value="{{ today|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Venue ID</label>
+                    <input type="number" name="venue_id" class="form-control" min="1" placeholder="optional">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Entry Fee</label>
+                    <input type="number" name="entry_fee" class="form-control" step="0.01" min="0" value="16">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Added Money</label>
+                    <input type="number" name="added_money" class="form-control" step="0.01" min="0" value="{{ default_added_money }}">
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">Notes</label>
+                    <input type="text" name="notes" class="form-control" placeholder="optional">
+                </div>
+                <div class="col-12">
+                    <div class="text-muted small mb-2">
+                        Game type: <strong>8-Ball</strong> · Format: <strong>Double Elimination</strong>
+                    </div>
+                    <button type="submit" class="btn btn-info text-white px-4">Create on OnTheHill</button>
+                    <span class="text-muted ms-2">Sends the {{ existing_teams|length }} team{{ existing_teams|length|pluralize }} above as seeded entries.</span>
+                </div>
+            </form>
+        </div>
+    </div>
     {% elif can_make_teams %}
     <div class="d-flex justify-content-end mb-4">
         <form method="post">

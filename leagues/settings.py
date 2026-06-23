@@ -132,3 +132,5 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 FRONTEND_LEAGUE_ID = int(os.environ.get('FRONTEND_LEAGUE_ID') or 1)
+
+ONTHEHILL_BASE_URL = os.environ.get('ONTHEHILL_BASE_URL') or 'http://127.0.0.1:8000'

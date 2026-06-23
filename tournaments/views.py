@@ -1,10 +1,17 @@
 import csv
+import json
 import random
+import urllib.error
+import urllib.request
+from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Q, Sum
 from django.http import HttpResponse
 from django.contrib import messages
+from django.utils import timezone
+from django.utils.safestring import mark_safe
+from django.views.decorators.http import require_POST
 from core.models import Player, League
 from scheduling.models import Season
 from .models import Tournament, TournamentPlayer, TournamentTeam, BracketMatch
@@ -125,6 +132,8 @@ def tournament_players(request):
     existing_teams = list(TournamentTeam.objects.filter(tournament=tournament).select_related('a_player', 'b_player'))
     can_make_teams = len(a_players) == len(b_players) and len(a_players) > 0 and not existing_teams
 
+    default_tournament_name = f"{active_season.name} End of Season Tournament"
+
     return render(request, 'tournaments/tournament_players.html', {
         'active_league': active_league,
         'league_name': active_league.name if active_league else 'League Name',
@@ -137,6 +146,10 @@ def tournament_players(request):
         'existing_teams': existing_teams,
         'can_make_teams': can_make_teams,
         'paid_player_ids': paid_player_ids,
+        'today': timezone.localdate(),
+        'default_tournament_name': default_tournament_name,
+        'default_added_money': active_league.tournament_target,
+        'onthehill_base_url': settings.ONTHEHILL_BASE_URL,
     })
 
 
@@ -388,3 +401,104 @@ def end_of_season_tournament(request, tournament_id=None):
         'reset_match': reset,
         'payout_info': payout_info,
     })
+
+
+@staff_member_required
+@require_POST
+def create_onthehill_tournament(request):
+    active_league = get_active_league(request)
+    if not active_league:
+        messages.error(request, "No active league found.")
+        return redirect('home')
+
+    active_season = get_active_season(active_league)
+    if not active_season:
+        messages.error(request, "No active season found.")
+        return redirect('home')
+
+    tournament = Tournament.objects.filter(season=active_season).first()
+    teams = []
+    if tournament:
+        teams = list(
+            TournamentTeam.objects.filter(tournament=tournament)
+            .select_related('a_player', 'b_player')
+            .order_by('team_number')
+        )
+    if not teams:
+        messages.error(request, "No tournament teams to send. Generate teams first.")
+        return redirect('tournament_players')
+
+    api_token = (request.POST.get('api_token') or '').strip()
+    if not api_token:
+        messages.error(request, "API token is required.")
+        return redirect('tournament_players')
+
+    name = (request.POST.get('name') or '').strip() or f"{active_season.name} End of Season Tournament"
+    payload = {
+        'name': name,
+        'game_type': '8ball',
+        'format': 'double_elim',
+        'teams': [{'name': f"{t.a_player.name} / {t.b_player.name}"} for t in teams],
+    }
+
+    for field in ('date', 'notes'):
+        value = (request.POST.get(field) or '').strip()
+        if value:
+            payload[field] = value
+
+    entry_fee = (request.POST.get('entry_fee') or '').strip() or '16'
+    payload['entry_fee'] = entry_fee
+
+    added_money = (request.POST.get('added_money') or '').strip()
+    if added_money:
+        payload['added_money'] = added_money
+    else:
+        payload['added_money'] = str(active_league.tournament_target)
+
+    venue_id = (request.POST.get('venue_id') or '').strip()
+    if venue_id:
+        try:
+            payload['venue_id'] = int(venue_id)
+        except ValueError:
+            messages.error(request, "Venue ID must be an integer.")
+            return redirect('tournament_players')
+
+    url = settings.ONTHEHILL_BASE_URL.rstrip('/') + '/api/tournaments/'
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Token {api_token}',
+        },
+        method='POST',
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode('utf-8')
+            data = json.loads(body) if body else {}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        try:
+            error_msg = json.loads(body).get('error') or body
+        except json.JSONDecodeError:
+            error_msg = body or str(e)
+        messages.error(request, f"OnTheHill rejected the request ({e.code}): {error_msg}")
+        return redirect('tournament_players')
+    except urllib.error.URLError as e:
+        messages.error(request, f"Could not reach OnTheHill at {url}: {e.reason}")
+        return redirect('tournament_players')
+
+    tournament_url = data.get('url')
+    if tournament_url:
+        messages.success(
+            request,
+            mark_safe(
+                f'Tournament created on OnTheHill. '
+                f'<a href="{tournament_url}" target="_blank" rel="noopener">Open it</a>.'
+            ),
+        )
+    else:
+        messages.success(request, "Tournament created on OnTheHill.")
+    return redirect('tournament_players')
