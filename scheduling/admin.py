@@ -340,7 +340,6 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             'schedule_weeks': self._get_schedule_data(season),
             'all_teams': list(league.teams.order_by('name')),
             'start_date_choices': self._get_start_date_choices(season),
-            'recreate_schedule_url': reverse('admin:scheduling_season_recreate_schedule', args=[season.pk]),
             'mirror_schedule_url': reverse('admin:scheduling_season_mirror_schedule', args=[season.pk]),
             'rebalance_schedule_url': reverse('admin:scheduling_season_rebalance_schedule', args=[season.pk]),
             'renumber_weeks_url': reverse('admin:scheduling_season_renumber_weeks', args=[season.pk]),
@@ -348,6 +347,9 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             'update_match_location_url_name': 'admin:scheduling_season_update_match_location',
             'move_match_url_name': 'admin:scheduling_season_move_match',
         }
+
+        if season.status != Season.Status.ACTIVE:
+            context['recreate_schedule_url'] = reverse('admin:scheduling_season_recreate_schedule', args=[season.pk])
 
         if season.status == Season.Status.WORKING:
             context['move_live_url'] = reverse('admin:scheduling_season_move_live', args=[season.pk])
@@ -457,6 +459,14 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
+            return self._get_redirect_url(request, season)
+
+        if season.status == Season.Status.ACTIVE:
+            self.message_user(
+                request,
+                'Cannot recreate the schedule of an active season.',
+                level=messages.ERROR,
+            )
             return self._get_redirect_url(request, season)
 
         start_date_value = request.POST.get('start_date')
