@@ -1159,6 +1159,7 @@ def team_schedule_modal(request, team_id):
                 results_rows.append({
                     'date': match.week.date,
                     'opponent': opponent_label,
+                    'opponent_rank': opponent.team_rank,
                     'result': f'{team_score}-{opponent_score}',
                 })
             else:
@@ -1167,6 +1168,7 @@ def team_schedule_modal(request, team_id):
                 row = {
                     'date': match.week.date,
                     'opponent': opponent_label,
+                    'opponent_rank': opponent.team_rank,
                 }
 
                 if match.week.date < today:
@@ -1179,6 +1181,7 @@ def team_schedule_modal(request, team_id):
         {
             'team': team,
             'team_league_rank': rank_map.get(team.id) if active_season else None,
+            'team_skill_rank': team.team_rank,
             'results_rows': results_rows,
             'makeup_rows': makeup_rows,
             'upcoming_rows': upcoming_rows,

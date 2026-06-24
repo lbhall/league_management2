@@ -2,7 +2,9 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="teamScheduleModalLabel">{{ team.name }} Schedule</h5>
+                <h5 class="modal-title" id="teamScheduleModalLabel">
+                    {{ team.name }}{% if team_skill_rank %} ({{ team_skill_rank }}){% endif %} Schedule
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -21,7 +23,7 @@
                                 {% for row in results_rows %}
                                     <tr>
                                         <td>{{ row.date }}</td>
-                                        <td>{{ row.opponent }}</td>
+                                        <td>{{ row.opponent }}{% if row.opponent_rank %} ({{ row.opponent_rank }}){% endif %}</td>
                                         <td>{{ row.result }}</td>
                                     </tr>
                                 {% endfor %}
@@ -46,7 +48,7 @@
                                 {% for row in makeup_rows %}
                                     <tr>
                                         <td>{{ row.date }}</td>
-                                        <td>{{ row.opponent }}</td>
+                                        <td>{{ row.opponent }}{% if row.opponent_rank %} ({{ row.opponent_rank }}){% endif %}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -70,7 +72,7 @@
                                 {% for row in upcoming_rows %}
                                     <tr>
                                         <td>{{ row.date }}</td>
-                                        <td>{{ row.opponent }}</td>
+                                        <td>{{ row.opponent }}{% if row.opponent_rank %} ({{ row.opponent_rank }}){% endif %}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
