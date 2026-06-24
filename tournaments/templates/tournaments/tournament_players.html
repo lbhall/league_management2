@@ -84,13 +84,6 @@
             <form method="post" action="{% url 'create_onthehill_tournament' %}" class="row g-3">
                 {% csrf_token %}
                 <div class="col-md-6">
-                    <label class="form-label">API Token <span class="text-danger">*</span></label>
-                    <input type="password" name="api_token" class="form-control" required autocomplete="off">
-                    <div class="form-text">
-                        Generate at <a href="{{ onthehill_base_url }}/api-token/" target="_blank" rel="noopener">{{ onthehill_base_url }}/api-token/</a>.
-                    </div>
-                </div>
-                <div class="col-md-6">
                     <label class="form-label">Tournament Name</label>
                     <input type="text" name="name" class="form-control" placeholder="{{ default_tournament_name }}">
                 </div>

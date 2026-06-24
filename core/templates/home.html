@@ -143,6 +143,7 @@
                                                     >
                                                         {{ entry.home_team.name }}
                                                     </a>
+                                                    {% if entry.home_team_skill_rank %}({{ entry.home_team_skill_rank }}){% endif %}
                                                 {% else %}
                                                     <a href="{% url 'team_detail' entry.home_team.id %}">{{ entry.home_team }}</a>
                                                 {% endif %}
@@ -158,6 +159,7 @@
                                                     >
                                                         {{ entry.away_team.name }}
                                                     </a>
+                                                    {% if entry.away_team_skill_rank %}({{ entry.away_team_skill_rank }}){% endif %}
                                                 {% else %}
                                                     <a href="{% url 'team_detail' entry.away_team.id %}">{{ entry.away_team }}</a>
                                                 {% endif %}

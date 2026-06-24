@@ -23,8 +23,47 @@ from .bracket import (
     compute_placements,
     compute_payouts,
     _sync_tournament_completion,
+    PAYOUT_PERCENTAGES,
+    FLAT_PAYOUTS,
 )
 from core.views import get_active_league, get_active_season
+
+
+def _fetch_onthehill_token():
+    """Exchange the configured OnTheHill credentials for an API token."""
+    url = settings.ONTHEHILL_BASE_URL.rstrip('/') + '/api/token/'
+    payload = {
+        'username': settings.ONTHEHILL_USERNAME,
+        'password': settings.ONTHEHILL_PASSWORD,
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        body = resp.read().decode('utf-8')
+        data = json.loads(body) if body else {}
+    return data.get('token')
+
+
+def _post_onthehill_payout(api_token, tournament_id, place, payout_type, amount):
+    url = settings.ONTHEHILL_BASE_URL.rstrip('/') + f'/api/tournaments/{tournament_id}/payouts/'
+    payload = {'place': place, 'payout_type': payout_type, 'amount': amount}
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Token {api_token}',
+        },
+        method='POST',
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        body = resp.read().decode('utf-8')
+        return json.loads(body) if body else {}
+
 
 @staff_member_required
 def tournament_players(request):
@@ -149,7 +188,6 @@ def tournament_players(request):
         'today': timezone.localdate(),
         'default_tournament_name': default_tournament_name,
         'default_added_money': active_league.tournament_target,
-        'onthehill_base_url': settings.ONTHEHILL_BASE_URL,
     })
 
 
@@ -428,9 +466,26 @@ def create_onthehill_tournament(request):
         messages.error(request, "No tournament teams to send. Generate teams first.")
         return redirect('tournament_players')
 
-    api_token = (request.POST.get('api_token') or '').strip()
+    if not settings.ONTHEHILL_USERNAME or not settings.ONTHEHILL_PASSWORD:
+        messages.error(request, "OnTheHill username/password are not configured.")
+        return redirect('tournament_players')
+
+    try:
+        api_token = _fetch_onthehill_token()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        try:
+            error_msg = json.loads(body).get('error') or body
+        except json.JSONDecodeError:
+            error_msg = body or str(e)
+        messages.error(request, f"Could not get an OnTheHill API token ({e.code}): {error_msg}")
+        return redirect('tournament_players')
+    except urllib.error.URLError as e:
+        messages.error(request, f"Could not reach OnTheHill for an API token: {e.reason}")
+        return redirect('tournament_players')
+
     if not api_token:
-        messages.error(request, "API token is required.")
+        messages.error(request, "OnTheHill did not return an API token.")
         return redirect('tournament_players')
 
     name = (request.POST.get('name') or '').strip() or f"{active_season.name} End of Season Tournament"
@@ -491,14 +546,40 @@ def create_onthehill_tournament(request):
         return redirect('tournament_players')
 
     tournament_url = data.get('url')
+    tournament_id = data.get('id')
+
+    payout_errors = []
+    if tournament_id:
+        for place, pct in PAYOUT_PERCENTAGES.items():
+            try:
+                _post_onthehill_payout(api_token, tournament_id, place, 'percentage', str(round(pct * 100)))
+            except urllib.error.HTTPError as e:
+                payout_errors.append(f"place {place}: {e.code}")
+            except urllib.error.URLError as e:
+                payout_errors.append(f"place {place}: {e.reason}")
+        for place, amount in FLAT_PAYOUTS.items():
+            try:
+                _post_onthehill_payout(api_token, tournament_id, place, 'flat', str(amount))
+            except urllib.error.HTTPError as e:
+                payout_errors.append(f"place {place}: {e.code}")
+            except urllib.error.URLError as e:
+                payout_errors.append(f"place {place}: {e.reason}")
+    else:
+        payout_errors.append("missing tournament id in response, payouts not sent")
+
     if tournament_url:
-        messages.success(
-            request,
-            mark_safe(
-                f'Tournament created on OnTheHill. '
-                f'<a href="{tournament_url}" target="_blank" rel="noopener">Open it</a>.'
-            ),
+        success_msg = (
+            f'Tournament created on OnTheHill. '
+            f'<a href="{tournament_url}" target="_blank" rel="noopener">Open it</a>.'
         )
     else:
-        messages.success(request, "Tournament created on OnTheHill.")
+        success_msg = "Tournament created on OnTheHill."
+
+    if payout_errors:
+        messages.warning(
+            request,
+            mark_safe(success_msg + " Some payouts failed to save: " + "; ".join(payout_errors)),
+        )
+    else:
+        messages.success(request, mark_safe(success_msg + " Payouts saved."))
     return redirect('tournament_players')

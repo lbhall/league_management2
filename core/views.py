@@ -121,7 +121,11 @@ def get_one_pocket_race_label(team_a, team_b):
     if not race:
         return ''
 
-    return f'{race[0]}/{race[1]}'
+    higher_race, lower_race = race
+    race_a = higher_race if rank_a == higher_rank else lower_race
+    race_b = higher_race if rank_b == higher_rank else lower_race
+
+    return f'{race_a}/{race_b}'
 
 
 def build_week_schedule_with_byes(active_league, week, team_standings=None):
@@ -147,6 +151,7 @@ def build_week_schedule_with_byes(active_league, week, team_standings=None):
             bye_entries.append({
                 'home_team': team,
                 'home_team_rank': rank_map.get(team.id),
+                'home_team_skill_rank': team.team_rank,
                 'away_team': 'BYE',
                 'location': '',
                 'is_bye': True,
@@ -157,8 +162,10 @@ def build_week_schedule_with_byes(active_league, week, team_standings=None):
         {
             'home_team': match.home_team,
             'home_team_rank': rank_map.get(match.home_team_id),
+            'home_team_skill_rank': match.home_team.team_rank,
             'away_team': match.away_team,
             'away_team_rank': rank_map.get(match.away_team_id),
+            'away_team_skill_rank': match.away_team.team_rank,
             'location': match.location,
             'is_bye': False,
             'race_label': (
