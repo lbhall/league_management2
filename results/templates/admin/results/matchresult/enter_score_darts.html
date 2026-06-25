@@ -1,0 +1,546 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        .score-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .score-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .score-card-header {
+            background: #417690;
+            color: #fff;
+            border-bottom: 1px solid #ddd;
+            padding: 12px 16px;
+            font-weight: 700;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .score-card-header .games-won-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+        }
+
+        .score-card-header .games-won-field input[type="number"] {
+            width: 64px;
+            padding: 4px 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            color: #222;
+        }
+
+        .score-card-body {
+            padding: 0;
+        }
+
+        .score-meta {
+            margin-bottom: 18px;
+            color: #888;
+        }
+
+        .score-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .score-table th,
+        .score-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        .score-table th {
+            background: #cfe0e8;
+            color: #222;
+            font-weight: 700;
+        }
+
+        .score-table tbody tr {
+            background: #f0f0f0;
+        }
+
+        .score-table input[type="number"],
+        .score-table select {
+            width: 100%;
+            min-width: 90px;
+        }
+
+        .score-table th.col-player,
+        .score-table td.col-player {
+            width: 32%;
+        }
+
+        .score-table th.col-narrow,
+        .score-table td.col-narrow {
+            width: 60px;
+            white-space: nowrap;
+        }
+
+        .score-table td.col-narrow input[type="number"] {
+            min-width: 0;
+            width: 52px;
+        }
+
+        .submit-row {
+            margin-top: 24px;
+        }
+
+        .player-select-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .player-select-wrapper .player-select {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .add-player-btn {
+            flex-shrink: 0;
+            width: 26px;
+            height: 26px;
+            padding: 0;
+            font-size: 18px;
+            line-height: 1;
+            background: #417690;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .add-player-btn:hover {
+            background: #205067;
+        }
+
+        /* Modal */
+        #add-player-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 9000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #add-player-overlay.open {
+            display: flex;
+        }
+
+        #add-player-dialog {
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 24px;
+            min-width: 320px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+        }
+
+        #add-player-dialog h3 {
+            margin: 0 0 16px;
+            font-size: 16px;
+            color: #222;
+        }
+
+        .add-player-field {
+            margin-bottom: 14px;
+        }
+
+        .add-player-field label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .add-player-field input[type="text"],
+        .add-player-field select {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        #add-player-error {
+            color: #ba2121;
+            font-size: 13px;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .add-player-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        @media (max-width: 960px) {
+            .score-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="score-meta">
+        <p><strong>League:</strong> {{ league.name }}</p>
+        <p><strong>Match:</strong> {{ match.home_team }} vs {{ match.away_team }}</p>
+        <p><strong>Week:</strong> {{ match.week }}</p>
+        {% if match.location %}
+            <p><strong>Location:</strong> {{ match.location }}</p>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        {% if next_url %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+        {% endif %}
+
+        <div class="score-layout">
+            <div class="score-card" data-team-card="home">
+                <div class="score-card-header">
+                    <span>{{ match.home_team }}</span>
+                    <span class="games-won-field">
+                        Games Won
+                        <input type="number" min="0" name="home_team_score" value="{{ home_score }}">
+                    </span>
+                </div>
+                <div class="score-card-body">
+                    <table class="score-table">
+                        <thead>
+                            <tr>
+                                <th class="col-player">Player</th>
+                                <th class="col-narrow">Hat Trick</th>
+                                <th class="col-narrow">3 in a Bed</th>
+                                <th class="col-narrow">White Horse</th>
+                                <th class="col-narrow">3 in the Black</th>
+                                <th class="col-narrow">Points</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in home_player_rows %}
+                                <tr data-team="home">
+                                    <td class="col-player">
+                                        <div class="player-select-wrapper">
+                                            <select name="home_player_{{ forloop.counter0 }}" class="player-select">
+                                                <option value="">---------</option>
+                                                <optgroup label="{{ match.home_team }}">
+                                                    {% for player in row.choices.team_players %}
+                                                        <option
+                                                            value="{{ player.id }}"
+                                                            {% if row.player and row.player.id == player.id %}selected{% endif %}
+                                                        >
+                                                            {{ player.name }}
+                                                        </option>
+                                                    {% endfor %}
+                                                </optgroup>
+                                                <optgroup label="Unassigned Players">
+                                                    {% for player in row.choices.unassigned_players %}
+                                                        <option
+                                                            value="{{ player.id }}"
+                                                            {% if row.player and row.player.id == player.id %}selected{% endif %}
+                                                        >
+                                                            {{ player.name }}
+                                                        </option>
+                                                    {% endfor %}
+                                                </optgroup>
+                                            </select>
+                                            <button type="button" class="add-player-btn" title="Add new player">+</button>
+                                        </div>
+                                    </td>
+                                    <td class="col-narrow">
+                                        <input type="number" min="0" class="stat-input" data-stat="hat_tricks" name="home_hat_tricks_{{ forloop.counter0 }}" value="{{ row.hat_tricks }}">
+                                    </td>
+                                    <td class="col-narrow">
+                                        <input type="number" min="0" class="stat-input" data-stat="three_in_a_beds" name="home_three_in_a_beds_{{ forloop.counter0 }}" value="{{ row.three_in_a_beds }}">
+                                    </td>
+                                    <td class="col-narrow">
+                                        <input type="number" min="0" class="stat-input" data-stat="white_horses" name="home_white_horses_{{ forloop.counter0 }}" value="{{ row.white_horses }}">
+                                    </td>
+                                    <td class="col-narrow">
+                                        <input type="number" min="0" class="stat-input" data-stat="three_in_the_blacks" name="home_three_in_the_blacks_{{ forloop.counter0 }}" value="{{ row.three_in_the_blacks }}">
+                                    </td>
+                                    <td class="col-narrow points-display">{{ row.points }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="score-card" data-team-card="away">
+                <div class="score-card-header">
+                    <span>{{ match.away_team }}</span>
+                    <span class="games-won-field">
+                        Games Won
+                        <input type="number" min="0" name="away_team_score" value="{{ away_score }}">
+                    </span>
+                </div>
+                <div class="score-card-body">
+                    <table class="score-table">
+                        <thead>
+                            <tr>
+                                <th class="col-player">Player</th>
+                                <th class="col-narrow">Hat Trick</th>
+                                <th class="col-narrow">3 in a Bed</th>
+                                <th class="col-narrow">White Horse</th>
+                                <th class="col-narrow">3 in the Black</th>
+                                <th class="col-narrow">Points</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in away_player_rows %}
+                                <tr data-team="away">
+                                    <td class="col-player">
+                                        <div class="player-select-wrapper">
+                                            <select name="away_player_{{ forloop.counter0 }}" class="player-select">
+                                                <option value="">---------</option>
+                                                <optgroup label="{{ match.away_team }}">
+                                                    {% for player in row.choices.team_players %}
+                                                        <option
+                                                            value="{{ player.id }}"
+                                                            {% if row.player and row.player.id == player.id %}selected{% endif %}
+                                                        >
+                                                            {{ player.name }}
+                                                        </option>
+                                                    {% endfor %}
+                                                </optgroup>
+                                                <optgroup label="Unassigned Players">
+                                                    {% for player in row.choices.unassigned_players %}
+                                                        <option
+                                                            value="{{ player.id }}"
+                                                            {% if row.player and row.player.id == player.id %}selected{% endif %}
+                                                        >
+                                                            {{ player.name }}
+                                                        </option>
+                                                    {% endfor %}
+                                                </optgroup>
+                                            </select>
+                                            <button type="button" class="add-player-btn" title="Add new player">+</button>
+                                        </div>
+                                    </td>
+                                    <td class="col-narrow">
+                                        <input type="number" min="0" class="stat-input" data-stat="hat_tricks" name="away_hat_tricks_{{ forloop.counter0 }}" value="{{ row.hat_tricks }}">
+                                    </td>
+                                    <td class="col-narrow">
+                                        <input type="number" min="0" class="stat-input" data-stat="three_in_a_beds" name="away_three_in_a_beds_{{ forloop.counter0 }}" value="{{ row.three_in_a_beds }}">
+                                    </td>
+                                    <td class="col-narrow">
+                                        <input type="number" min="0" class="stat-input" data-stat="white_horses" name="away_white_horses_{{ forloop.counter0 }}" value="{{ row.white_horses }}">
+                                    </td>
+                                    <td class="col-narrow">
+                                        <input type="number" min="0" class="stat-input" data-stat="three_in_the_blacks" name="away_three_in_the_blacks_{{ forloop.counter0 }}" value="{{ row.three_in_the_blacks }}">
+                                    </td>
+                                    <td class="col-narrow points-display">{{ row.points }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" value="Save Score" class="default">
+        </div>
+    </form>
+
+    <!-- Add Player Modal -->
+    <div id="add-player-overlay">
+        <div id="add-player-dialog">
+            <h3>Add New Player</h3>
+            <div id="add-player-error"></div>
+            <div class="add-player-field">
+                <label for="add-player-name">Name</label>
+                <input type="text" id="add-player-name" autocomplete="off">
+            </div>
+            <div class="add-player-field">
+                <label for="add-player-gender">Gender</label>
+                <select id="add-player-gender">
+                    <option value="true">Male</option>
+                    <option value="false">Female</option>
+                </select>
+            </div>
+            <div class="add-player-actions">
+                <button type="button" id="add-player-cancel" class="button">Cancel</button>
+                <button type="button" id="add-player-submit" class="default button">Add Player</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const createPlayerUrl = '{{ create_player_url }}';
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            let targetSelect = null;
+
+            const overlay = document.getElementById('add-player-overlay');
+            const nameInput = document.getElementById('add-player-name');
+            const genderSelect = document.getElementById('add-player-gender');
+            const errorDiv = document.getElementById('add-player-error');
+
+            function openModal(select) {
+                targetSelect = select;
+                nameInput.value = '';
+                genderSelect.value = 'true';
+                errorDiv.style.display = 'none';
+                errorDiv.textContent = '';
+                overlay.classList.add('open');
+                nameInput.focus();
+            }
+
+            function closeModal() {
+                overlay.classList.remove('open');
+                targetSelect = null;
+            }
+
+            document.getElementById('add-player-cancel').addEventListener('click', closeModal);
+
+            overlay.addEventListener('click', function (e) {
+                if (e.target === overlay) {
+                    closeModal();
+                }
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && overlay.classList.contains('open')) {
+                    closeModal();
+                }
+            });
+
+            document.getElementById('add-player-submit').addEventListener('click', function () {
+                const name = nameInput.value.trim();
+                if (!name) {
+                    errorDiv.textContent = 'Name is required.';
+                    errorDiv.style.display = 'block';
+                    nameInput.focus();
+                    return;
+                }
+
+                errorDiv.style.display = 'none';
+
+                const body = new URLSearchParams();
+                body.append('name', name);
+                body.append('male', genderSelect.value);
+                body.append('csrfmiddlewaretoken', csrfToken);
+
+                fetch(createPlayerUrl, {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: body.toString(),
+                })
+                .then(function (res) { return res.json().then(function (data) { return {ok: res.ok, data: data}; }); })
+                .then(function (result) {
+                    if (!result.ok) {
+                        errorDiv.textContent = result.data.error || 'An error occurred.';
+                        errorDiv.style.display = 'block';
+                        return;
+                    }
+
+                    const player = result.data;
+
+                    if (targetSelect) {
+                        document.querySelectorAll('.player-select').forEach(function (sel) {
+                            let unassignedGroup = null;
+                            for (const og of sel.querySelectorAll('optgroup')) {
+                                if (og.label === 'Unassigned Players') {
+                                    unassignedGroup = og;
+                                    break;
+                                }
+                            }
+                            if (!unassignedGroup) {
+                                unassignedGroup = document.createElement('optgroup');
+                                unassignedGroup.label = 'Unassigned Players';
+                                sel.appendChild(unassignedGroup);
+                            }
+                            const opt = document.createElement('option');
+                            opt.value = player.id;
+                            opt.textContent = player.name;
+                            unassignedGroup.appendChild(opt);
+                        });
+
+                        targetSelect.value = player.id;
+                        targetSelect.dispatchEvent(new Event('change'));
+                    }
+
+                    closeModal();
+                })
+                .catch(function () {
+                    errorDiv.textContent = 'A network error occurred. Please try again.';
+                    errorDiv.style.display = 'block';
+                });
+            });
+
+            nameInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('add-player-submit').click();
+                }
+            });
+
+            document.querySelectorAll('.add-player-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    const select = btn.closest('.player-select-wrapper').querySelector('.player-select');
+                    openModal(select);
+                });
+            });
+
+            const POINTS_PER_STAT = {
+                hat_tricks: 1,
+                three_in_a_beds: 2,
+                white_horses: 3,
+                three_in_the_blacks: 4,
+            };
+
+            function updateRowPoints(row) {
+                const pointsDisplay = row.querySelector('.points-display');
+                if (!pointsDisplay) {
+                    return;
+                }
+
+                let points = 0;
+                row.querySelectorAll('.stat-input').forEach(function (input) {
+                    const value = parseInt(input.value || '0', 10) || 0;
+                    points += value * (POINTS_PER_STAT[input.dataset.stat] || 0);
+                });
+
+                pointsDisplay.textContent = points;
+            }
+
+            document.querySelectorAll('tr[data-team]').forEach(function (row) {
+                updateRowPoints(row);
+                row.querySelectorAll('.stat-input').forEach(function (input) {
+                    input.addEventListener('input', function () {
+                        updateRowPoints(row);
+                    });
+                });
+            });
+        })();
+    </script>
+{% endblock %}

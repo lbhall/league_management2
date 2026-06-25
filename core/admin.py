@@ -195,11 +195,15 @@ class LeagueAdmin(admin.ModelAdmin):
     change_form_template = 'admin/core/league/change_form.html'
 
     def financial_breakdown_link(self, obj):
+        if obj.results_type == League.ResultsType.DARTS:
+            return '—'
         url = reverse('admin:core_league_financial_breakdown', args=[obj.pk])
         return format_html('<a href="{}">Financial Breakdown</a>', url)
     financial_breakdown_link.short_description = 'Finance'
 
     def tournament_players_link(self, obj):
+        if obj.results_type == League.ResultsType.DARTS:
+            return '—'
         url = reverse('tournament_players')
         return format_html('<a href="{}">Tournament Players</a>', url)
     tournament_players_link.short_description = 'Tournaments'
@@ -255,14 +259,16 @@ class LeagueAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         if object_id:
             league = get_object_or_404(League, pk=object_id)
+            is_darts = league.results_type == League.ResultsType.DARTS
+
             extra_context['financial_breakdown_url'] = reverse(
                 'admin:core_league_financial_breakdown',
                 args=[league.pk],
             )
-            extra_context['show_financial_breakdown'] = True
-            
+            extra_context['show_financial_breakdown'] = not is_darts
+
             extra_context['tournament_players_url'] = reverse('tournament_players')
-            extra_context['show_tournament_players'] = True
+            extra_context['show_tournament_players'] = not is_darts
 
         return super().changeform_view(
             request,

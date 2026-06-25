@@ -18,8 +18,8 @@ class MatchResult(models.Model):
 
     def clean(self):
         super().clean()
-        if self.match.week.season.league.results_type not in ['8_ball', 'one_pocket']:
-            raise ValidationError('MatchResult entry is currently only supported for 8-ball and one-pocket leagues.')
+        if self.match.week.season.league.results_type not in ['8_ball', 'one_pocket', 'darts']:
+            raise ValidationError('MatchResult entry is currently only supported for 8-ball, one-pocket, and darts leagues.')
 
     def __str__(self):
         return f"{self.match.home_team} vs {self.match.away_team}"
@@ -46,6 +46,12 @@ class PlayerMatchResult(models.Model):
     runouts = models.PositiveIntegerField(default=0)
     eight_on_the_breaks = models.PositiveIntegerField(default=0)
     won_all_games = models.BooleanField(default=False)
+
+    # Darts-only stats. Not used (left at 0) for 8-ball/one-pocket leagues.
+    hat_tricks = models.PositiveIntegerField(default=0)
+    three_in_a_beds = models.PositiveIntegerField(default=0)
+    white_horses = models.PositiveIntegerField(default=0)
+    three_in_the_blacks = models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [
@@ -108,3 +114,12 @@ class PlayerMatchResult(models.Model):
 
     def __str__(self):
         return f'{self.player} - {self.match_result.match}'
+
+    @property
+    def darts_points(self):
+        return (
+            self.hat_tricks * 1
+            + self.three_in_a_beds * 2
+            + self.white_horses * 3
+            + self.three_in_the_blacks * 4
+        )

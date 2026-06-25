@@ -247,3 +247,75 @@ class EightBallViewsTests(ViewTestCase):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('archived_seasons'))
         self.assertEqual(response.status_code, 200)
+
+
+class DartsViewsTests(ViewTestCase):
+    def setUp(self):
+        super().setUp()
+        self.league = make_league(name='Darts League', results_type=League.ResultsType.DARTS, team_size=2)
+        self.venue = make_venue(self.league)
+        self.home_team = make_team(self.league, self.venue, 'Home Team')
+        self.away_team = make_team(self.league, self.venue, 'Away Team')
+        self.home_player = Player.objects.create(league=self.league, name='Nancy', team=self.home_team, male=False)
+        self.away_player = Player.objects.create(league=self.league, name='Am', team=self.away_team, male=True)
+
+        self.season = Season.objects.create(league=self.league, name='Season 1', status=Season.Status.ACTIVE)
+        self.week1 = Week.objects.create(season=self.season, date=date(2026, 1, 5), number=1)
+        self.match = Match.objects.create(week=self.week1, home_team=self.home_team, away_team=self.away_team)
+        self.match_result = MatchResult.objects.create(
+            match=self.match, home_team_score=6, away_team_score=3,
+        )
+        PlayerMatchResult.objects.create(
+            match_result=self.match_result, player=self.home_player, represented_team=self.home_team,
+            three_in_a_beds=2,
+        )
+        PlayerMatchResult.objects.create(
+            match_result=self.match_result, player=self.away_player, represented_team=self.away_team,
+            white_horses=1,
+        )
+
+    def test_home_page_shows_team_score_based_standings(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Nancy')
+
+        team_standings = response.context['team_standings']
+        home_standing = next(s for s in team_standings if s['team'] == 'Home Team')
+        away_standing = next(s for s in team_standings if s['team'] == 'Away Team')
+        self.assertEqual(home_standing['games_won'], 6)
+        self.assertEqual(home_standing['games_lost'], 3)
+        self.assertEqual(home_standing['matches_won'], 1)
+        self.assertEqual(away_standing['matches_lost'], 1)
+
+    def test_home_page_top_players_sorted_by_darts_points(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        # Nancy: 2 three-in-a-beds = 4 pts; Am: 1 white horse = 3 pts.
+        top_players = response.context['top_male_players']
+        self.assertEqual([p['player'] for p in top_players[:2]], ['Nancy', 'Am'])
+        self.assertContains(response, '4 pts')
+        self.assertContains(response, '3 pts')
+
+    def test_standings_page(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('standings'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Home Team')
+
+    def test_nav_hides_archived_and_tournament_links(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'archived-seasons')
+        self.assertNotContains(response, 'End of Season Tournament')
+        self.assertContains(response, '/schedule/')
+        self.assertContains(response, '/standings/')
+
+    def test_nav_hides_contact_info_link(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'contact-info')
+        self.assertContains(response, '/rules/')

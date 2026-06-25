@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-*j3^ac7+8v38f6)-q#pb+k26vk7#12f#qa2cnnr62=(=gkeeuz
 DEBUG = True
 
 
-ALLOWED_HOSTS = ["emcfunleague.com", "www.emcfunleague.com", "localhost:8000", "127.0.0.1:8000", "localhost", "127.0.0.1",'bogies.emcfunleague.com']
+ALLOWED_HOSTS = ["emcfunleague.com", "www.emcfunleague.com", "localhost:8000", "coed.emcfunleague.com", "127.0.0.1:8000", "localhost", "127.0.0.1",'bogies.emcfunleague.com']
 
 
 # Application definition

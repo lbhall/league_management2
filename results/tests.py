@@ -41,6 +41,19 @@ def make_match(league, home_team, away_team):
 
 class MatchResultModelTests(TestCase):
     def test_clean_rejects_unsupported_results_type(self):
+        league = make_league(results_type=League.ResultsType.EIGHT_BALL)
+        venue = make_venue(league)
+        home = make_team(league, venue, 'Home')
+        away = make_team(league, venue, 'Away')
+        match = make_match(league, home, away)
+        League.objects.filter(pk=league.pk).update(results_type='something_else')
+        match.week.season.league.refresh_from_db()
+
+        result = MatchResult(match=match)
+        with self.assertRaises(ValidationError):
+            result.clean()
+
+    def test_clean_allows_darts(self):
         league = make_league(results_type=League.ResultsType.DARTS)
         venue = make_venue(league)
         home = make_team(league, venue, 'Home')
@@ -48,8 +61,7 @@ class MatchResultModelTests(TestCase):
         match = make_match(league, home, away)
 
         result = MatchResult(match=match)
-        with self.assertRaises(ValidationError):
-            result.clean()
+        result.clean()  # should not raise
 
     def test_clean_allows_eight_ball(self):
         league = make_league(results_type=League.ResultsType.EIGHT_BALL)
@@ -91,6 +103,16 @@ class PlayerMatchResultModelTests(TestCase):
         )
         self.assertEqual(pmr.losses, 0)
         self.assertTrue(pmr.won_all_games)
+
+    def test_darts_points_weights_each_stat(self):
+        pmr = PlayerMatchResult(
+            hat_tricks=2, three_in_a_beds=1, white_horses=1, three_in_the_blacks=1,
+        )
+        self.assertEqual(pmr.darts_points, 2 * 1 + 1 * 2 + 1 * 3 + 1 * 4)
+
+    def test_darts_points_defaults_to_zero(self):
+        pmr = PlayerMatchResult()
+        self.assertEqual(pmr.darts_points, 0)
 
     def test_save_recomputes_losses_for_partial_wins(self):
         pmr = PlayerMatchResult.objects.create(

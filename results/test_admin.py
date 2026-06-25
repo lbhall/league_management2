@@ -254,6 +254,89 @@ class EnterScoreOnePocketViewTests(ResultsAdminTestCase):
         self.assertContains(response, 'valid numeric scores')
 
 
+class EnterScoreDartsViewTests(ResultsAdminTestCase):
+    def setUp(self):
+        super().setUp()
+        self.league = make_league(name='Darts League', results_type=League.ResultsType.DARTS, team_size=2)
+        self.venue = make_venue(self.league)
+        self.home_team = Team.objects.create(league=self.league, venue=self.venue, name='Home')
+        self.away_team = Team.objects.create(league=self.league, venue=self.venue, name='Away')
+        self.season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ACTIVE)
+        self.week = Week.objects.create(season=self.season, date=date(2026, 1, 5), number=1)
+        self.match = Match.objects.create(week=self.week, home_team=self.home_team, away_team=self.away_team)
+
+        self.home_p1 = Player.objects.create(league=self.league, name='HomeP1', team=self.home_team)
+        self.home_p2 = Player.objects.create(league=self.league, name='HomeP2', team=self.home_team)
+        self.away_p1 = Player.objects.create(league=self.league, name='AwayP1', team=self.away_team)
+        self.away_p2 = Player.objects.create(league=self.league, name='AwayP2', team=self.away_team)
+
+    def enter_score_url(self):
+        return reverse('admin:results_matchresult_enter_score', args=[self.match.id])
+
+    def post_score(self, **extra):
+        data = {
+            'home_team_score': '6', 'away_team_score': '3',
+            'home_player_0': self.home_p1.id, 'home_player_1': self.home_p2.id,
+            'home_hat_tricks_0': '1', 'home_three_in_a_beds_0': '0',
+            'home_white_horses_0': '0', 'home_three_in_the_blacks_0': '0',
+            'home_hat_tricks_1': '0', 'home_three_in_a_beds_1': '2',
+            'home_white_horses_1': '0', 'home_three_in_the_blacks_1': '0',
+            'away_player_0': self.away_p1.id, 'away_player_1': self.away_p2.id,
+            'away_hat_tricks_0': '0', 'away_three_in_a_beds_0': '0',
+            'away_white_horses_0': '1', 'away_three_in_the_blacks_0': '0',
+            'away_hat_tricks_1': '0', 'away_three_in_a_beds_1': '0',
+            'away_white_horses_1': '0', 'away_three_in_the_blacks_1': '0',
+        }
+        data.update(extra)
+        return self.client.post(self.enter_score_url(), data)
+
+    def test_get_renders_empty_rows(self):
+        response = self.client.get(self.enter_score_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'HomeP1')
+        self.assertContains(response, 'Games Won')
+
+    def test_post_success_saves_team_score_and_player_stats(self):
+        response = self.post_score()
+        self.assertEqual(response.status_code, 302)
+
+        match_result = MatchResult.objects.get(match=self.match)
+        self.assertEqual(match_result.home_team_score, 6)
+        self.assertEqual(match_result.away_team_score, 3)
+
+        home_p1_result = PlayerMatchResult.objects.get(match_result=match_result, player=self.home_p1)
+        self.assertEqual(home_p1_result.hat_tricks, 1)
+        home_p2_result = PlayerMatchResult.objects.get(match_result=match_result, player=self.home_p2)
+        self.assertEqual(home_p2_result.three_in_a_beds, 2)
+        away_p1_result = PlayerMatchResult.objects.get(match_result=match_result, player=self.away_p1)
+        self.assertEqual(away_p1_result.white_horses, 1)
+
+    def test_post_with_next_url_redirects_there(self):
+        response = self.post_score(next='/somewhere/')
+        self.assertRedirects(response, '/somewhere/', fetch_redirect_response=False)
+
+    def test_post_rejects_negative_team_score(self):
+        response = self.post_score(home_team_score='-1')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'cannot be negative')
+        self.assertFalse(MatchResult.objects.filter(match=self.match).exclude(home_team_score=None).exists())
+
+    def test_post_rejects_duplicate_player_selection(self):
+        response = self.post_score(home_player_1=self.home_p1.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'cannot be selected in more than one slot')
+
+    def test_post_rejects_non_numeric_team_score(self):
+        response = self.post_score(home_team_score='not-a-number')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'valid numeric values')
+
+    def test_post_rejects_non_numeric_player_stat(self):
+        response = self.post_score(home_hat_tricks_0='not-a-number')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'valid numeric values')
+
+
 class EnterScoreDispatchTests(ResultsAdminTestCase):
     def test_unsupported_results_type_redirects_with_error(self):
         League.objects.filter(pk=self.league.pk).update(results_type='something_else')

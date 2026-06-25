@@ -207,8 +207,12 @@
                                                     <span class="text-muted">({{ player.team }})</span>
                                                 {% endif %}
                                                 <div class="text-muted small ms-3">
-                                                    {{ player.wins }}-{{ player.losses }} |
-                                                    {{ player.percentage|floatformat:2 }} | {{ player.runs }} Runs | {{ player.eights }} 8s | {{ player.sweeps }} {{ active_league.team_size }}/0
+                                                    {% if active_league.results_type == 'darts' %}
+                                                        {{ player.hat_tricks }} HT | {{ player.three_in_a_beds }} 3-Bed | {{ player.white_horses }} WH | {{ player.three_in_the_blacks }} 3-Black | {{ player.points }} pts
+                                                    {% else %}
+                                                        {{ player.wins }}-{{ player.losses }} |
+                                                        {{ player.percentage|floatformat:2 }} | {{ player.runs }} Runs | {{ player.eights }} 8s | {{ player.sweeps }} {{ active_league.team_size }}/0
+                                                    {% endif %}
                                                 </div>
                                             </li>
                                         {% endfor %}

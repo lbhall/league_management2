@@ -110,6 +110,28 @@ class LeagueAdminPermissionTests(CoreAdminTestCase):
         response = self.client.get(reverse('admin:core_league_changelist'))
         self.assertEqual(response.status_code, 403)  # has_view_permission() returns False
 
+    def test_finance_and_tournament_links_hidden_for_darts_league(self):
+        darts_league = make_league(name='Darts League', results_type=League.ResultsType.DARTS)
+        self.make_scoped_staff(league=darts_league)
+
+        response = self.client.get(reverse('admin:core_league_changelist'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Financial Breakdown')
+        self.assertNotContains(response, 'Tournament Players')
+
+        response = self.client.get(reverse('admin:core_league_change', args=[darts_league.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Financial Breakdown')
+        self.assertNotContains(response, 'Tournament Players')
+
+    def test_finance_and_tournament_links_shown_for_pool_league(self):
+        self.make_scoped_staff()
+
+        response = self.client.get(reverse('admin:core_league_changelist'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Financial Breakdown')
+        self.assertContains(response, 'Tournament Players')
+
 
 class FinancialBreakdownViewTests(CoreAdminTestCase):
     def test_renders_without_active_season(self):

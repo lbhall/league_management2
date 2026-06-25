@@ -12,12 +12,14 @@
           <li style="list-style-type: none; border-bottom: 1px solid var(--border-color); padding: 8px 10px;">
               <a href="{% url 'admin:scheduling_schedule' %}" style="font-weight: bold;">📅 Schedule View</a>
           </li>
+          {% if request.user.league_admin_access.league.results_type != 'darts' %}
           <li style="list-style-type: none; border-bottom: 1px solid var(--border-color); padding: 8px 10px;">
               <a href="{% url 'finance' %}" style="font-weight: bold;">💰 Finance Breakdown</a>
           </li>
           <li style="list-style-type: none; border-bottom: 1px solid var(--border-color); padding: 8px 10px;">
               <a href="{% url 'tournament_players' %}" style="font-weight: bold; color: #ffc107;">🏆 Tournament Players</a>
           </li>
+          {% endif %}
       </ul>
   </div>
 </nav>

@@ -3,13 +3,15 @@ from django.test import RequestFactory, TestCase
 
 from core.models import League, Player, Team, Venue
 from core.views import (
+    build_player_stats,
     build_team_standings,
     build_week_schedule_with_byes,
     get_active_league,
     get_active_season,
     get_one_pocket_race_label,
 )
-from scheduling.models import Season, Week
+from results.models import MatchResult, PlayerMatchResult
+from scheduling.models import Match, Season, Week
 
 
 def make_league(results_type=League.ResultsType.ONE_POCKET, **kwargs):
@@ -162,6 +164,52 @@ class BuildTeamStandingsTests(TestCase):
 
         self.assertEqual([s['team'] for s in standings], ['Alpha', 'Zed'])
         self.assertTrue(all(s['matches_won'] == 0 for s in standings))
+
+    def test_excludes_bye_team_but_still_credits_opponent(self):
+        league = make_league(results_type=League.ResultsType.DARTS, team_size=2)
+        venue = make_venue(league)
+        real_team = make_team(league, venue, 'Real Team')
+        bye_team = make_team(league, venue, 'BYE')
+
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.ACTIVE)
+        week = Week.objects.create(season=season, date='2026-01-05', number=1)
+        match = Match.objects.create(week=week, home_team=real_team, away_team=bye_team)
+        MatchResult.objects.create(match=match, home_team_score=6, away_team_score=0)
+
+        standings = build_team_standings(league, active_season=season)
+
+        self.assertEqual([s['team'] for s in standings], ['Real Team'])
+        real_standing = standings[0]
+        self.assertEqual(real_standing['matches_won'], 1)
+        self.assertEqual(real_standing['games_won'], 6)
+
+
+class BuildPlayerStatsTests(TestCase):
+    def test_darts_ties_at_equal_points_broken_by_hat_tricks(self):
+        league = make_league(results_type=League.ResultsType.DARTS, team_size=2)
+        venue = make_venue(league)
+        team_a = make_team(league, venue, 'Team A')
+        team_b = make_team(league, venue, 'Team B')
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.ACTIVE)
+        week = Week.objects.create(season=season, date='2026-01-05', number=1)
+        match = Match.objects.create(week=week, home_team=team_a, away_team=team_b)
+        match_result = MatchResult.objects.create(match=match, home_team_score=9, away_team_score=0)
+
+        # Both score 9 points, but via different stat mixes: more hat tricks
+        # should rank ahead, matching the legacy site's tie-break behavior.
+        cyndi = Player.objects.create(league=league, name='Cyndi', team=team_a)
+        am = Player.objects.create(league=league, name='Am', team=team_a)
+        PlayerMatchResult.objects.create(
+            match_result=match_result, player=cyndi, represented_team=team_a,
+            hat_tricks=7, three_in_a_beds=1,
+        )
+        PlayerMatchResult.objects.create(
+            match_result=match_result, player=am, represented_team=team_a,
+            hat_tricks=3, three_in_a_beds=3,
+        )
+
+        stats = build_player_stats(league, season)
+        self.assertEqual([s['player'] for s in stats if s['points'] > 0], ['Cyndi', 'Am'])
 
 
 class BuildWeekScheduleWithByesTests(TestCase):

@@ -67,6 +67,11 @@ def _post_onthehill_payout(api_token, tournament_id, place, payout_type, amount)
 
 @staff_member_required
 def tournament_players(request):
+    user_league_access = getattr(request.user, 'league_admin_access', None)
+    if user_league_access and user_league_access.league.results_type == League.ResultsType.DARTS:
+        messages.error(request, "Tournament management isn't available for darts leagues.")
+        return redirect('admin:index')
+
     active_league = get_active_league(request)
     if not active_league:
         messages.error(request, "No active league found.")

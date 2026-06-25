@@ -188,6 +188,7 @@ def build_week_schedule_with_byes(active_league, week, team_standings=None):
 def build_team_standings(active_league, active_season, through_week=None):
     teams = list(
         Team.objects.filter(league=active_league)
+        .exclude(name__iexact='BYE')
         .order_by('name')
     )
 
@@ -244,7 +245,7 @@ def build_team_standings(active_league, active_season, through_week=None):
         if not hasattr(match, 'result'):
             continue
 
-        if active_league.results_type == League.ResultsType.ONE_POCKET:
+        if active_league.results_type in (League.ResultsType.ONE_POCKET, League.ResultsType.DARTS):
             home_games_won = match.result.home_team_score or 0
             away_games_won = match.result.away_team_score or 0
             home_games_lost = away_games_won
@@ -262,26 +263,39 @@ def build_team_standings(active_league, active_season, through_week=None):
             home_games_lost = total_games_per_match - home_games_won
             away_games_lost = total_games_per_match - away_games_won
 
-        standings_map[match.home_team_id]['games_won'] += home_games_won
-        standings_map[match.home_team_id]['games_lost'] += home_games_lost
+        home_standing = standings_map.get(match.home_team_id)
+        away_standing = standings_map.get(match.away_team_id)
 
-        standings_map[match.away_team_id]['games_won'] += away_games_won
-        standings_map[match.away_team_id]['games_lost'] += away_games_lost
+        if home_standing:
+            home_standing['games_won'] += home_games_won
+            home_standing['games_lost'] += home_games_lost
 
-        if active_league.results_type == League.ResultsType.ONE_POCKET:
+        if away_standing:
+            away_standing['games_won'] += away_games_won
+            away_standing['games_lost'] += away_games_lost
+
+        if active_league.results_type in (League.ResultsType.ONE_POCKET, League.ResultsType.DARTS):
             if home_games_won > away_games_won:
-                standings_map[match.home_team_id]['matches_won'] += 1
-                standings_map[match.away_team_id]['matches_lost'] += 1
+                if home_standing:
+                    home_standing['matches_won'] += 1
+                if away_standing:
+                    away_standing['matches_lost'] += 1
             elif away_games_won > home_games_won:
-                standings_map[match.away_team_id]['matches_won'] += 1
-                standings_map[match.home_team_id]['matches_lost'] += 1
+                if away_standing:
+                    away_standing['matches_won'] += 1
+                if home_standing:
+                    home_standing['matches_lost'] += 1
         else:
             if home_games_won > match_win_threshold:
-                standings_map[match.home_team_id]['matches_won'] += 1
-                standings_map[match.away_team_id]['matches_lost'] += 1
+                if home_standing:
+                    home_standing['matches_won'] += 1
+                if away_standing:
+                    away_standing['matches_lost'] += 1
             elif away_games_won > match_win_threshold:
-                standings_map[match.away_team_id]['matches_won'] += 1
-                standings_map[match.home_team_id]['matches_lost'] += 1
+                if away_standing:
+                    away_standing['matches_won'] += 1
+                if home_standing:
+                    home_standing['matches_lost'] += 1
 
     sorted_standings = sorted(
         standings_map.values(),
@@ -320,20 +334,41 @@ def build_player_stats(active_league, active_season, through_week=None):
             'runs': 0,
             'sweeps': 0,
             'eights': 0,
+            'hat_tricks': 0,
+            'three_in_a_beds': 0,
+            'white_horses': 0,
+            'three_in_the_blacks': 0,
+            'points': 0,
+            'games_played': 0,
             'tie_breaker': 0,
         }
         for player in players
     }
 
-    if not active_season:
-        return sorted(
-            stats_map.values(),
-            key=lambda stat: (
-                -stat['wins'],
-                -stat['tie_breaker'],
-                stat['player'],
-            ),
+    is_darts = active_league.results_type == League.ResultsType.DARTS
+
+    def darts_sort_key(stat):
+        return (
+            -stat['points'],
+            -stat['hat_tricks'],
+            -stat['three_in_a_beds'],
+            -stat['white_horses'],
+            -stat['three_in_the_blacks'],
+            stat['player'],
         )
+
+    def pool_sort_key(stat):
+        return (
+            -stat['wins'],
+            -stat['tie_breaker'],
+            -stat['percentage'],
+            stat['player'],
+        )
+
+    sort_key = darts_sort_key if is_darts else pool_sort_key
+
+    if not active_season:
+        return sorted(stats_map.values(), key=sort_key)
 
     player_results = PlayerMatchResult.objects.filter(
         match_result__match__week__season=active_season,
@@ -355,21 +390,19 @@ def build_player_stats(active_league, active_season, through_week=None):
         stats_map[player_result.player_id]['runs'] += player_result.runouts
         stats_map[player_result.player_id]['sweeps'] += 1 if player_result.won_all_games else 0
         stats_map[player_result.player_id]['eights'] += player_result.eight_on_the_breaks
+        stats_map[player_result.player_id]['hat_tricks'] += player_result.hat_tricks
+        stats_map[player_result.player_id]['three_in_a_beds'] += player_result.three_in_a_beds
+        stats_map[player_result.player_id]['white_horses'] += player_result.white_horses
+        stats_map[player_result.player_id]['three_in_the_blacks'] += player_result.three_in_the_blacks
+        stats_map[player_result.player_id]['points'] += player_result.darts_points
+        stats_map[player_result.player_id]['games_played'] += 1
 
     for stat in stats_map.values():
-        stat['tie_breaker'] = stat['sweeps'] + stat['eights'] + stat['runs']
+        stat['tie_breaker'] = stat['sweeps'] + stat['eights'] + stat['runs'] + stat['points']
         total = stat['wins'] + stat['losses']
         stat['percentage'] = ((stat['wins'] / total) * 100) if total > 0 else 0.0
 
-    return sorted(
-        stats_map.values(),
-        key=lambda stat: (
-            -stat['wins'],
-            -stat['tie_breaker'],
-            -stat['percentage'],
-            stat['player'],
-        ),
-    )
+    return sorted(stats_map.values(), key=sort_key)
 
 
 @staff_member_required
@@ -570,21 +603,25 @@ def finance(request):
     })
 
 
-def _top_n_with_record_ties(stats, n):
+def _top_n_with_record_ties(stats, n, record_keys=('wins', 'losses')):
     if not stats or n <= 0:
         return []
+
+    def record_of(stat):
+        return tuple(stat[key] for key in record_keys)
+
     result = list(stats[:n])
     if len(stats) > n:
-        cutoff_record = (stats[n - 1]['wins'], stats[n - 1]['losses'])
+        cutoff_record = record_of(stats[n - 1])
         for stat in stats[n:]:
-            if (stat['wins'], stat['losses']) != cutoff_record:
+            if record_of(stat) != cutoff_record:
                 break
             result.append(stat)
 
     prev_record = None
     prev_rank = 0
     for index, stat in enumerate(result, start=1):
-        record = (stat['wins'], stat['losses'])
+        record = record_of(stat)
         if record == prev_record:
             stat['display_rank'] = prev_rank
         else:
@@ -656,14 +693,25 @@ def home(request):
                     current_schedule = build_week_schedule_with_byes(active_league, next_week, team_standings=team_standings)
 
         all_player_stats = build_player_stats(active_league, active_season)
-        top_male_players = _top_n_with_record_ties(
-            [stat for stat in all_player_stats if stat['male'] and (stat['wins'] + stat['losses']) > 0],
-            5,
-        )
-        top_female_players = _top_n_with_record_ties(
-            [stat for stat in all_player_stats if not stat['male'] and (stat['wins'] + stat['losses']) > 0],
-            5,
-        )
+        is_darts = active_league.results_type == League.ResultsType.DARTS
+
+        if is_darts:
+            # Darts ranks everyone together by points, not split by gender.
+            top_male_players = _top_n_with_record_ties(
+                [stat for stat in all_player_stats if stat['games_played'] > 0],
+                5,
+                record_keys=('points',),
+            )
+            top_female_players = []
+        else:
+            top_male_players = _top_n_with_record_ties(
+                [stat for stat in all_player_stats if stat['male'] and stat['games_played'] > 0],
+                5,
+            )
+            top_female_players = _top_n_with_record_ties(
+                [stat for stat in all_player_stats if not stat['male'] and stat['games_played'] > 0],
+                5,
+            )
 
     has_archived_seasons = bool(active_league and active_league.archived_seasons.exists())
 

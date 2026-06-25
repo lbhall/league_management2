@@ -302,19 +302,38 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 'matches__result',
             ).order_by('date', 'number')
         )
-        teams = list(season.league.teams.order_by('name'))
+        teams = [
+            team for team in season.league.teams.order_by('name')
+            if team.name.strip().upper() != 'BYE'
+        ]
 
         for index, week in enumerate(weeks):
             scheduled_team_ids = set()
+            display_matches = []
+            teams_playing_bye = set()
+
             for match in week.matches.all():
                 match.valid_destination_weeks = get_valid_destination_weeks(season, match)
                 match.has_result = hasattr(match, 'result')
                 scheduled_team_ids.add(match.home_team_id)
                 scheduled_team_ids.add(match.away_team_id)
 
+                home_is_bye = match.home_team.name.strip().upper() == 'BYE'
+                away_is_bye = match.away_team.name.strip().upper() == 'BYE'
+
+                if home_is_bye or away_is_bye:
+                    # The "BYE" placeholder team isn't a real opponent, so
+                    # surface its real opponent in the bye-teams list below
+                    # instead of rendering a score-entry row for it.
+                    teams_playing_bye.add((match.away_team if home_is_bye else match.home_team).id)
+                    continue
+
+                display_matches.append(match)
+
+            week.display_matches = display_matches
             week.bye_teams = [
                 team for team in teams
-                if team.id not in scheduled_team_ids
+                if team.id not in scheduled_team_ids or team.id in teams_playing_bye
             ]
             week.can_move_up = index > 0
             week.can_move_down = index < len(weeks) - 1

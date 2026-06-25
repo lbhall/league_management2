@@ -342,7 +342,8 @@
                     <div class="schedule-week-body">
                         {% if week.number is None %}
                             <p class="schedule-empty">No matches scheduled because this is a holiday week.</p>
-                        {% elif week.matches.all %}
+                        {% elif week.display_matches or week.bye_teams %}
+                            {% if week.display_matches %}
                             <table class="schedule-match-table">
                                 <thead>
                                     <tr>
@@ -356,7 +357,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for match in week.matches.all %}
+                                    {% for match in week.display_matches %}
                                         <tr data-home-team="{{ match.home_team.id }}" data-away-team="{{ match.away_team.id }}">
                                             <td>
                                                 <strong>{{ match.home_team }}</strong> vs <strong>{{ match.away_team }}</strong>
@@ -435,6 +436,7 @@
                                     {% endfor %}
                                 </tbody>
                             </table>
+                            {% endif %}
 
                             {% if week.bye_teams %}
                                 <div class="schedule-meta" style="margin-top: 12px; font-weight: 600;">

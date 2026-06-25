@@ -44,18 +44,22 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/player-stats/">Player Stats</a>
                     </li>
+                    {% if active_league.results_type != 'darts' %}
                     <li class="nav-item">
                         <a class="nav-link" href="/contact-info/">Contact Info</a>
                     </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="/rules/">Rules</a>
                     </li>
+                    {% if active_league.results_type != 'darts' %}
                     <li class="nav-item">
                         <a class="nav-link" href="/archived-seasons/">Archived</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'end_of_season_tournament' %}">End of Season Tournament</a>
                     </li>
+                    {% endif %}
                     {% endif %}
                 </ul>
 

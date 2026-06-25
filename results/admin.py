@@ -401,8 +401,251 @@ class MatchResultAdmin(admin.ModelAdmin):
         )
 
 
+    def _build_darts_side_rows(self, match_result, represented_team, roster_players, unassigned_players, team_size):
+        existing_results = list(
+            match_result.player_results.filter(
+                represented_team=represented_team,
+            ).select_related('player').order_by('id')
+        )
+
+        rows = []
+        for index in range(team_size):
+            player_result = existing_results[index] if index < len(existing_results) else None
+            player = player_result.player if player_result else None
+
+            rows.append({
+                'slot_number': index + 1,
+                'player': player,
+                'hat_tricks': player_result.hat_tricks if player_result else 0,
+                'three_in_a_beds': player_result.three_in_a_beds if player_result else 0,
+                'white_horses': player_result.white_horses if player_result else 0,
+                'three_in_the_blacks': player_result.three_in_the_blacks if player_result else 0,
+                'points': player_result.darts_points if player_result else 0,
+                'choices': self._player_choices_by_side(roster_players, unassigned_players),
+            })
+
+        return rows
+
+    def _save_darts_side_rows(self, match_result, represented_team, rows_data, valid_players, team_size):
+        match_result.player_results.filter(represented_team=represented_team).delete()
+
+        for row in rows_data:
+            player_id = row.get('player_id')
+            if not player_id:
+                continue
+
+            player = valid_players.get(int(player_id))
+            if player is None:
+                continue
+
+            player_result = PlayerMatchResult(
+                match_result=match_result,
+                player=player,
+                represented_team=represented_team,
+                # Per-player wins/losses aren't tracked for darts; losses is
+                # set to satisfy PlayerMatchResult.clean()'s pool-oriented
+                # "losses == team_size - wins" invariant with wins left at 0.
+                losses=team_size,
+                hat_tricks=int(row.get('hat_tricks', 0) or 0),
+                three_in_a_beds=int(row.get('three_in_a_beds', 0) or 0),
+                white_horses=int(row.get('white_horses', 0) or 0),
+                three_in_the_blacks=int(row.get('three_in_the_blacks', 0) or 0),
+            )
+            player_result.full_clean()
+            player_result.save()
+
     def _enter_score_view_darts(self, request, match, league):
-        pass
+        next_url = request.GET.get('next') or request.POST.get('next')
+
+        match_result, _ = MatchResult.objects.get_or_create(match=match)
+
+        home_players = list(
+            Player.objects.filter(team=match.home_team).order_by('name')
+        )
+        away_players = list(
+            Player.objects.filter(team=match.away_team).order_by('name')
+        )
+        unassigned_players = list(
+            Player.objects.filter(
+                league=league,
+                team__isnull=True,
+            ).order_by('name')
+        )
+
+        valid_players = {
+            player.id: player
+            for player in (home_players + away_players + unassigned_players)
+        }
+
+        team_size = league.team_size
+
+        home_score = match_result.home_team_score if match_result.home_team_score is not None else 0
+        away_score = match_result.away_team_score if match_result.away_team_score is not None else 0
+
+        home_player_rows = self._build_darts_side_rows(
+            match_result=match_result,
+            represented_team=match.home_team,
+            roster_players=home_players,
+            unassigned_players=unassigned_players,
+            team_size=team_size,
+        )
+        away_player_rows = self._build_darts_side_rows(
+            match_result=match_result,
+            represented_team=match.away_team,
+            roster_players=away_players,
+            unassigned_players=unassigned_players,
+            team_size=team_size,
+        )
+
+        if request.method == 'POST':
+            posted_home_rows = []
+            posted_away_rows = []
+
+            try:
+                home_score = int(request.POST.get('home_team_score', '0') or 0)
+                away_score = int(request.POST.get('away_team_score', '0') or 0)
+
+                selected_player_ids = []
+
+                for index in range(team_size):
+                    home_player_id = request.POST.get(f'home_player_{index}', '').strip()
+                    away_player_id = request.POST.get(f'away_player_{index}', '').strip()
+
+                    posted_home_rows.append({
+                        'player_id': home_player_id,
+                        'hat_tricks': request.POST.get(f'home_hat_tricks_{index}', '0'),
+                        'three_in_a_beds': request.POST.get(f'home_three_in_a_beds_{index}', '0'),
+                        'white_horses': request.POST.get(f'home_white_horses_{index}', '0'),
+                        'three_in_the_blacks': request.POST.get(f'home_three_in_the_blacks_{index}', '0'),
+                    })
+                    posted_away_rows.append({
+                        'player_id': away_player_id,
+                        'hat_tricks': request.POST.get(f'away_hat_tricks_{index}', '0'),
+                        'three_in_a_beds': request.POST.get(f'away_three_in_a_beds_{index}', '0'),
+                        'white_horses': request.POST.get(f'away_white_horses_{index}', '0'),
+                        'three_in_the_blacks': request.POST.get(f'away_three_in_the_blacks_{index}', '0'),
+                    })
+
+                    if home_player_id:
+                        selected_player_ids.append(int(home_player_id))
+                    if away_player_id:
+                        selected_player_ids.append(int(away_player_id))
+
+                    # Validate the numeric stat fields up front so a bad value
+                    # raises ValueError before anything is saved.
+                    for row in (posted_home_rows[-1], posted_away_rows[-1]):
+                        int(row['hat_tricks'] or 0)
+                        int(row['three_in_a_beds'] or 0)
+                        int(row['white_horses'] or 0)
+                        int(row['three_in_the_blacks'] or 0)
+
+                if home_score < 0 or away_score < 0:
+                    self.message_user(
+                        request,
+                        'Games won cannot be negative.',
+                        level=messages.ERROR,
+                    )
+                elif len(selected_player_ids) != len(set(selected_player_ids)):
+                    self.message_user(
+                        request,
+                        'A player cannot be selected in more than one slot.',
+                        level=messages.ERROR,
+                    )
+                else:
+                    self._save_darts_side_rows(
+                        match_result=match_result,
+                        represented_team=match.home_team,
+                        rows_data=posted_home_rows,
+                        valid_players=valid_players,
+                        team_size=team_size,
+                    )
+                    self._save_darts_side_rows(
+                        match_result=match_result,
+                        represented_team=match.away_team,
+                        rows_data=posted_away_rows,
+                        valid_players=valid_players,
+                        team_size=team_size,
+                    )
+
+                    match_result.home_team_score = home_score
+                    match_result.away_team_score = away_score
+                    match_result.save(update_fields=['home_team_score', 'away_team_score', 'updated_at'])
+
+                    self.message_user(
+                        request,
+                        'Match score saved successfully.',
+                        level=messages.SUCCESS,
+                    )
+
+                    if next_url:
+                        return redirect(next_url)
+
+                    return redirect(
+                        reverse('admin:results_matchresult_enter_score', args=[match.id])
+                    )
+
+            except ValueError:
+                self.message_user(
+                    request,
+                    'Please enter valid numeric values for games won and player stats.',
+                    level=messages.ERROR,
+                )
+
+            def _safe_int(value):
+                try:
+                    return int(value or 0)
+                except ValueError:
+                    return 0
+
+            def _darts_points(row):
+                return (
+                    row['hat_tricks'] * 1
+                    + row['three_in_a_beds'] * 2
+                    + row['white_horses'] * 3
+                    + row['three_in_the_blacks'] * 4
+                )
+
+            for index, row in enumerate(home_player_rows):
+                player_id = request.POST.get(f'home_player_{index}', '').strip()
+                row['player'] = valid_players.get(int(player_id)) if player_id.isdigit() else None
+                row['hat_tricks'] = _safe_int(request.POST.get(f'home_hat_tricks_{index}', '0'))
+                row['three_in_a_beds'] = _safe_int(request.POST.get(f'home_three_in_a_beds_{index}', '0'))
+                row['white_horses'] = _safe_int(request.POST.get(f'home_white_horses_{index}', '0'))
+                row['three_in_the_blacks'] = _safe_int(request.POST.get(f'home_three_in_the_blacks_{index}', '0'))
+                row['points'] = _darts_points(row)
+
+            for index, row in enumerate(away_player_rows):
+                player_id = request.POST.get(f'away_player_{index}', '').strip()
+                row['player'] = valid_players.get(int(player_id)) if player_id.isdigit() else None
+                row['hat_tricks'] = _safe_int(request.POST.get(f'away_hat_tricks_{index}', '0'))
+                row['three_in_a_beds'] = _safe_int(request.POST.get(f'away_three_in_a_beds_{index}', '0'))
+                row['white_horses'] = _safe_int(request.POST.get(f'away_white_horses_{index}', '0'))
+                row['three_in_the_blacks'] = _safe_int(request.POST.get(f'away_three_in_the_blacks_{index}', '0'))
+                row['points'] = _darts_points(row)
+
+            home_score = _safe_int(request.POST.get('home_team_score', '0'))
+            away_score = _safe_int(request.POST.get('away_team_score', '0'))
+
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'title': f'Enter Score: {match}',
+            'match': match,
+            'league': league,
+            'team_size': team_size,
+            'next_url': next_url,
+            'home_score': home_score,
+            'away_score': away_score,
+            'home_player_rows': home_player_rows,
+            'away_player_rows': away_player_rows,
+            'create_player_url': reverse('admin:results_matchresult_create_player', args=[match.id]),
+        }
+
+        return TemplateResponse(
+            request,
+            'admin/results/matchresult/enter_score_darts.html',
+            context,
+        )
 
     def enter_score_view(self, request, match_id):
         match = self._get_scoped_match(request, match_id)
