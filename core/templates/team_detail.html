@@ -32,6 +32,16 @@
                         <div class="table-responsive">
                             <table class="table table-striped align-middle mb-0">
                                 <thead>
+                                    {% if team.league.results_type == 'darts' %}
+                                    <tr>
+                                        <th>Player</th>
+                                        <th>Points</th>
+                                        <th>HT</th>
+                                        <th>3-Bed</th>
+                                        <th>WH</th>
+                                        <th>3-Black</th>
+                                    </tr>
+                                    {% else %}
                                     <tr>
                                         <th>Player</th>
                                         <th>Wins</th>
@@ -41,9 +51,28 @@
                                         <th>{{ active_league.team_size }}/0</th>
                                         <th>8s</th>
                                     </tr>
+                                    {% endif %}
                                 </thead>
                                 <tbody>
                                     {% for stat in team_player_stats %}
+                                        {% if team.league.results_type == 'darts' %}
+                                        <tr>
+                                            <td>
+                                                <a
+                                                    href="#"
+                                                    data-player-scores-modal
+                                                    data-player-id="{{ stat.player_id }}"
+                                                >
+                                                    {{ stat.player }}
+                                                </a>
+                                            </td>
+                                            <td>{{ stat.points }}</td>
+                                            <td>{{ stat.hat_tricks }}</td>
+                                            <td>{{ stat.three_in_a_beds }}</td>
+                                            <td>{{ stat.white_horses }}</td>
+                                            <td>{{ stat.three_in_the_blacks }}</td>
+                                        </tr>
+                                        {% else %}
                                         <tr>
                                             <td>
                                                 <a
@@ -61,6 +90,7 @@
                                             <td>{{ stat.sweeps }}</td>
                                             <td>{{ stat.eights }}</td>
                                         </tr>
+                                        {% endif %}
                                     {% endfor %}
                                 </tbody>
                             </table>
@@ -71,6 +101,7 @@
                 </div>
             </div>
 
+            {% if team.league.results_type != 'darts' %}
             <div class="card shadow-sm">
                 <div class="card-body">
                     <h2 class="h4 mb-3">Captain</h2>
@@ -104,6 +135,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <div class="col-lg-6">
@@ -193,6 +225,16 @@
                                 <div class="table-responsive">
                                     <table class="table table-striped align-middle mb-0">
                                         <thead>
+                                            {% if team.league.results_type == 'darts' %}
+                                            <tr>
+                                                <th>Player</th>
+                                                <th>Points</th>
+                                                <th>HT</th>
+                                                <th>3-Bed</th>
+                                                <th>WH</th>
+                                                <th>3-Black</th>
+                                            </tr>
+                                            {% else %}
                                             <tr>
                                                 <th>Player</th>
                                                 <th>Wins</th>
@@ -201,9 +243,20 @@
                                                 <th>{{ active_league.team_size }}/0</th>
                                                 <th>8s</th>
                                             </tr>
+                                            {% endif %}
                                         </thead>
                                         <tbody>
                                             {% for row in team_group.list %}
+                                                {% if team.league.results_type == 'darts' %}
+                                                <tr>
+                                                    <td>{{ row.player }}</td>
+                                                    <td>{{ row.points }}</td>
+                                                    <td>{{ row.hat_tricks }}</td>
+                                                    <td>{{ row.three_in_a_beds }}</td>
+                                                    <td>{{ row.white_horses }}</td>
+                                                    <td>{{ row.three_in_the_blacks }}</td>
+                                                </tr>
+                                                {% else %}
                                                 <tr>
                                                     <td>{{ row.player }}</td>
                                                     <td>{{ row.wins }}</td>
@@ -212,6 +265,7 @@
                                                     <td>{% if row.sweeps %}1{% else %}0{% endif %}</td>
                                                     <td>{{ row.eights }}</td>
                                                 </tr>
+                                                {% endif %}
                                             {% endfor %}
                                         </tbody>
                                     </table>

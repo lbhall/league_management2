@@ -967,11 +967,10 @@ def team_detail(request, team_id):
     team_player_stats = build_team_player_stats(active_season, team)
 
     team_schedule = []
-    if active_season:
-        monday_weeks = (
+    if active_season and team.league_id == active_season.league_id:
+        season_weeks = (
             Week.objects.filter(
                 season=active_season,
-                date__week_day=2,
             )            .prefetch_related(
                 Prefetch(
                     'matches',
@@ -985,7 +984,7 @@ def team_detail(request, team_id):
             .order_by('date')
         )
 
-        for week in monday_weeks:
+        for week in season_weeks:
             is_holiday_week = week.number is None
             week_match = None if is_holiday_week else week.matches.filter(
                 Q(home_team=team) | Q(away_team=team)
@@ -999,15 +998,20 @@ def team_detail(request, team_id):
                 match_detail_rows = []
 
                 if hasattr(week_match, 'result'):
-                    home_games_won = 0
-                    away_games_won = 0
+                    if team.league.results_type in (League.ResultsType.ONE_POCKET, League.ResultsType.DARTS):
+                        home_games_won = week_match.result.home_team_score or 0
+                        away_games_won = week_match.result.away_team_score or 0
+                    else:
+                        home_games_won = 0
+                        away_games_won = 0
+
+                        for player_result in week_match.result.player_results.select_related('player', 'represented_team').all():
+                            if player_result.represented_team_id == week_match.home_team_id:
+                                home_games_won += player_result.wins
+                            elif player_result.represented_team_id == week_match.away_team_id:
+                                away_games_won += player_result.wins
 
                     for player_result in week_match.result.player_results.select_related('player', 'represented_team').all():
-                        if player_result.represented_team_id == week_match.home_team_id:
-                            home_games_won += player_result.wins
-                        elif player_result.represented_team_id == week_match.away_team_id:
-                            away_games_won += player_result.wins
-
                         is_home_row = player_result.represented_team_id == week_match.home_team_id
                         match_detail_rows.append({
                             'player': player_result.player.name,
@@ -1018,6 +1022,11 @@ def team_detail(request, team_id):
                             'runouts': player_result.runouts,
                             'eights': player_result.eight_on_the_breaks,
                             'sweeps': player_result.won_all_games,
+                            'hat_tricks': player_result.hat_tricks,
+                            'three_in_a_beds': player_result.three_in_a_beds,
+                            'white_horses': player_result.white_horses,
+                            'three_in_the_blacks': player_result.three_in_the_blacks,
+                            'points': player_result.darts_points,
                         })
 
                     match_detail_rows.sort(key=lambda r: (0 if r['is_home'] else 1, r['player']))
@@ -1104,6 +1113,11 @@ def build_player_vs_team_stats(player, active_season, through_week=None):
             'runs': player_result.runouts,
             'sweeps': 1 if player_result.won_all_games else 0,
             'eights': player_result.eight_on_the_breaks,
+            'hat_tricks': player_result.hat_tricks,
+            'three_in_a_beds': player_result.three_in_a_beds,
+            'white_horses': player_result.white_horses,
+            'three_in_the_blacks': player_result.three_in_the_blacks,
+            'points': player_result.darts_points,
         })
 
     return sorted(rows, key=lambda row: row['week_date'])
@@ -1146,6 +1160,7 @@ def player_scores_modal(request, player_id):
             'active_season': active_season,
             'through_week': through_week,
             'matchup_rows': matchup_rows,
+            'is_darts': active_league.results_type == League.ResultsType.DARTS,
         },
         request=request,
     )
@@ -1465,6 +1480,8 @@ def build_team_player_stats(active_season, team, through_week=None):
     if not active_season:
         return []
 
+    is_darts = team.league.results_type == League.ResultsType.DARTS
+
     player_map = {
         player.id: {
             'player_id': player.id,
@@ -1477,6 +1494,11 @@ def build_team_player_stats(active_season, team, through_week=None):
             'runs': 0,
             'sweeps': 0,
             'eights': 0,
+            'hat_tricks': 0,
+            'three_in_a_beds': 0,
+            'white_horses': 0,
+            'three_in_the_blacks': 0,
+            'points': 0,
             'tie_breaker': 0,
         }
         for player in team.players.all()
@@ -1515,6 +1537,11 @@ def build_team_player_stats(active_season, team, through_week=None):
                 'runs': 0,
                 'sweeps': 0,
                 'eights': 0,
+                'hat_tricks': 0,
+                'three_in_a_beds': 0,
+                'white_horses': 0,
+                'three_in_the_blacks': 0,
+                'points': 0,
                 'tie_breaker': 0,
             }
 
@@ -1523,17 +1550,31 @@ def build_team_player_stats(active_season, team, through_week=None):
         player_map[player_id]['runs'] += player_result.runouts
         player_map[player_id]['sweeps'] += 1 if player_result.won_all_games else 0
         player_map[player_id]['eights'] += player_result.eight_on_the_breaks
+        player_map[player_id]['hat_tricks'] += player_result.hat_tricks
+        player_map[player_id]['three_in_a_beds'] += player_result.three_in_a_beds
+        player_map[player_id]['white_horses'] += player_result.white_horses
+        player_map[player_id]['three_in_the_blacks'] += player_result.three_in_the_blacks
+        player_map[player_id]['points'] += player_result.darts_points
 
     for stat in player_map.values():
         stat['tie_breaker'] = stat['sweeps'] + stat['eights'] + stat['runs']
         total = stat['wins'] + stat['losses']
         stat['percentage'] = ((stat['wins'] / total) * 100) if total > 0 else 0.0
 
-    return sorted(
-        player_map.values(),
-        key=lambda stat: (
+    if is_darts:
+        sort_key = lambda stat: (
+            -stat['points'],
+            -stat['hat_tricks'],
+            -stat['three_in_a_beds'],
+            -stat['white_horses'],
+            -stat['three_in_the_blacks'],
+            stat['player'],
+        )
+    else:
+        sort_key = lambda stat: (
             -stat['wins'],
             -stat['tie_breaker'],
             stat['player'],
-        ),
-    )
+        )
+
+    return sorted(player_map.values(), key=sort_key)

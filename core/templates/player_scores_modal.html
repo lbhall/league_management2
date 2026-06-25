@@ -14,6 +14,20 @@
                     <div class="table-responsive">
                         <table class="table table-striped align-middle mb-0">
                             <thead>
+                                {% if is_darts %}
+                                <tr>
+                                    {% if not player.team %}
+                                        <th>Team</th>
+                                    {% endif %}
+                                    <th>Week</th>
+                                    <th>Opponent</th>
+                                    <th>Points</th>
+                                    <th>HT</th>
+                                    <th>3-Bed</th>
+                                    <th>WH</th>
+                                    <th>3-Black</th>
+                                </tr>
+                                {% else %}
                                 <tr>
                                     {% if not player.team %}
                                         <th>Team</th>
@@ -26,9 +40,24 @@
                                     <th>{{ active_season.league.team_size }}/0</th>
                                     <th>8s</th>
                                 </tr>
+                                {% endif %}
                             </thead>
                             <tbody>
                                 {% for row in matchup_rows %}
+                                    {% if is_darts %}
+                                    <tr>
+                                        {% if not player.team %}
+                                            <td>{{ row.represented_team_name }}</td>
+                                        {% endif %}
+                                        <td>{{ row.week_number }}</td>
+                                        <td><a href="/teams/{{ row.team_id }}/">{{ row.team_name }}</a></td>
+                                        <td>{{ row.points }}</td>
+                                        <td>{{ row.hat_tricks }}</td>
+                                        <td>{{ row.three_in_a_beds }}</td>
+                                        <td>{{ row.white_horses }}</td>
+                                        <td>{{ row.three_in_the_blacks }}</td>
+                                    </tr>
+                                    {% else %}
                                     <tr>
                                         {% if not player.team %}
                                             <td>{{ row.represented_team_name }}</td>
@@ -41,6 +70,7 @@
                                         <td>{{ row.sweeps }}</td>
                                         <td>{{ row.eights }}</td>
                                     </tr>
+                                    {% endif %}
                                 {% endfor %}
                             </tbody>
                         </table>

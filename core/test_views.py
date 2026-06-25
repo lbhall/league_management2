@@ -319,3 +319,92 @@ class DartsViewsTests(ViewTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'contact-info')
         self.assertContains(response, '/rules/')
+
+    def test_team_detail_hides_captain_and_venue_cards(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('team_detail', args=[self.home_team.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, '>Captain<')
+        self.assertNotContains(response, '>Venue<')
+
+    def test_team_detail_shows_darts_stat_columns(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('team_detail', args=[self.home_team.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '>Points<')
+        self.assertContains(response, '>HT<')
+        self.assertContains(response, '3-Bed')
+        self.assertContains(response, '>WH<')
+        self.assertContains(response, '3-Black')
+
+        stat = next(
+            s for s in response.context['team_player_stats'] if s['player'] == 'Nancy'
+        )
+        self.assertEqual(stat['three_in_a_beds'], 2)
+        self.assertEqual(stat['points'], 4)
+
+    def test_team_detail_shows_schedule_for_non_monday_match_days(self):
+        # The darts league in this test plays on Fridays; the week-day filter
+        # used to be hard-coded to Mondays, which hid the schedule entirely.
+        self.assertEqual(self.week1.date.strftime('%A'), 'Monday')
+        friday_week = Week.objects.create(season=self.season, date=date(2026, 1, 9), number=2)
+        Match.objects.create(week=friday_week, home_team=self.home_team, away_team=self.away_team)
+
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('team_detail', args=[self.home_team.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'No schedule available for this team.')
+
+        weeks_shown = [entry['week'] for entry in response.context['team_schedule']]
+        self.assertIn(friday_week, weeks_shown)
+
+    def test_team_detail_shows_actual_team_score_for_darts(self):
+        # Per-player wins/losses are placeholders for darts; the match result
+        # label must come from MatchResult.home/away_team_score, not from
+        # summing player_result.wins (which would always show 0-0).
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('team_detail', args=[self.home_team.id]))
+        self.assertEqual(response.status_code, 200)
+
+        entry = next(
+            e for e in response.context['team_schedule'] if e['week'] == self.week1
+        )
+        self.assertEqual(entry['result_label'], '6-3')
+        self.assertContains(response, '6-3')
+
+    def test_player_scores_modal_shows_darts_columns(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(
+                reverse('player_scores_modal', args=[self.home_player.id])
+            )
+        self.assertEqual(response.status_code, 200)
+        html = response.json()['html']
+        self.assertIn('>Points<', html)
+        self.assertIn('>HT<', html)
+        self.assertIn('3-Bed', html)
+        self.assertIn('>WH<', html)
+        self.assertIn('3-Black', html)
+        self.assertNotIn('>Wins<', html)
+        self.assertNotIn('>Losses<', html)
+
+        row = response.context['matchup_rows'][0]
+        self.assertEqual(row['three_in_a_beds'], 2)
+        self.assertEqual(row['points'], 4)
+
+    def test_team_detail_match_result_modal_shows_darts_columns(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('team_detail', args=[self.home_team.id]))
+        self.assertEqual(response.status_code, 200)
+
+        entry = next(
+            e for e in response.context['team_schedule'] if e['week'] == self.week1
+        )
+        row = next(r for r in entry['match_detail_rows'] if r['player'] == 'Nancy')
+        self.assertEqual(row['three_in_a_beds'], 2)
+        self.assertEqual(row['points'], 4)
+
+        self.assertContains(response, '>Points<')
+        self.assertContains(response, '>HT<')
+        self.assertContains(response, '3-Bed')
+        self.assertContains(response, '>WH<')
+        self.assertContains(response, '3-Black')
