@@ -1,0 +1,12 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+staticfiles/
+*.log
+*.back
+database_backups/
+.env
+.claude/
+node_modules/

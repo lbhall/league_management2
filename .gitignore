@@ -221,3 +221,4 @@ __marimo__/
 db.sqlite3
 league.log
 database_backups/
+staticfiles/

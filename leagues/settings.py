@@ -19,14 +19,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-*j3^ac7+8v38f6)-q#pb+k26vk7#12f#qa2cnnr62=(=gkeeuz'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-only-key')
+DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-
-ALLOWED_HOSTS = ["emcfunleague.com", "www.emcfunleague.com", "localhost:8000", "coed.emcfunleague.com", "127.0.0.1:8000", "localhost", "127.0.0.1",'bogies.emcfunleague.com']
+_default_hosts = "emcfunleague.com,www.emcfunleague.com,coed.emcfunleague.com,bogies.emcfunleague.com,localhost,127.0.0.1"
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', _default_hosts).split(',')
 
 
 # Application definition
@@ -132,6 +129,16 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 FRONTEND_LEAGUE_ID = int(os.environ.get('FRONTEND_LEAGUE_ID') or 1)
+
+# Maps incoming Host header → league ID so a single process can serve all leagues.
+# Override individual entries via env vars (e.g. EMC_HOST=emcfunleague.com).
+# FRONTEND_LEAGUE_ID is still used as the fallback when no host matches.
+LEAGUE_HOSTS = {
+    os.environ.get('EMC_HOST', 'emcfunleague.com'): 1,
+    os.environ.get('EMC_WWW_HOST', 'www.emcfunleague.com'): 1,
+    os.environ.get('COED_HOST', 'coed.emcfunleague.com'): 2,
+    os.environ.get('BOGIES_HOST', 'bogies.emcfunleague.com'): 3,
+}
 
 ONTHEHILL_BASE_URL = os.environ.get('ONTHEHILL_BASE_URL') or 'http://127.0.0.1:8000'
 ONTHEHILL_USERNAME = os.environ.get('ONTHEHILL_USERNAME') or 'ghawk999'

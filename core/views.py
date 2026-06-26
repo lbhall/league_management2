@@ -64,10 +64,18 @@ def get_active_league(request):
     if requested_league_id:
         request.session['frontend_league_id'] = requested_league_id
 
-    league_id = (
-        request.session.get('frontend_league_id')
-        or settings.FRONTEND_LEAGUE_ID
-    )
+    # Explicit ?league= param or session takes highest priority.
+    league_id = request.session.get('frontend_league_id')
+
+    # Next: match the incoming Host header against the LEAGUE_HOSTS map so a
+    # single container can serve multiple leagues differentiated by domain.
+    if not league_id:
+        host = request.get_host().split(':')[0]  # strip port if present
+        league_id = settings.LEAGUE_HOSTS.get(host)
+
+    # Finally fall back to the single-league FRONTEND_LEAGUE_ID setting.
+    if not league_id:
+        league_id = settings.FRONTEND_LEAGUE_ID
 
     if league_id:
         league = League.objects.filter(pk=league_id).first()
