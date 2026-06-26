@@ -143,3 +143,18 @@ LEAGUE_HOSTS = {
 ONTHEHILL_BASE_URL = os.environ.get('ONTHEHILL_BASE_URL', 'http://127.0.0.1:8000')
 ONTHEHILL_USERNAME = os.environ.get('ONTHEHILL_USERNAME', '')
 ONTHEHILL_PASSWORD = os.environ.get('ONTHEHILL_PASSWORD', '')
+
+# HTTPS / security settings (nginx terminates SSL and forwards via X-Forwarded-Proto)
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 3600  # 1 hour — increase to 31536000 once confirmed working
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    CSRF_TRUSTED_ORIGINS = [
+        'https://emcfunleague.com',
+        'https://www.emcfunleague.com',
+        'https://coed.emcfunleague.com',
+        'https://bogies.emcfunleague.com',
+    ]
