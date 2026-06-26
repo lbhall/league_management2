@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SOURCE_DIR="/var/www/emcfunleague.com/source"
-VENV="$SOURCE_DIR/venv/bin"
+VENV="/var/www/emcfunleague.com/venv/bin"
 
 echo "==> Pulling latest code..."
 git -C "$SOURCE_DIR" pull
