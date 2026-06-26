@@ -140,6 +140,6 @@ LEAGUE_HOSTS = {
     os.environ.get('BOGIES_HOST', 'bogies.emcfunleague.com'): 3,
 }
 
-ONTHEHILL_BASE_URL = os.environ.get('ONTHEHILL_BASE_URL') or 'http://127.0.0.1:8000'
-ONTHEHILL_USERNAME = os.environ.get('ONTHEHILL_USERNAME') or 'ghawk999'
-ONTHEHILL_PASSWORD = os.environ.get('ONTHEHILL_PASSWORD') or 'greenBone78!'
+ONTHEHILL_BASE_URL = os.environ.get('ONTHEHILL_BASE_URL', 'http://127.0.0.1:8000')
+ONTHEHILL_USERNAME = os.environ.get('ONTHEHILL_USERNAME', '')
+ONTHEHILL_PASSWORD = os.environ.get('ONTHEHILL_PASSWORD', '')
