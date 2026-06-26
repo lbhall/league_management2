@@ -152,6 +152,7 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 3600  # 1 hour — increase to 31536000 once confirmed working
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
     CSRF_TRUSTED_ORIGINS = [
         'https://emcfunleague.com',
         'https://www.emcfunleague.com',
