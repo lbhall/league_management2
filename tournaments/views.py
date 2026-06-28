@@ -29,8 +29,8 @@ from .bracket import (
 from core.views import get_active_league, get_active_season
 
 
-def _fetch_onthehill_token():
-    """Exchange the configured OnTheHill credentials for an API token."""
+def _fetch_readysettourney_token():
+    """Exchange the configured ReadySetTourney credentials for an API token."""
     url = settings.ONTHEHILL_BASE_URL.rstrip('/') + '/api/token/'
     payload = {
         'username': settings.ONTHEHILL_USERNAME,
@@ -48,7 +48,7 @@ def _fetch_onthehill_token():
     return data.get('token')
 
 
-def _post_onthehill_payout(api_token, tournament_id, place, payout_type, amount):
+def _post_readysettourney_payout(api_token, tournament_id, place, payout_type, amount):
     url = settings.ONTHEHILL_BASE_URL.rstrip('/') + f'/api/tournaments/{tournament_id}/payouts/'
     payload = {'place': place, 'payout_type': payout_type, 'amount': amount}
     req = urllib.request.Request(
@@ -448,7 +448,7 @@ def end_of_season_tournament(request, tournament_id=None):
 
 @staff_member_required
 @require_POST
-def create_onthehill_tournament(request):
+def create_readysettourney_tournament(request):
     active_league = get_active_league(request)
     if not active_league:
         messages.error(request, "No active league found.")
@@ -472,25 +472,25 @@ def create_onthehill_tournament(request):
         return redirect('tournament_players')
 
     if not settings.ONTHEHILL_USERNAME or not settings.ONTHEHILL_PASSWORD:
-        messages.error(request, "OnTheHill username/password are not configured.")
+        messages.error(request, "ReadySetTourney username/password are not configured.")
         return redirect('tournament_players')
 
     try:
-        api_token = _fetch_onthehill_token()
+        api_token = _fetch_readysettourney_token()
     except urllib.error.HTTPError as e:
         body = e.read().decode('utf-8', errors='replace')
         try:
             error_msg = json.loads(body).get('error') or body
         except json.JSONDecodeError:
             error_msg = body or str(e)
-        messages.error(request, f"Could not get an OnTheHill API token ({e.code}): {error_msg}")
+        messages.error(request, f"Could not get an ReadySetTourney API token ({e.code}): {error_msg}")
         return redirect('tournament_players')
     except urllib.error.URLError as e:
-        messages.error(request, f"Could not reach OnTheHill for an API token: {e.reason}")
+        messages.error(request, f"Could not reach ReadySetTourney for an API token: {e.reason}")
         return redirect('tournament_players')
 
     if not api_token:
-        messages.error(request, "OnTheHill did not return an API token.")
+        messages.error(request, "ReadySetTourney did not return an API token.")
         return redirect('tournament_players')
 
     name = (request.POST.get('name') or '').strip() or f"{active_season.name} End of Season Tournament"
@@ -544,10 +544,10 @@ def create_onthehill_tournament(request):
             error_msg = json.loads(body).get('error') or body
         except json.JSONDecodeError:
             error_msg = body or str(e)
-        messages.error(request, f"OnTheHill rejected the request ({e.code}): {error_msg}")
+        messages.error(request, f"ReadySetTourney rejected the request ({e.code}): {error_msg}")
         return redirect('tournament_players')
     except urllib.error.URLError as e:
-        messages.error(request, f"Could not reach OnTheHill at {url}: {e.reason}")
+        messages.error(request, f"Could not reach ReadySetTourney at {url}: {e.reason}")
         return redirect('tournament_players')
 
     tournament_url = data.get('url')
@@ -557,14 +557,14 @@ def create_onthehill_tournament(request):
     if tournament_id:
         for place, pct in PAYOUT_PERCENTAGES.items():
             try:
-                _post_onthehill_payout(api_token, tournament_id, place, 'percentage', str(round(pct * 100)))
+                _post_readysettourney_payout(api_token, tournament_id, place, 'percentage', str(round(pct * 100)))
             except urllib.error.HTTPError as e:
                 payout_errors.append(f"place {place}: {e.code}")
             except urllib.error.URLError as e:
                 payout_errors.append(f"place {place}: {e.reason}")
         for place, amount in FLAT_PAYOUTS.items():
             try:
-                _post_onthehill_payout(api_token, tournament_id, place, 'flat', str(amount))
+                _post_readysettourney_payout(api_token, tournament_id, place, 'flat', str(amount))
             except urllib.error.HTTPError as e:
                 payout_errors.append(f"place {place}: {e.code}")
             except urllib.error.URLError as e:
@@ -574,11 +574,11 @@ def create_onthehill_tournament(request):
 
     if tournament_url:
         success_msg = (
-            f'Tournament created on OnTheHill. '
+            f'Tournament created on ReadySetTourney. '
             f'<a href="{tournament_url}" target="_blank" rel="noopener">Open it</a>.'
         )
     else:
-        success_msg = "Tournament created on OnTheHill."
+        success_msg = "Tournament created on ReadySetTourney."
 
     if payout_errors:
         messages.warning(

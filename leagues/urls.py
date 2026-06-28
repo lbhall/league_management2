@@ -24,7 +24,7 @@ from core.views import (
     team_schedule_modal,
 )
 from tournaments.views import (
-    create_onthehill_tournament,
+    create_readysettourney_tournament,
     end_of_season_tournament,
     export_tournament_teams,
     tournament_bracket,
@@ -36,7 +36,7 @@ urlpatterns = [
     path('finance/', finance, name='finance'),
     path('tournament-players/', tournament_players, name='tournament_players'),
     path('tournament-players/export/', export_tournament_teams, name='export_tournament_teams'),
-    path('tournament-players/create-onthehill/', create_onthehill_tournament, name='create_onthehill_tournament'),
+    path('tournament-players/create-readysettourney/', create_readysettourney_tournament, name='create_readysettourney_tournament'),
     path('tournament-bracket/', tournament_bracket, name='tournament_bracket'),
     path('end-of-season-tournament/', end_of_season_tournament, name='end_of_season_tournament'),
     path('end-of-season-tournament/<int:tournament_id>/', end_of_season_tournament, name='end_of_season_tournament_detail'),

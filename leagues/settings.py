@@ -20,7 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-only-key')
-DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
+DEBUG = os.environ.get('DEBUG', 'true').lower() == 'true'
 
 _default_hosts = "emcfunleague.com,www.emcfunleague.com,coed.emcfunleague.com,bogies.emcfunleague.com,localhost,127.0.0.1"
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', _default_hosts).split(',')

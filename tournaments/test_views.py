@@ -42,7 +42,7 @@ def make_response(data):
 
 def make_http_error(code, body):
     return urllib.error.HTTPError(
-        'http://onthehill.example/', code, 'error', {}, io.BytesIO(json.dumps(body).encode('utf-8')),
+        'http://readysettourney.example/', code, 'error', {}, io.BytesIO(json.dumps(body).encode('utf-8')),
     )
 
 
@@ -287,7 +287,7 @@ class EndOfSeasonTournamentViewTests(TournamentViewTestCase):
             self.assertEqual(response.status_code, 200)
 
 
-class CreateOnTheHillTournamentViewTests(TournamentViewTestCase):
+class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
     def setUp(self):
         super().setUp()
         self.players = self.make_eligible_players(2)
@@ -298,32 +298,32 @@ class CreateOnTheHillTournamentViewTests(TournamentViewTestCase):
 
     def test_requires_post(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
-            response = self.client.get(reverse('create_onthehill_tournament'))
+            response = self.client.get(reverse('create_readysettourney_tournament'))
         self.assertEqual(response.status_code, 405)
 
     def test_no_teams_to_send(self):
         TournamentTeam.objects.all().delete()
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
-            response = self.client.post(reverse('create_onthehill_tournament'))
+            response = self.client.post(reverse('create_readysettourney_tournament'))
         self.assertRedirects(response, reverse('tournament_players'))
 
     def test_missing_credentials(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id, ONTHEHILL_USERNAME='', ONTHEHILL_PASSWORD=''):
-            response = self.client.post(reverse('create_onthehill_tournament'))
+            response = self.client.post(reverse('create_readysettourney_tournament'))
         self.assertRedirects(response, reverse('tournament_players'))
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_successful_creation_with_payouts(self, mock_urlopen):
         mock_urlopen.side_effect = [
             make_response({'token': 'abc123'}),
-            make_response({'id': 42, 'url': 'http://onthehill.example/t/42'}),
+            make_response({'id': 42, 'url': 'http://readysettourney.example/t/42'}),
         ] + [make_response({}) for _ in range(8)]  # 6 percentage + 2 flat payouts
 
         with self.settings(
             FRONTEND_LEAGUE_ID=self.league.id,
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
-            response = self.client.post(reverse('create_onthehill_tournament'), {
+            response = self.client.post(reverse('create_readysettourney_tournament'), {
                 'name': 'Test Tournament', 'entry_fee': '20',
             })
         self.assertRedirects(response, reverse('tournament_players'))
@@ -337,7 +337,7 @@ class CreateOnTheHillTournamentViewTests(TournamentViewTestCase):
             FRONTEND_LEAGUE_ID=self.league.id,
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='wrong',
         ):
-            response = self.client.post(reverse('create_onthehill_tournament'))
+            response = self.client.post(reverse('create_readysettourney_tournament'))
         self.assertRedirects(response, reverse('tournament_players'))
 
     @patch('tournaments.views.urllib.request.urlopen')
@@ -348,7 +348,7 @@ class CreateOnTheHillTournamentViewTests(TournamentViewTestCase):
             FRONTEND_LEAGUE_ID=self.league.id,
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
-            response = self.client.post(reverse('create_onthehill_tournament'))
+            response = self.client.post(reverse('create_readysettourney_tournament'))
         self.assertRedirects(response, reverse('tournament_players'))
 
     @patch('tournaments.views.urllib.request.urlopen')
@@ -362,7 +362,7 @@ class CreateOnTheHillTournamentViewTests(TournamentViewTestCase):
             FRONTEND_LEAGUE_ID=self.league.id,
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
-            response = self.client.post(reverse('create_onthehill_tournament'), {'venue_id': '7'})
+            response = self.client.post(reverse('create_readysettourney_tournament'), {'venue_id': '7'})
         self.assertRedirects(response, reverse('tournament_players'))
 
     @patch('tournaments.views.urllib.request.urlopen')
@@ -373,35 +373,35 @@ class CreateOnTheHillTournamentViewTests(TournamentViewTestCase):
             FRONTEND_LEAGUE_ID=self.league.id,
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
-            response = self.client.post(reverse('create_onthehill_tournament'), {'venue_id': 'not-a-number'})
+            response = self.client.post(reverse('create_readysettourney_tournament'), {'venue_id': 'not-a-number'})
         self.assertRedirects(response, reverse('tournament_players'))
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_payout_post_errors_are_collected_but_dont_fail_request(self, mock_urlopen):
         mock_urlopen.side_effect = [
             make_response({'token': 'abc123'}),
-            make_response({'id': 42, 'url': 'http://onthehill.example/t/42'}),
+            make_response({'id': 42, 'url': 'http://readysettourney.example/t/42'}),
         ] + [make_http_error(409, {'error': 'duplicate place'}) for _ in range(8)]
 
         with self.settings(
             FRONTEND_LEAGUE_ID=self.league.id,
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
-            response = self.client.post(reverse('create_onthehill_tournament'))
+            response = self.client.post(reverse('create_readysettourney_tournament'))
         self.assertRedirects(response, reverse('tournament_players'))
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_missing_tournament_id_in_response(self, mock_urlopen):
         mock_urlopen.side_effect = [
             make_response({'token': 'abc123'}),
-            make_response({'url': 'http://onthehill.example/t/42'}),  # no 'id'
+            make_response({'url': 'http://readysettourney.example/t/42'}),  # no 'id'
         ]
 
         with self.settings(
             FRONTEND_LEAGUE_ID=self.league.id,
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
-            response = self.client.post(reverse('create_onthehill_tournament'))
+            response = self.client.post(reverse('create_readysettourney_tournament'))
         self.assertRedirects(response, reverse('tournament_players'))
 
     @patch('tournaments.views.urllib.request.urlopen')
@@ -412,5 +412,5 @@ class CreateOnTheHillTournamentViewTests(TournamentViewTestCase):
             FRONTEND_LEAGUE_ID=self.league.id,
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
-            response = self.client.post(reverse('create_onthehill_tournament'))
+            response = self.client.post(reverse('create_readysettourney_tournament'))
         self.assertRedirects(response, reverse('tournament_players'))

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bio-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/beauhall/projects/bio", "run", "dev"],
+      "port": 4321
+    },
+    {
+      "name": "autotracker",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/beauhall/projects/autotracker/manage.py", "runserver", "8011"],
+      "port": 8011
+    }
+  ]
+}
