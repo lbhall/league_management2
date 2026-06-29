@@ -147,10 +147,10 @@ ONTHEHILL_PASSWORD = os.environ.get('ONTHEHILL_PASSWORD', '')
 # HTTPS / security settings (nginx terminates SSL and forwards via X-Forwarded-Proto)
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 3600  # 1 hour — increase to 31536000 once confirmed working
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0  # 1 hour — increase to 31536000 once confirmed working
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     CSRF_TRUSTED_ORIGINS = [
