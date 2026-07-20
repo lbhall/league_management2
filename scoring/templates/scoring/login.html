@@ -1,0 +1,27 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Sign in — EMC Scoring{% endblock %}
+{% block header %}Sign in{% endblock %}
+
+{% block content %}
+    <div class="card">
+        {% if form.non_field_errors %}
+            <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <label for="id_email">Email</label>
+            {{ form.email }}
+            {{ form.email.errors }}
+            <label for="id_password">Password</label>
+            {{ form.password }}
+            {{ form.password.errors }}
+            <div style="margin-top:16px;">
+                <button type="submit" class="btn">Sign in</button>
+            </div>
+        </form>
+    </div>
+    <p class="muted" style="text-align:center;">
+        No account? <a href="{% url 'scoring:signup' %}">Create one</a>
+    </p>
+{% endblock %}

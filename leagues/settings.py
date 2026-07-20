@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'scheduling',
     'results',
     'tournaments',
+    'scoring',
 ]
 
 MIDDLEWARE = [

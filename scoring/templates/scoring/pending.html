@@ -1,0 +1,15 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Awaiting approval — EMC Scoring{% endblock %}
+{% block header %}Almost there{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h2>Account awaiting approval</h2>
+        <p class="muted">
+            Your account has been created and is waiting for a league admin to approve it.
+            Once approved, you'll be able to enter scores for
+            {% if profile.team %}<strong>{{ profile.team.name }}</strong>{% else %}your team{% endif %}.
+        </p>
+    </div>
+{% endblock %}

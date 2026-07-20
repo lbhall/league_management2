@@ -281,6 +281,21 @@
     </div>
     {% endif %}
 
+    {% if venue_violations %}
+    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:12px 16px;margin-bottom:16px;">
+        <strong style="color:#856404;">⚠ Venue capacity violations detected</strong>
+        <ul style="margin:8px 0 0 0;padding-left:20px;color:#856404;">
+            {% for v in venue_violations %}
+                <li>
+                    <a href="#week-{{ v.week.pk }}" style="color:#856404;font-weight:600;">Week {{ v.week.number }} ({{ v.week.date }})</a>
+                    — {{ v.venue.name }} has {{ v.match_count }} match{{ v.match_count|pluralize }} but capacity is {{ v.allowed }}.
+                    Use <strong>Rebalance Schedule</strong> to fix automatically, or move a match manually.
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <div class="module aligned">
         <h2>Schedule for {{ season.name }} ({{ season.league.name }})</h2>
 

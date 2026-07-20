@@ -1,0 +1,60 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Enter score — EMC Scoring{% endblock %}
+{% block header %}Enter score{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <div class="match-teams">{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
+        <div class="muted">Week {{ match.week.number }} — {{ match.week.date }}{% if match.location %} — {{ match.location }}{% endif %}</div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        {% for section in sections %}
+            <div class="card">
+                <h2>{{ section.team.name }}</h2>
+                {% for row in section.rows %}
+                    <div style="padding:12px 0; {% if not forloop.last %}border-bottom:1px solid #e2e8f0;{% endif %}">
+                        <label style="display:flex;align-items:center;gap:10px;font-size:1rem;margin:0;">
+                            <input type="checkbox" name="played_{{ row.player.id }}"
+                                   {% if row.played %}checked{% endif %}
+                                   style="width:20px;height:20px;">
+                            {{ row.player.name }}
+                        </label>
+                        <div style="display:flex;gap:10px;margin-top:8px;">
+                            <div style="flex:1;">
+                                <label style="margin:0 0 4px;">Wins</label>
+                                <select name="wins_{{ row.player.id }}">
+                                    {% for n in win_range %}
+                                        <option value="{{ n }}" {% if row.wins == n %}selected{% endif %}>{{ n }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div style="flex:1;">
+                                <label style="margin:0 0 4px;">Runs</label>
+                                <select name="runouts_{{ row.player.id }}">
+                                    {% for n in win_range %}
+                                        <option value="{{ n }}" {% if row.runouts == n %}selected{% endif %}>{{ n }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div style="flex:1;">
+                                <label style="margin:0 0 4px;">8-Break</label>
+                                <select name="eights_{{ row.player.id }}">
+                                    {% for n in win_range %}
+                                        <option value="{{ n }}" {% if row.eights == n %}selected{% endif %}>{{ n }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+
+        <button type="submit" class="btn">Save scores</button>
+        <div style="height:10px;"></div>
+        <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Cancel</a>
+    </form>
+{% endblock %}

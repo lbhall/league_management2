@@ -1,0 +1,47 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Matches — EMC Scoring{% endblock %}
+{% block header %}
+    {% if profile.role == 'admin' %}All Matches{% else %}{{ profile.team.name }}{% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if not season %}
+        <div class="card">
+            <p class="muted">No active season right now.</p>
+        </div>
+    {% else %}
+        {% if needs_score %}
+            <div class="card">
+                <h2>Needs a score</h2>
+                {% for match in needs_score %}
+                    <div style="padding:10px 0; {% if not forloop.last %}border-bottom:1px solid #e2e8f0;{% endif %}">
+                        <div class="match-teams">{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
+                        <div class="muted" style="margin:4px 0 8px;">
+                            Week {{ match.week.number }} — {{ match.week.date }}
+                            {% if match.location %} — {{ match.location }}{% endif %}
+                        </div>
+                        <a class="btn" href="{% url 'scoring:enter_score' match.id %}">Enter score</a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="card">
+                <h2>All caught up</h2>
+                <p class="muted">No matches waiting on a score.</p>
+            </div>
+        {% endif %}
+
+        {% if upcoming %}
+            <div class="card">
+                <h2>Upcoming</h2>
+                {% for match in upcoming %}
+                    <div style="padding:8px 0; {% if not forloop.last %}border-bottom:1px solid #e2e8f0;{% endif %}">
+                        <div>{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
+                        <div class="muted">Week {{ match.week.number }} — {{ match.week.date }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endif %}
+{% endblock %}

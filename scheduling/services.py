@@ -385,6 +385,42 @@ def move_match_to_week(match, target_week):
     match.save(update_fields=['week'])
 
 
+def get_venue_violations(season):
+    """
+    Return a list of dicts describing weeks where a venue has more matches
+    than its max_home_teams capacity allows.
+
+    Each dict has: week, venue, match_count, allowed.
+    """
+    violations = []
+    weeks = list(
+        season.weeks.prefetch_related(
+            'matches__home_team__venue',
+        ).order_by('date', 'number')
+    )
+
+    for week in weeks:
+        if week.number is None:
+            continue
+
+        venue_counts = {}
+        for match in week.matches.all():
+            venue = _match_effective_venue(match)
+            venue_counts.setdefault(venue.id, {'venue': venue, 'count': 0})
+            venue_counts[venue.id]['count'] += 1
+
+        for entry in venue_counts.values():
+            if entry['count'] > entry['venue'].max_home_teams:
+                violations.append({
+                    'week': week,
+                    'venue': entry['venue'],
+                    'match_count': entry['count'],
+                    'allowed': entry['venue'].max_home_teams,
+                })
+
+    return violations
+
+
 def rebalance_season_matches(season):
     weeks = list(season.weeks.order_by('date', 'number'))
     if not weeks:
@@ -399,15 +435,13 @@ def rebalance_season_matches(season):
         venue_counts = {}
 
         for match in week.matches.select_related('home_team__venue').order_by('sort_order', 'id'):
-            venue_id = match.home_team.venue_id
-            venue_counts.setdefault(venue_id, [])
-            venue_counts[venue_id].append(match)
+            venue = _match_effective_venue(match)
+            venue_counts.setdefault(venue.id, {'venue': venue, 'matches': []})
+            venue_counts[venue.id]['matches'].append(match)
 
-        for venue_matches in venue_counts.values():
-            if not venue_matches:
-                continue
-
-            venue = venue_matches[0].home_team.venue
+        for entry in venue_counts.values():
+            venue = entry['venue']
+            venue_matches = entry['matches']
             allowed = venue.max_home_teams
 
             if len(venue_matches) <= allowed:

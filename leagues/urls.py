@@ -5,7 +5,7 @@ The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/4.2/topics/http/urls/
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 
 from core.views import (
     archived_player_history,
@@ -52,5 +52,6 @@ urlpatterns = [
     path('teams/<int:team_id>/schedule-modal/', team_schedule_modal, name='team_schedule_modal'),
     path('one-pocket/full-schedule-modal/', one_pocket_full_schedule_modal, name='one_pocket_full_schedule_modal'),
     path('players/<int:player_id>/scores-modal/', player_scores_modal, name='player_scores_modal'),
+    path('score/', include('scoring.urls')),
     path('admin/', admin.site.urls),
 ]

@@ -1,0 +1,113 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{% block title %}EMC Scoring{% endblock %}</title>
+    <meta name="theme-color" content="#0c385f">
+    <link rel="manifest" href="{% url 'scoring:manifest' %}">
+    <link rel="apple-touch-icon" href="{% static 'scoring/icon-192.png' %}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f2f4f7;
+            color: #1a202c;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        header.app-bar {
+            background: #0c385f;
+            color: #fff;
+            padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        header.app-bar h1 { font-size: 1.1rem; font-weight: 600; }
+        header.app-bar a { color: #9fc3e8; text-decoration: none; font-size: 0.9rem; }
+        main { padding: 16px; max-width: 520px; margin: 0 auto; }
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .card h2 { font-size: 1rem; margin-bottom: 10px; color: #0c385f; }
+        .muted { color: #64748b; font-size: 0.85rem; }
+        .btn {
+            display: block;
+            width: 100%;
+            background: #0c385f;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-align: center;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .btn-secondary { background: #e2e8f0; color: #0c385f; }
+        form label { display: block; font-size: 0.85rem; font-weight: 600; margin: 12px 0 4px; }
+        form input[type="email"], form input[type="password"], form select, form input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font-size: 1rem;
+            background: #fff;
+        }
+        .messages { list-style: none; margin-bottom: 12px; }
+        .messages li {
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        .messages li.success { background: #d1fae5; color: #065f46; }
+        .messages li.error { background: #fee2e2; color: #991b1b; }
+        .errorlist { list-style: none; color: #991b1b; font-size: 0.85rem; margin: 4px 0; }
+        .match-teams { font-size: 1.05rem; font-weight: 600; }
+        .badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: #fef3c7;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <header class="app-bar">
+        <h1>{% block header %}EMC Scoring{% endblock %}</h1>
+        {% if request.user.is_authenticated %}
+            <a href="{% url 'scoring:logout' %}">Sign out</a>
+        {% endif %}
+    </header>
+    <main>
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li class="{{ message.tags }}">{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register("{% url 'scoring:service_worker' %}", { scope: '/score/' });
+        }
+    </script>
+</body>
+</html>
