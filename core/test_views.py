@@ -248,6 +248,19 @@ class EightBallViewsTests(ViewTestCase):
             response = self.client.get(reverse('archived_seasons'))
         self.assertEqual(response.status_code, 200)
 
+    def test_bye_week_opponent_is_not_a_link(self):
+        # Week 2 has no match for the team, so the schedule shows a Bye row.
+        Week.objects.create(season=self.season, date=date(2026, 1, 12), number=2)
+
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('team_detail', args=[self.home_team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Bye')
+        # There is no page for "Bye" — the row must not render a hyperlink.
+        # (The bug rendered <a href="/teams//">Bye</a> with an empty id.)
+        self.assertNotContains(response, 'href="/teams//"')
+
 
 class DartsViewsTests(ViewTestCase):
     def setUp(self):

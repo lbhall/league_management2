@@ -160,8 +160,12 @@
                                             <td>{% if entry.week.number %}{{ entry.week.number }}{% else %}-{% endif %}</td>
                                             <td>{{ entry.week.date|date:"M d, y" }}</td>
                                             <td>
-                                                {% if entry.is_home %}VS {% else %}@ {% endif %}
-                                                <a href="/teams/{{ entry.opponent.id }}/">{{ entry.opponent }}</a>
+                                                {% if entry.is_bye %}
+                                                    {{ entry.opponent }}
+                                                {% else %}
+                                                    {% if entry.is_home %}VS {% else %}@ {% endif %}
+                                                    <a href="/teams/{{ entry.opponent.id }}/">{{ entry.opponent }}</a>
+                                                {% endif %}
                                             </td>
                                             <td>{{ entry.location }}</td>
                                             <td>
