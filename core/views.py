@@ -1047,7 +1047,13 @@ def team_detail(request, team_id):
 
                     team_games_won = home_games_won if is_home else away_games_won
                     opponent_games_won = away_games_won if is_home else home_games_won
-                    result_label = f'{team_games_won}-{opponent_games_won}'
+                    if (
+                        team.league.results_type == League.ResultsType.ONE_POCKET
+                        and max(home_games_won, away_games_won) < 3
+                    ):
+                        result_label = ''
+                    else:
+                        result_label = f'{team_games_won}-{opponent_games_won}'
 
                 team_schedule.append({
                     'match_id': week_match.id,
@@ -1220,25 +1226,30 @@ def team_schedule_modal(request, team_id):
             opponent = match.away_team if is_home else match.home_team
 
             if hasattr(match, 'result'):
-                team_score = (
-                    (match.result.home_team_score or 0)
-                    if is_home else
-                    (match.result.away_team_score or 0)
-                )
-                opponent_score = (
-                    (match.result.away_team_score or 0)
-                    if is_home else
-                    (match.result.home_team_score or 0)
-                )
+                home_score = match.result.home_team_score or 0
+                away_score = match.result.away_team_score or 0
+                is_complete = max(home_score, away_score) >= 3
 
-                opponent_label = opponent.name
+                if is_complete:
+                    team_score = home_score if is_home else away_score
+                    opponent_score = away_score if is_home else home_score
 
-                results_rows.append({
-                    'date': match.week.date,
-                    'opponent': opponent_label,
-                    'opponent_rank': opponent.team_rank,
-                    'result': f'{team_score}-{opponent_score}',
-                })
+                    results_rows.append({
+                        'date': match.week.date,
+                        'opponent': opponent.name,
+                        'opponent_rank': opponent.team_rank,
+                        'result': f'{team_score}-{opponent_score}',
+                    })
+                else:
+                    row = {
+                        'date': match.week.date,
+                        'opponent': opponent.name,
+                        'opponent_rank': opponent.team_rank,
+                    }
+                    if match.week.date < today:
+                        makeup_rows.append(row)
+                    else:
+                        upcoming_rows.append(row)
             else:
                 opponent_label = opponent.name
 

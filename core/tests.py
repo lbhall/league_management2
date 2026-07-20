@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
-from django.test import RequestFactory, TestCase
+from django.test import Client, RequestFactory, TestCase
+from django.contrib.auth.models import User
 
 from core.models import League, Player, Team, Venue
 from core.views import (
@@ -257,3 +258,61 @@ class ActiveLeagueSeasonHelperTests(TestCase):
 
     def test_get_active_season_returns_none_without_league(self):
         self.assertIsNone(get_active_season(None))
+
+
+class OnePocketZeroZeroScoreTests(TestCase):
+    """0-0 MatchResult records must never be treated as a completed match."""
+
+    def setUp(self):
+        self.league = make_league(results_type=League.ResultsType.ONE_POCKET)
+        self.venue = make_venue(self.league)
+        self.team_a = make_team(self.league, self.venue, 'Beau', team_rank=4)
+        self.team_b = make_team(self.league, self.venue, 'Marcus', team_rank=2)
+        self.season = Season.objects.create(
+            league=self.league, name='Mid 2026', status=Season.Status.ACTIVE
+        )
+        self.week = Week.objects.create(season=self.season, date='2026-07-19', number=3)
+        self.match = Match.objects.create(
+            week=self.week, home_team=self.team_a, away_team=self.team_b
+        )
+        MatchResult.objects.create(match=self.match, home_team_score=0, away_team_score=0)
+
+    def test_build_week_schedule_hides_zero_zero_result_label(self):
+        entries = build_week_schedule_with_byes(self.league, self.week)
+        match_entry = next(e for e in entries if not e['is_bye'])
+        self.assertEqual(match_entry['result_label'], '')
+
+    def test_build_team_standings_does_not_count_zero_zero_as_win(self):
+        standings = build_team_standings(self.league, self.season)
+        for standing in standings:
+            self.assertEqual(standing['matches_won'], 0)
+            self.assertEqual(standing['matches_lost'], 0)
+
+    def test_team_schedule_modal_puts_zero_zero_in_upcoming_or_makeup(self):
+        client = Client()
+        user = User.objects.create_superuser('admin', 'a@b.com', 'password')
+        client.force_login(user)
+
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.pk):
+            response = client.get(f'/teams/{self.team_a.pk}/schedule-modal/')
+
+        self.assertEqual(response.status_code, 200)
+        results_rows = response.context['results_rows']
+        makeup_rows = response.context['makeup_rows']
+        upcoming_rows = response.context['upcoming_rows']
+
+        # 0-0 must not appear as a completed result
+        self.assertEqual(len(results_rows), 0)
+        # It must appear in either makeup or upcoming (depending on date)
+        self.assertEqual(len(makeup_rows) + len(upcoming_rows), 1)
+
+    def test_valid_score_still_shows_result_label(self):
+        # Replace 0-0 with a proper 3-1 result and confirm it is shown.
+        result = self.match.result
+        result.home_team_score = 3
+        result.away_team_score = 1
+        result.save()
+
+        entries = build_week_schedule_with_byes(self.league, self.week)
+        match_entry = next(e for e in entries if not e['is_bye'])
+        self.assertEqual(match_entry['result_label'], '3-1')
