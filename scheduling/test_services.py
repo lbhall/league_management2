@@ -66,7 +66,7 @@ class SeedingTests(TestCase):
     def test_assign_random_team_seeds_assigns_unique_sequential_seeds(self):
         league = make_league()
         venue = make_venue(league)
-        teams = make_teams(league, venue, 4)
+        make_teams(league, venue, 4)
 
         services.assign_random_team_seeds(league, random_seed=42)
 

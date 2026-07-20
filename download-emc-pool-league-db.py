@@ -55,7 +55,7 @@ def cmd_use_local(args):
 
     temp_path = project_root / ".db.sqlite3.download"
 
-    print(f"Downloading production database...")
+    print("Downloading production database...")
     print(f"Remote: {args.user}@{args.host}:{REMOTE_DB_PATH}")
     print(f"Local:  {local_db_path}")
 
@@ -93,7 +93,7 @@ def cmd_backup(args):
     date_str = datetime.now().strftime("%Y%m%d-%H%M%S")
     local_path = backup_dir / f"{date_str}.db.sqlite3"
 
-    print(f"Downloading production database backup...")
+    print("Downloading production database backup...")
     print(f"Remote: {args.user}@{args.host}:{REMOTE_DB_PATH}")
     print(f"Backup: {local_path}")
 

@@ -67,7 +67,7 @@ class GetUserLeagueTests(SeasonAdminTestCase):
 
 class ScheduleRedirectViewTests(SeasonAdminTestCase):
     def test_superuser_sees_league_selector(self):
-        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ACTIVE)
+        Season.objects.create(league=self.league, name='S1', status=Season.Status.ACTIVE)
         response = self.client.get(reverse('admin:scheduling_schedule'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.league.name)
@@ -101,7 +101,7 @@ class ManageScheduleViewTests(SeasonAdminTestCase):
     def test_renders_schedule_with_bye_teams(self):
         season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ACTIVE)
         week = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
-        bystander = make_team(self.league, self.venue, 'Sitting Out')
+        make_team(self.league, self.venue, 'Sitting Out')
         Match.objects.create(week=week, home_team=self.home, away_team=self.away)
 
         response = self.client.get(reverse('admin:scheduling_season_manage_schedule', args=[season.pk]))

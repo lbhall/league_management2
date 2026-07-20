@@ -1,0 +1,11 @@
+[tool.ruff]
+line-length = 120
+extend-exclude = [
+    "*/migrations/*",
+    ".venv",
+    "staticfiles",
+]
+
+[tool.ruff.lint]
+# Defaults (E4/E7/E9 pycodestyle errors + F pyflakes) are a good baseline.
+select = ["E4", "E7", "E9", "F"]

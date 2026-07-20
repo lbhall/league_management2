@@ -2,7 +2,7 @@ from datetime import date, timedelta
 import random
 
 from django.db import transaction
-from django.db.models import Sum, F, Value, Q, IntegerField
+from django.db.models import Sum, Q, IntegerField
 from django.db.models.functions import Coalesce, Cast
 
 from core.models import Team, Player, Venue

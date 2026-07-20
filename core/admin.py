@@ -3,7 +3,7 @@ from decimal import Decimal
 from django import forms
 from django.contrib import admin
 from django.forms.models import BaseInlineFormSet
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
 from django.utils.html import format_html

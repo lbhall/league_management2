@@ -13,7 +13,6 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from core.models import Player, League
-from scheduling.models import Season
 from .models import Tournament, TournamentPlayer, TournamentTeam, BracketMatch
 from .bracket import (
     generate_bracket,

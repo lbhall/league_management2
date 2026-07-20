@@ -57,7 +57,7 @@ class Command(BaseCommand):
             if not one_pocket_leagues:
                 raise CommandError('No One Pocket league found. Pass --league to specify one.')
             if len(one_pocket_leagues) > 1:
-                names = ', '.join(l.name for l in one_pocket_leagues)
+                names = ', '.join(lg.name for lg in one_pocket_leagues)
                 raise CommandError(f'Multiple One Pocket leagues found ({names}); pass --league to pick one.')
             league = one_pocket_leagues[0]
 

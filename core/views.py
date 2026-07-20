@@ -14,7 +14,6 @@ from decimal import Decimal
 from content.models import NewsItem, Rule
 from results.models import PlayerMatchResult
 from scheduling.models import (
-    ArchivedMatch,
     ArchivedPlayerMatchResult,
     ArchivedSeason,
     Match,
@@ -432,7 +431,6 @@ def finance(request):
     team_count = teams.count()
     team_size = active_league.team_size
 
-    weeks = active_season.weeks.filter(number__isnull=False).count() if active_season else 0
     weeks_played = active_season.weeks.filter(
         number__isnull=False,
         matches__result__isnull=False
@@ -445,7 +443,6 @@ def finance(request):
     tournament_target = active_league.tournament_target
 
     weekly_payout_pool_per_team = (fee_per_player - greens_fee - operator_pay_per_player) * Decimal(team_size)
-    total_signup_fees = signup_fee * Decimal(team_count)
     total_matches_in_season = Match.objects.filter(week__season=active_season, week__number__isnull=False).count()
     total_weekly_payout_pool = weekly_payout_pool_per_team * Decimal(total_matches_in_season) * Decimal('2')
     tournament_money = tournament_target
@@ -1587,19 +1584,21 @@ def build_team_player_stats(active_season, team, through_week=None):
         stat['percentage'] = ((stat['wins'] / total) * 100) if total > 0 else 0.0
 
     if is_darts:
-        sort_key = lambda stat: (
-            -stat['points'],
-            -stat['hat_tricks'],
-            -stat['three_in_a_beds'],
-            -stat['white_horses'],
-            -stat['three_in_the_blacks'],
-            stat['player'],
-        )
+        def sort_key(stat):
+            return (
+                -stat['points'],
+                -stat['hat_tricks'],
+                -stat['three_in_a_beds'],
+                -stat['white_horses'],
+                -stat['three_in_the_blacks'],
+                stat['player'],
+            )
     else:
-        sort_key = lambda stat: (
-            -stat['wins'],
-            -stat['tie_breaker'],
-            stat['player'],
-        )
+        def sort_key(stat):
+            return (
+                -stat['wins'],
+                -stat['tie_breaker'],
+                stat['player'],
+            )
 
     return sorted(player_map.values(), key=sort_key)

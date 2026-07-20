@@ -53,7 +53,7 @@ class TournamentAdminPermissionTests(TournamentAdminTestCase):
 
     def test_non_staff_cannot_access_module(self):
         User = get_user_model()
-        non_staff = User.objects.create_user(username='regular', password='pw', is_staff=False)
+        User.objects.create_user(username='regular', password='pw', is_staff=False)
         self.client.login(username='regular', password='pw')
         response = self.client.get(reverse('admin:tournaments_tournament_changelist'))
         self.assertEqual(response.status_code, 302)  # redirected to login
@@ -79,7 +79,7 @@ class TournamentAdminPermissionTests(TournamentAdminTestCase):
 
     def test_staff_without_league_access_can_still_view(self):
         User = get_user_model()
-        staff_user = User.objects.create_user(username='staffer3', password='pw', is_staff=True)
+        User.objects.create_user(username='staffer3', password='pw', is_staff=True)
         self.client.login(username='staffer3', password='pw')
 
         response = self.client.get(reverse('admin:tournaments_tournament_change', args=[self.tournament.pk]))
