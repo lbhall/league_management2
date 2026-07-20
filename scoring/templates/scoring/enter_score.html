@@ -7,6 +7,10 @@
     <div class="card">
         <div class="match-teams">{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
         <div class="muted">Week {{ match.week.number }} — {{ match.week.date }}{% if match.location %} — {{ match.location }}{% endif %}</div>
+        <p class="muted" style="margin-top:8px;">
+            Quick totals entry. Prefer game-by-game?
+            <a href="{% url 'scoring:lineup' match.id %}">Use the round-robin sheet</a>.
+        </p>
     </div>
 
     <form method="post">
@@ -50,6 +54,47 @@
                         </div>
                     </div>
                 {% endfor %}
+
+                <div style="margin-top:14px;padding-top:12px;border-top:2px dashed #cbd5e1;">
+                    <div class="muted" style="font-weight:600;margin-bottom:8px;">
+                        Subs (optional)
+                        — <a href="{% url 'scoring:add_player' %}?next={{ request.get_full_path|urlencode }}">Add new player</a>
+                    </div>
+                {% if sub_choices %}
+                    <div>
+                        {% for slot in sub_slots %}
+                            <div style="margin-bottom:10px;">
+                                <select name="sub_player_{{ section.team.id }}_{{ slot }}">
+                                    <option value="">— Add a sub —</option>
+                                    {% for sub in sub_choices %}
+                                        <option value="{{ sub.id }}">{{ sub.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div style="display:flex;gap:10px;margin-top:6px;">
+                                    <div style="flex:1;">
+                                        <label style="margin:0 0 4px;">Wins</label>
+                                        <select name="sub_wins_{{ section.team.id }}_{{ slot }}">
+                                            {% for n in win_range %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                                        </select>
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label style="margin:0 0 4px;">Runs</label>
+                                        <select name="sub_runouts_{{ section.team.id }}_{{ slot }}">
+                                            {% for n in win_range %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                                        </select>
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label style="margin:0 0 4px;">8-Break</label>
+                                        <select name="sub_eights_{{ section.team.id }}_{{ slot }}">
+                                            {% for n in win_range %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                </div>
             </div>
         {% endfor %}
 

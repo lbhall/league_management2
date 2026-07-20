@@ -1,0 +1,54 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Lineup — EMC Scoring{% endblock %}
+{% block header %}Set lineup{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <div class="match-teams">{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
+        <div class="muted">Week {{ match.week.number }} — {{ match.week.date }}{% if match.location %} — {{ match.location }}{% endif %}</div>
+        <p class="muted" style="margin-top:8px;">
+            Set the play order. Position 1 plays first each round, matching the paper score sheet.
+        </p>
+        {% if profile.role == 'admin' %}
+            <p class="muted" style="margin-top:6px;">
+                <a href="{% url 'scoring:enter_score' match.id %}">Admin view (totals entry)</a>
+            </p>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        {% for block in team_blocks %}
+            <div class="card">
+                <h2>
+                    {{ block.team.name }}
+                    <span class="badge">{% if block.is_home %}Home (1–5){% else %}Away (A–E){% endif %}</span>
+                </h2>
+                {% for slot in block.slots %}
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                        <div style="width:28px;font-weight:700;color:#0c385f;text-align:center;">
+                            {{ slot.label }}
+                        </div>
+                        <select name="lineup_{{ block.team.id }}_{{ slot.position }}" style="flex:1;">
+                            <option value="">— Select player —</option>
+                            {% for player in block.choices %}
+                                <option value="{{ player.id }}" {% if slot.selected == player.id %}selected{% endif %}>
+                                    {{ player.name }}{% if not player.team_id %} (sub){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+
+        <p class="muted" style="margin-bottom:10px;">
+            Missing someone? <a href="{% url 'scoring:add_player' %}?next={{ request.get_full_path|urlencode }}">Add a new player</a>
+        </p>
+
+        <button type="submit" class="btn">Save lineup &amp; start scoring</button>
+        <div style="height:10px;"></div>
+        <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
+    </form>
+{% endblock %}

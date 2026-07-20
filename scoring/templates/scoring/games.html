@@ -1,0 +1,98 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Games — EMC Scoring{% endblock %}
+{% block header %}Score games{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <div class="match-teams">{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
+        <div class="muted">
+            Week {{ match.week.number }} — {{ match.week.date }}{% if match.location %} — {{ match.location }}{% endif %}
+        </div>
+        <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+            <span class="muted">{{ games_entered }} of {{ total_games }} games recorded</span>
+            <a href="{% url 'scoring:lineup' match.id %}" style="font-size:0.85rem;">Edit lineup</a>
+        </div>
+        {% if profile.role == 'admin' %}
+            <p class="muted" style="margin-top:6px;">
+                <a href="{% url 'scoring:enter_score' match.id %}">Admin view (totals entry)</a>
+            </p>
+        {% endif %}
+    </div>
+
+    <style>
+        .game-row { padding: 10px 0; border-top: 1px solid #e2e8f0; }
+        .game-row:first-of-type { border-top: none; }
+        .winner-toggle { display: flex; gap: 8px; margin-top: 6px; }
+        .winner-toggle label {
+            flex: 1;
+            margin: 0;
+            font-weight: 400;
+        }
+        .winner-toggle input[type="radio"] { display: none; }
+        .winner-toggle span {
+            display: block;
+            text-align: center;
+            padding: 10px 6px;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .winner-toggle input[type="radio"]:checked + span {
+            background: #0c385f;
+            border-color: #0c385f;
+            color: #fff;
+            font-weight: 600;
+        }
+        .game-flags { display: flex; gap: 16px; margin-top: 6px; }
+        .game-flags label {
+            display: flex; align-items: center; gap: 5px;
+            margin: 0; font-weight: 400; font-size: 0.82rem; color: #64748b;
+        }
+    </style>
+
+    <form method="post">
+        {% csrf_token %}
+        {% for round in rounds %}
+            <div class="card">
+                <h2>Round {{ round.number }}</h2>
+                {% for game in round.games %}
+                    <div class="game-row">
+                        <div class="muted" style="font-size:0.8rem;">
+                            {{ game.home_position }} vs {{ game.away_letter }} — tap the winner
+                        </div>
+                        <div class="winner-toggle">
+                            <label>
+                                <input type="radio" name="winner_{{ round.number }}_{{ game.home_position }}"
+                                       value="home" {% if game.winner == 'home' %}checked{% endif %}>
+                                <span>{{ game.home_player.name }}</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="winner_{{ round.number }}_{{ game.home_position }}"
+                                       value="away" {% if game.winner == 'away' %}checked{% endif %}>
+                                <span>{{ game.away_player.name }}</span>
+                            </label>
+                        </div>
+                        <div class="game-flags">
+                            <label>
+                                <input type="checkbox" name="ro_{{ round.number }}_{{ game.home_position }}"
+                                       {% if game.runout %}checked{% endif %}> Run out
+                            </label>
+                            <label>
+                                <input type="checkbox" name="eb_{{ round.number }}_{{ game.home_position }}"
+                                       {% if game.eight_on_break %}checked{% endif %}> 8 on the break
+                            </label>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+
+        <button type="submit" class="btn">Save games</button>
+        <div style="height:10px;"></div>
+        <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
+    </form>
+{% endblock %}

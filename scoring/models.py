@@ -2,7 +2,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from core.models import League, Player
+from core.models import League, Player, Team
+from scheduling.models import Match
 
 
 class ScoringProfile(models.Model):
@@ -65,3 +66,82 @@ class ScoringProfile(models.Model):
 
     def __str__(self):
         return f'{self.user.username} ({self.get_role_display()})'
+
+
+class LineupSlot(models.Model):
+    """A team's play order for one match (position 1..team_size)."""
+
+    match = models.ForeignKey(
+        Match,
+        on_delete=models.CASCADE,
+        related_name='scoring_lineup_slots',
+    )
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.CASCADE,
+        related_name='scoring_lineup_slots',
+    )
+    position = models.PositiveSmallIntegerField()
+    player = models.ForeignKey(
+        Player,
+        on_delete=models.CASCADE,
+        related_name='scoring_lineup_slots',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['match', 'team', 'position'],
+                name='unique_lineup_position_per_match_team',
+            ),
+            models.UniqueConstraint(
+                fields=['match', 'team', 'player'],
+                name='unique_lineup_player_per_match_team',
+            ),
+        ]
+        ordering = ['team_id', 'position']
+
+    def __str__(self):
+        return f'{self.match} — {self.team.name} #{self.position}: {self.player.name}'
+
+
+class GameResult(models.Model):
+    """One game inside a match. In round r, home position i plays the away
+    position offset by the round (matching the paper score sheet's rotation:
+    round 1 is 1:A 2:B 3:C..., round 2 is 1:B 2:C 3:D..., etc.)."""
+
+    class Winner(models.TextChoices):
+        HOME = 'home', 'Home'
+        AWAY = 'away', 'Away'
+
+    match = models.ForeignKey(
+        Match,
+        on_delete=models.CASCADE,
+        related_name='scoring_games',
+    )
+    round_number = models.PositiveSmallIntegerField()
+    home_position = models.PositiveSmallIntegerField()
+    winner = models.CharField(max_length=4, choices=Winner.choices)
+    runout = models.BooleanField(default=False)
+    eight_on_break = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['match', 'round_number', 'home_position'],
+                name='unique_game_per_match_round_position',
+            ),
+        ]
+        ordering = ['round_number', 'home_position']
+
+    @staticmethod
+    def away_position_for(home_position, round_number, team_size):
+        return ((home_position - 1 + round_number - 1) % team_size) + 1
+
+    @property
+    def away_position(self):
+        team_size = self.match.week.season.league.team_size
+        return self.away_position_for(self.home_position, self.round_number, team_size)
+
+    def __str__(self):
+        return f'{self.match} R{self.round_number} G{self.home_position} — {self.winner}'

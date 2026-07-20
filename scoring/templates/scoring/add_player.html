@@ -1,0 +1,51 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Add player — EMC Scoring{% endblock %}
+{% block header %}Add player{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+
+            <label for="id_name">Player name</label>
+            <input type="text" name="name" id="id_name" required
+                   autocomplete="off" autocapitalize="words"
+                   style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:1rem;">
+
+            <label>Gender</label>
+            <div style="display:flex;gap:16px;padding:4px 0;">
+                <label style="display:flex;align-items:center;gap:6px;font-weight:400;margin:0;">
+                    <input type="radio" name="gender" value="male" checked> Male
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-weight:400;margin:0;">
+                    <input type="radio" name="gender" value="female"> Female
+                </label>
+            </div>
+
+            {% if can_add_to_team %}
+                <label>Add to</label>
+                <div style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">
+                    <label style="display:flex;align-items:center;gap:6px;font-weight:400;margin:0;">
+                        <input type="radio" name="assignment" value="sub" checked>
+                        Sub pool (no team)
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-weight:400;margin:0;">
+                        <input type="radio" name="assignment" value="team">
+                        My team ({{ profile.team.name }})
+                    </label>
+                </div>
+            {% endif %}
+
+            <div style="margin-top:16px;">
+                <button type="submit" class="btn">Add player</button>
+            </div>
+        </form>
+    </div>
+    {% if next_url %}
+        <a class="btn btn-secondary" href="{{ next_url }}">Back to score entry</a>
+    {% else %}
+        <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
+    {% endif %}
+{% endblock %}
