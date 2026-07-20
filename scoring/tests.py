@@ -118,6 +118,39 @@ class SignupTests(ScoringBase):
         self.assertContains(response, 'already exists')
 
 
+class LoginTests(ScoringBase):
+    def test_login_with_plain_username_works(self):
+        # Django admin accounts often have a plain username, not an email.
+        User.objects.create_user(
+            username='beau', password='pw12345!', is_staff=True,
+        )
+
+        response = self.client.post('/score/login/', {
+            'email': 'beau',
+            'password': 'pw12345!',
+        })
+        self.assertRedirects(response, '/score/', fetch_redirect_response=False)
+
+    def test_login_with_email_still_works(self):
+        user, _ = self.make_captain(self.home_players[0], email='cap@example.com')
+
+        response = self.client.post('/score/login/', {
+            'email': 'Cap@Example.com',  # case-insensitive for emails
+            'password': 'pw12345!',
+        })
+        self.assertRedirects(response, '/score/', fetch_redirect_response=False)
+
+    def test_bad_password_rejected(self):
+        self.make_captain(self.home_players[0], email='cap@example.com')
+
+        response = self.client.post('/score/login/', {
+            'email': 'cap@example.com',
+            'password': 'wrong',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invalid email/username or password')
+
+
 class ApprovalGateTests(ScoringBase):
     def test_unapproved_captain_redirected_to_pending(self):
         user, _ = self.make_captain(self.home_players[0], approved=False)

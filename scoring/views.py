@@ -74,15 +74,17 @@ def login_view(request):
 
     form = LoginForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        user = authenticate(
-            request,
-            username=form.cleaned_data['email'].lower().strip(),
-            password=form.cleaned_data['password'],
-        )
+        identifier = form.cleaned_data['email'].strip()
+        password = form.cleaned_data['password']
+        # Try as entered first (usernames are case-sensitive), then
+        # lowercased (captain accounts store emails lowercased).
+        user = authenticate(request, username=identifier, password=password)
+        if user is None and identifier.lower() != identifier:
+            user = authenticate(request, username=identifier.lower(), password=password)
         if user is not None:
             login(request, user)
             return redirect('scoring:match_list')
-        form.add_error(None, 'Invalid email or password.')
+        form.add_error(None, 'Invalid email/username or password.')
 
     return render(request, 'scoring/login.html', {'form': form})
 

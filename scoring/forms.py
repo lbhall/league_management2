@@ -58,8 +58,11 @@ class SignupForm(forms.Form):
 
 
 class LoginForm(forms.Form):
-    email = forms.EmailField(
-        widget=forms.EmailInput(attrs={'autocomplete': 'email', 'inputmode': 'email'}),
+    # Accepts an email (captain accounts) or a plain Django username
+    # (admin accounts), so no EmailField validation here.
+    email = forms.CharField(
+        label='Email or username',
+        widget=forms.TextInput(attrs={'autocomplete': 'username'}),
     )
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={'autocomplete': 'current-password'}),

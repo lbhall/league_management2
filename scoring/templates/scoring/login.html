@@ -10,7 +10,7 @@
         {% endif %}
         <form method="post">
             {% csrf_token %}
-            <label for="id_email">Email</label>
+            <label for="id_email">Email or username</label>
             {{ form.email }}
             {{ form.email.errors }}
             <label for="id_password">Password</label>
