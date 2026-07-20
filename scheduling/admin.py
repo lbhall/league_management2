@@ -314,7 +314,15 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
 
             for match in week.matches.all():
                 match.valid_destination_weeks = get_valid_destination_weeks(season, match)
-                match.has_result = hasattr(match, 'result')
+                result = getattr(match, 'result', None)
+                if result and season.league.results_type == 'one_pocket':
+                    match.has_result = (
+                        result.home_team_score is not None
+                        and result.away_team_score is not None
+                        and max(result.home_team_score, result.away_team_score) >= 3
+                    )
+                else:
+                    match.has_result = result is not None
                 scheduled_team_ids.add(match.home_team_id)
                 scheduled_team_ids.add(match.away_team_id)
 

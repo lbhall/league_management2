@@ -183,7 +183,13 @@ def build_week_schedule_with_byes(active_league, week, team_standings=None):
             ),
             'result_label': (
                 f'{match.result.home_team_score or 0}-{match.result.away_team_score or 0}'
-                if hasattr(match, 'result') and match.result.home_team_score is not None and match.result.away_team_score is not None
+                if hasattr(match, 'result')
+                and match.result.home_team_score is not None
+                and match.result.away_team_score is not None
+                and (
+                    active_league.results_type != League.ResultsType.ONE_POCKET
+                    or max(match.result.home_team_score, match.result.away_team_score) >= 3
+                )
                 else ''
             ),
         }

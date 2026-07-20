@@ -286,7 +286,7 @@
 
         {% if schedule_weeks %}
             {% for week in schedule_weeks %}
-                <div class="schedule-week-card {% if week.number is None %}schedule-week-holiday{% endif %}">
+                <div id="week-{{ week.pk }}" class="schedule-week-card {% if week.number is None %}schedule-week-holiday{% endif %}">
                     <div class="schedule-week-header">
                         <div class="schedule-week-header-main">
                             <div class="schedule-week-title">
@@ -425,7 +425,7 @@
                                                 {% else %}
                                                     <span class="schedule-score-status not-scored">📝 Not scored</span>
                                                 {% endif %}
-                                                <a class="button" href="{% url 'admin:results_matchresult_enter_score' match.pk %}?next={{ request.get_full_path }}">
+                                                <a class="button" href="{% url 'admin:results_matchresult_enter_score' match.pk %}?next={{ request.get_full_path }}%23week-{{ week.pk }}">
                                                     Enter Score
                                                 </a>
                                             {% else %}
