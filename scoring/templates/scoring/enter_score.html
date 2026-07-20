@@ -57,4 +57,34 @@
         <div style="height:10px;"></div>
         <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Cancel</a>
     </form>
+
+    {% for section in readonly_sections %}
+        <div class="card" style="margin-top:14px;">
+            <h2>{{ section.team.name }} <span class="badge">Their entry</span></h2>
+            {% if section.rows %}
+                <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+                    <thead>
+                        <tr style="text-align:left;color:#64748b;">
+                            <th style="padding:6px 0;">Player</th>
+                            <th style="padding:6px 0;text-align:center;">Wins</th>
+                            <th style="padding:6px 0;text-align:center;">Runs</th>
+                            <th style="padding:6px 0;text-align:center;">8-Break</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in section.rows %}
+                            <tr style="border-top:1px solid #e2e8f0;">
+                                <td style="padding:8px 0;">{{ row.player.name }}</td>
+                                <td style="padding:8px 0;text-align:center;">{{ row.wins }}</td>
+                                <td style="padding:8px 0;text-align:center;">{{ row.runouts }}</td>
+                                <td style="padding:8px 0;text-align:center;">{{ row.eights }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="muted">No scores entered yet by {{ section.team.name }}.</p>
+            {% endif %}
+        </div>
+    {% endfor %}
 {% endblock %}

@@ -8,6 +8,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from core.models import League
 from results.models import MatchResult, PlayerMatchResult
 from scheduling.models import Match, Season
 
@@ -18,9 +19,25 @@ from .models import ScoringProfile
 def _get_profile(request):
     if not request.user.is_authenticated:
         return None
-    return ScoringProfile.objects.filter(user=request.user).select_related(
+    profile = ScoringProfile.objects.filter(user=request.user).select_related(
         'league', 'player__team'
     ).first()
+
+    if profile is None and request.user.is_staff:
+        # Django admin users get an approved league-admin scoring profile
+        # automatically so they can score any match without a signup step.
+        league = League.objects.filter(
+            results_type=League.ResultsType.EIGHT_BALL
+        ).order_by('id').first()
+        if league:
+            profile = ScoringProfile.objects.create(
+                user=request.user,
+                league=league,
+                role=ScoringProfile.Role.ADMIN,
+                is_approved=True,
+            )
+
+    return profile
 
 
 def signup(request):
@@ -82,6 +99,35 @@ def pending_approval(request):
     if profile and profile.is_approved:
         return redirect('scoring:match_list')
     return render(request, 'scoring/pending.html', {'profile': profile})
+
+
+def _cross_side_warnings(match_result, team_size):
+    """Consistency checks once both sides have rows. Every game is between the
+    two teams, so each side should field the same number of players and the
+    combined wins should equal the total games played."""
+    match = match_result.match
+    home_rows = [r for r in match_result.player_results.all() if r.represented_team_id == match.home_team_id]
+    away_rows = [r for r in match_result.player_results.all() if r.represented_team_id == match.away_team_id]
+
+    if not home_rows or not away_rows:
+        return []
+
+    warnings = []
+    if len(home_rows) != len(away_rows):
+        warnings.append(
+            f'{match.home_team.name} has {len(home_rows)} player(s) entered but '
+            f'{match.away_team.name} has {len(away_rows)} — both sides should field the same count.'
+        )
+
+    home_wins = sum(r.wins for r in home_rows)
+    away_wins = sum(r.wins for r in away_rows)
+    total_games = len(home_rows) * team_size
+    if len(home_rows) == len(away_rows) and home_wins + away_wins != total_games:
+        warnings.append(
+            f'Combined wins ({home_wins} + {away_wins} = {home_wins + away_wins}) do not equal '
+            f'the {total_games} games played — one side\'s scores may be off.'
+        )
+    return warnings
 
 
 def _match_fully_scored(match):
@@ -163,14 +209,34 @@ def enter_score(request, match_id):
 
     if profile.role == ScoringProfile.Role.ADMIN:
         editable_teams = [match.home_team, match.away_team]
+        readonly_teams = []
     else:
         editable_teams = [profile.team]
+        readonly_teams = [
+            match.away_team if profile.team.id == match.home_team_id else match.home_team
+        ]
 
     result = MatchResult.objects.filter(match=match).first()
     existing = {}
     if result:
         for row in result.player_results.select_related('player'):
             existing[row.player_id] = row
+
+    # Opponent rows shown read-only so both captains can see the full match.
+    readonly_sections = []
+    for team in readonly_teams:
+        rows = [
+            {
+                'player': row.player,
+                'wins': row.wins,
+                'runouts': row.runouts,
+                'eights': row.eight_on_the_breaks,
+            }
+            for row in existing.values()
+            if row.represented_team_id == team.id
+        ]
+        rows.sort(key=lambda r: r['player'].name)
+        readonly_sections.append({'team': team, 'rows': rows})
 
     sections = []
     for team in editable_teams:
@@ -239,6 +305,8 @@ def enter_score(request, match_id):
                 ).exclude(player_id__in=saved_player_ids).delete()
 
             messages.success(request, 'Scores saved.')
+            for warning in _cross_side_warnings(match_result, team_size):
+                messages.warning(request, warning)
             return redirect('scoring:match_list')
 
         for error in errors:
@@ -248,6 +316,7 @@ def enter_score(request, match_id):
         'profile': profile,
         'match': match,
         'sections': sections,
+        'readonly_sections': readonly_sections,
         'team_size': team_size,
         'win_range': range(team_size + 1),
     })

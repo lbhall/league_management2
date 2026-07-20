@@ -254,6 +254,101 @@ class ScoreSaveTests(ScoringBase):
         )
 
 
+class CrossSideValidationTests(ScoringBase):
+    def _post_side(self, players, team_wins):
+        """Post scores for a full side; team_wins distributed to first player."""
+        data = {}
+        for i, player in enumerate(players):
+            data[f'played_{player.id}'] = 'on'
+            data[f'wins_{player.id}'] = str(team_wins[i])
+            data[f'runouts_{player.id}'] = '0'
+            data[f'eights_{player.id}'] = '0'
+        return self.client.post(f'/score/match/{self.match.pk}/', data, follow=True)
+
+    def test_consistent_sides_no_warning(self):
+        home_user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(home_user)
+        self._post_side(self.home_players, [3, 3, 3, 3, 3])  # 15 wins
+
+        away_user, _ = self.make_captain(self.away_players[0])
+        self.client.force_login(away_user)
+        response = self._post_side(self.away_players, [2, 2, 2, 2, 2])  # 10 wins; 15+10=25 ✓
+
+        message_levels = [m.level_tag for m in response.context['messages']]
+        self.assertIn('success', message_levels)
+        self.assertNotIn('warning', message_levels)
+
+    def test_mismatched_totals_warns_second_captain(self):
+        home_user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(home_user)
+        self._post_side(self.home_players, [3, 3, 3, 3, 3])  # 15 wins
+
+        away_user, _ = self.make_captain(self.away_players[0])
+        self.client.force_login(away_user)
+        response = self._post_side(self.away_players, [3, 3, 3, 3, 3])  # 15; 30 != 25
+
+        warnings = [str(m) for m in response.context['messages'] if m.level_tag == 'warning']
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('do not equal', warnings[0])
+
+    def test_uneven_player_counts_warns(self):
+        home_user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(home_user)
+        self._post_side(self.home_players, [3, 3, 3, 3, 3])
+
+        away_user, _ = self.make_captain(self.away_players[0])
+        self.client.force_login(away_user)
+        player = self.away_players[0]
+        response = self.client.post(f'/score/match/{self.match.pk}/', {
+            f'played_{player.id}': 'on',
+            f'wins_{player.id}': '2',
+            f'runouts_{player.id}': '0',
+            f'eights_{player.id}': '0',
+        }, follow=True)
+
+        warnings = [str(m) for m in response.context['messages'] if m.level_tag == 'warning']
+        self.assertTrue(any('same count' in w for w in warnings))
+
+    def test_one_side_only_no_warning(self):
+        home_user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(home_user)
+        response = self._post_side(self.home_players, [3, 3, 3, 3, 3])
+
+        message_levels = [m.level_tag for m in response.context['messages']]
+        self.assertNotIn('warning', message_levels)
+
+
+class OpponentVisibilityTests(ScoringBase):
+    def test_captain_sees_opponent_rows_read_only(self):
+        result = MatchResult.objects.create(match=self.match)
+        PlayerMatchResult.objects.create(
+            match_result=result, player=self.away_players[0],
+            represented_team=self.away_team, wins=4, runouts=2, eight_on_the_breaks=1,
+        )
+
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        response = self.client.get(f'/score/match/{self.match.pk}/')
+
+        readonly = response.context['readonly_sections']
+        self.assertEqual(len(readonly), 1)
+        self.assertEqual(readonly[0]['team'], self.away_team)
+        self.assertEqual(readonly[0]['rows'][0]['wins'], 4)
+        self.assertEqual(readonly[0]['rows'][0]['runouts'], 2)
+        self.assertEqual(readonly[0]['rows'][0]['eights'], 1)
+        # Editable sections still limited to own team.
+        self.assertEqual(
+            [s['team'].id for s in response.context['sections']],
+            [self.home_team.id],
+        )
+
+    def test_admin_has_no_readonly_sections(self):
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+        response = self.client.get(f'/score/match/{self.match.pk}/')
+        self.assertEqual(response.context['readonly_sections'], [])
+
+
 class MatchListTests(ScoringBase):
     def test_fully_scored_match_not_in_needs_score(self):
         result = MatchResult.objects.create(match=self.match)
@@ -291,6 +386,33 @@ class MatchListTests(ScoringBase):
         self.client.force_login(user)
         response = self.client.get('/score/')
         self.assertEqual(len(response.context['needs_score']), 2)
+
+
+class StaffAutoProvisionTests(ScoringBase):
+    def test_staff_user_gets_admin_profile_automatically(self):
+        staff = User.objects.create_user(
+            username='siteadmin', email='siteadmin@example.com',
+            password='pw12345!', is_staff=True,
+        )
+        self.client.force_login(staff)
+
+        response = self.client.get('/score/')
+        self.assertEqual(response.status_code, 200)
+
+        profile = ScoringProfile.objects.get(user=staff)
+        self.assertEqual(profile.role, ScoringProfile.Role.ADMIN)
+        self.assertTrue(profile.is_approved)
+        self.assertEqual(profile.league, self.league)
+
+    def test_non_staff_user_without_profile_sees_no_account_page(self):
+        plain = User.objects.create_user(
+            username='random@example.com', email='random@example.com', password='pw12345!'
+        )
+        self.client.force_login(plain)
+
+        response = self.client.get('/score/', follow=True)
+        self.assertContains(response, 'No scoring account')
+        self.assertFalse(ScoringProfile.objects.filter(user=plain).exists())
 
 
 class PwaEndpointTests(ScoringBase):

@@ -4,12 +4,26 @@
 {% block header %}Almost there{% endblock %}
 
 {% block content %}
-    <div class="card">
-        <h2>Account awaiting approval</h2>
-        <p class="muted">
-            Your account has been created and is waiting for a league admin to approve it.
-            Once approved, you'll be able to enter scores for
-            {% if profile.team %}<strong>{{ profile.team.name }}</strong>{% else %}your team{% endif %}.
-        </p>
-    </div>
+    {% if profile %}
+        <div class="card">
+            <h2>Account awaiting approval</h2>
+            <p class="muted">
+                Your account has been created and is waiting for a league admin to approve it.
+                Once approved, you'll be able to enter scores for
+                {% if profile.team %}<strong>{{ profile.team.name }}</strong>{% else %}your team{% endif %}.
+            </p>
+        </div>
+    {% else %}
+        <div class="card">
+            <h2>No scoring account</h2>
+            <p class="muted">
+                You're signed in as <strong>{{ request.user.username }}</strong>, but that login
+                doesn't have a scoring account. Sign out below, then create a scoring account
+                with your email.
+            </p>
+            <div style="margin-top:12px;">
+                <a class="btn btn-secondary" href="{% url 'scoring:logout' %}">Sign out</a>
+            </div>
+        </div>
+    {% endif %}
 {% endblock %}
