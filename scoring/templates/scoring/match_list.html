@@ -6,6 +6,18 @@
 {% endblock %}
 
 {% block content %}
+    {% if admin_leagues|length > 1 %}
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+            {% for lg in admin_leagues %}
+                <a href="{% url 'scoring:match_list' %}?league={{ lg.pk }}"
+                   style="padding:8px 14px;border-radius:999px;font-size:0.85rem;font-weight:600;text-decoration:none;
+                          {% if lg.pk == profile.league_id %}background:#0c385f;color:#fff;{% else %}background:#e2e8f0;color:#0c385f;{% endif %}">
+                    {{ lg.name }}
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     {% if not season %}
         <div class="card">
             <p class="muted">No active season right now.</p>

@@ -770,6 +770,111 @@ class AdminViewSwitchTests(ScoringBase):
         self.assertContains(response, 'Use the round-robin sheet')
 
 
+class OnePocketScoringTests(ScoringBase):
+    """Bogies-style entry: admin picks the league, enters a simple two-score
+    result where the winner must have exactly 3."""
+
+    def setUp(self):
+        super().setUp()
+        self.op_league = League.objects.create(
+            name='Bogies East One Pocket League',
+            team_size=1,
+            results_type=League.ResultsType.ONE_POCKET,
+            day_of_week=League.DayOfWeek.SUNDAY,
+        )
+        op_venue = make_venue(self.op_league, name='Bogies East')
+        self.op_home = Team.objects.create(
+            league=self.op_league, venue=op_venue, name='Beau', team_rank=4,
+        )
+        self.op_away = Team.objects.create(
+            league=self.op_league, venue=op_venue, name='Marcus', team_rank=2,
+        )
+        self.op_season = Season.objects.create(
+            league=self.op_league, name='Mid 2026', status=Season.Status.ACTIVE,
+        )
+        self.op_week = Week.objects.create(
+            season=self.op_season, date=timezone.localdate(), number=1,
+        )
+        self.op_match = Match.objects.create(
+            week=self.op_week, home_team=self.op_home, away_team=self.op_away,
+        )
+
+    def _login_admin_on_op_league(self):
+        user, profile = self.make_admin()
+        self.client.force_login(user)
+        # Switch the admin profile onto the one pocket league.
+        self.client.get(f'/score/?league={self.op_league.pk}')
+        return user, profile
+
+    def test_admin_can_switch_league_from_match_list(self):
+        user, profile = self.make_admin()
+        self.client.force_login(user)
+
+        response = self.client.get(f'/score/?league={self.op_league.pk}')
+        self.assertEqual(response.status_code, 200)
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.league, self.op_league)
+        self.assertEqual(len(response.context['needs_score']), 1)
+        self.assertContains(response, 'Beau vs Marcus')
+
+    def test_captain_cannot_switch_league(self):
+        user, profile = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+
+        self.client.get(f'/score/?league={self.op_league.pk}')
+        profile.refresh_from_db()
+        self.assertEqual(profile.league, self.league)
+
+    def test_one_pocket_match_uses_simple_score_form(self):
+        self._login_admin_on_op_league()
+
+        response = self.client.get(f'/score/match/{self.op_match.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'scoring/enter_score_one_pocket.html')
+        self.assertContains(response, 'Beau')
+        self.assertContains(response, 'Marcus')
+
+    def test_valid_score_saves_match_result(self):
+        self._login_admin_on_op_league()
+
+        response = self.client.post(f'/score/match/{self.op_match.pk}/', {
+            'home_score': '3',
+            'away_score': '1',
+        })
+        self.assertRedirects(response, '/score/')
+
+        result = MatchResult.objects.get(match=self.op_match)
+        self.assertEqual(result.home_team_score, 3)
+        self.assertEqual(result.away_team_score, 1)
+
+    def test_no_winner_rejected(self):
+        self._login_admin_on_op_league()
+
+        for home, away in (('0', '0'), ('2', '1'), ('3', '3'), ('4', '1')):
+            response = self.client.post(f'/score/match/{self.op_match.pk}/', {
+                'home_score': home,
+                'away_score': away,
+            })
+            self.assertEqual(response.status_code, 200, f'{home}-{away} should re-render')
+
+        self.assertFalse(MatchResult.objects.filter(match=self.op_match).exists())
+
+    def test_scored_one_pocket_match_leaves_needs_score(self):
+        MatchResult.objects.create(match=self.op_match, home_team_score=3, away_team_score=0)
+
+        self._login_admin_on_op_league()
+        response = self.client.get('/score/')
+        self.assertEqual(response.context['needs_score'], [])
+
+    def test_zero_zero_result_still_needs_score(self):
+        MatchResult.objects.create(match=self.op_match, home_team_score=0, away_team_score=0)
+
+        self._login_admin_on_op_league()
+        response = self.client.get('/score/')
+        self.assertEqual(len(response.context['needs_score']), 1)
+
+
 class PwaEndpointTests(ScoringBase):
     def test_manifest_served(self):
         response = self.client.get('/score/manifest.json')

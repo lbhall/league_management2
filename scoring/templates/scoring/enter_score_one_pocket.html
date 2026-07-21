@@ -1,0 +1,44 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Enter score — One Pocket{% endblock %}
+{% block header %}Enter score{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <div class="match-teams">{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
+        <div class="muted">
+            Week {{ match.week.number }} — {{ match.week.date }}
+            {% if race_label %} — Race {{ race_label }}{% endif %}
+        </div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="card">
+            <div style="display:flex;gap:14px;align-items:end;">
+                <div style="flex:1;">
+                    <label>{{ match.home_team.name }}</label>
+                    <select name="home_score">
+                        {% for n in score_range %}
+                            <option value="{{ n }}" {% if home_score == n %}selected{% endif %}>{{ n }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="padding-bottom:12px;font-weight:700;color:#64748b;">—</div>
+                <div style="flex:1;">
+                    <label>{{ match.away_team.name }}</label>
+                    <select name="away_score">
+                        {% for n in score_range %}
+                            <option value="{{ n }}" {% if away_score == n %}selected{% endif %}>{{ n }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <p class="muted" style="margin-top:10px;">The winner's score is exactly 3.</p>
+        </div>
+
+        <button type="submit" class="btn">Save score</button>
+        <div style="height:10px;"></div>
+        <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
+    </form>
+{% endblock %}

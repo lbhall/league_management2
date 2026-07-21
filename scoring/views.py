@@ -136,6 +136,17 @@ def _match_fully_scored(match):
     result = getattr(match, 'result', None)
     if result is None:
         return False
+
+    league = match.week.season.league
+    if league.results_type == League.ResultsType.ONE_POCKET:
+        # One pocket stores the final score directly; a match is only
+        # complete once someone has reached the winning 3.
+        return (
+            result.home_team_score is not None
+            and result.away_team_score is not None
+            and max(result.home_team_score, result.away_team_score) >= 3
+        )
+
     sides_with_rows = set(
         result.player_results.values_list('represented_team_id', flat=True)
     )
@@ -147,6 +158,21 @@ def match_list(request):
     profile = _get_profile(request)
     if profile is None or not profile.is_approved:
         return redirect('scoring:pending')
+
+    scoreable_types = (League.ResultsType.EIGHT_BALL, League.ResultsType.ONE_POCKET)
+    admin_leagues = []
+    if profile.role == ScoringProfile.Role.ADMIN:
+        admin_leagues = list(
+            League.objects.filter(results_type__in=scoreable_types).order_by('name')
+        )
+        requested_league_id = request.GET.get('league')
+        if requested_league_id:
+            new_league = next(
+                (lg for lg in admin_leagues if str(lg.pk) == requested_league_id), None
+            )
+            if new_league and new_league.pk != profile.league_id:
+                profile.league = new_league
+                profile.save(update_fields=['league'])
 
     today = timezone.localdate()
     season = Season.objects.filter(
@@ -186,6 +212,7 @@ def match_list(request):
         'current_match': current_match,
         'needs_score': needs_score,
         'upcoming': upcoming[:5],
+        'admin_leagues': admin_leagues,
     })
 
 
@@ -199,12 +226,17 @@ def enter_score(request, match_id):
     if match is None:
         return redirect('scoring:match_list')
 
+    league = match.week.season.league
+
+    # One pocket is a single race — just the two final scores.
+    if league.results_type == League.ResultsType.ONE_POCKET:
+        return _enter_score_one_pocket(request, match)
+
     # Captains score game by game (like the paper sheet); the totals grid
     # below stays available for admins doing quick entry.
     if profile.role == ScoringProfile.Role.CAPTAIN:
         return redirect('scoring:games', match.id)
 
-    league = match.week.season.league
     team_size = league.team_size
 
     if profile.role == ScoringProfile.Role.ADMIN:
@@ -368,6 +400,50 @@ def enter_score(request, match_id):
         'sub_slots': (1, 2),
         'team_size': team_size,
         'win_range': range(team_size + 1),
+    })
+
+
+def _enter_score_one_pocket(request, match):
+    from core.views import get_one_pocket_race_label
+
+    result = MatchResult.objects.filter(match=match).first()
+    home_score = result.home_team_score if result else None
+    away_score = result.away_team_score if result else None
+
+    if request.method == 'POST':
+        error = None
+        try:
+            home_score = int(request.POST.get('home_score', '') or 0)
+            away_score = int(request.POST.get('away_score', '') or 0)
+        except ValueError:
+            error = 'Scores must be numbers.'
+
+        if error is None:
+            if home_score < 0 or away_score < 0:
+                error = 'Scores cannot be negative.'
+            elif home_score == 3 and away_score == 3:
+                error = 'Only one player can have the winning score of 3.'
+            elif home_score != 3 and away_score != 3:
+                error = 'One player must have the winning score of 3.'
+            elif max(home_score, away_score) > 3:
+                error = 'The winning score is exactly 3.'
+
+        if error is None:
+            match_result, _ = MatchResult.objects.get_or_create(match=match)
+            match_result.home_team_score = home_score
+            match_result.away_team_score = away_score
+            match_result.save()
+            messages.success(request, 'Score saved.')
+            return redirect('scoring:match_list')
+
+        messages.error(request, error)
+
+    return render(request, 'scoring/enter_score_one_pocket.html', {
+        'match': match,
+        'race_label': get_one_pocket_race_label(match.home_team, match.away_team),
+        'home_score': home_score,
+        'away_score': away_score,
+        'score_range': range(4),
     })
 
 
