@@ -180,6 +180,24 @@ def _match_fully_scored(match):
     return {match.home_team_id, match.away_team_id} <= sides_with_rows
 
 
+def _result_label(match):
+    """Home-away score summary for a scored match."""
+    result = getattr(match, 'result', None)
+    if result is None:
+        return ''
+    league = match.week.season.league
+    if league.results_type in (League.ResultsType.ONE_POCKET, League.ResultsType.DARTS):
+        return f'{result.home_team_score or 0}-{result.away_team_score or 0}'
+    home_wins = 0
+    away_wins = 0
+    for row in result.player_results.all():
+        if row.represented_team_id == match.home_team_id:
+            home_wins += row.wins
+        elif row.represented_team_id == match.away_team_id:
+            away_wins += row.wins
+    return f'{home_wins}-{away_wins}'
+
+
 @login_required(login_url='scoring:login')
 def match_list(request):
     profile = _get_profile(request)
@@ -213,6 +231,7 @@ def match_list(request):
     current_match = None
     needs_score = []
     upcoming = []
+    recent_scored = []
 
     if season:
         matches = (
@@ -229,20 +248,35 @@ def match_list(request):
             if match.week.number is None:
                 continue
             scored = _match_fully_scored(match)
-            if match.week.date <= today and not scored:
+            if scored:
+                recent_scored.append({
+                    'match': match,
+                    'result_label': _result_label(match),
+                })
+            elif match.week.date <= today:
                 needs_score.append(match)
-            elif match.week.date > today:
+            else:
                 upcoming.append(match)
 
         if needs_score:
             current_match = needs_score[0]
+
+        # Upcoming: the next week's full slate, not an arbitrary cap.
+        if upcoming:
+            next_date = upcoming[0].week.date
+            upcoming = [m for m in upcoming if m.week.date == next_date]
+
+        # Scored: most recent first, capped for the phone screen.
+        recent_scored.reverse()
+        recent_scored = recent_scored[:10]
 
     return render(request, 'scoring/match_list.html', {
         'profile': profile,
         'season': season,
         'current_match': current_match,
         'needs_score': needs_score,
-        'upcoming': upcoming[:5],
+        'upcoming': upcoming,
+        'recent_scored': recent_scored,
         'admin_leagues': admin_leagues,
     })
 
