@@ -16,6 +16,25 @@ from .forms import LoginForm, SignupForm
 from .models import GameResult, LineupSlot, ScoringProfile
 
 
+SCOREABLE_TYPES = (
+    League.ResultsType.EIGHT_BALL,
+    League.ResultsType.ONE_POCKET,
+    League.ResultsType.DARTS,
+)
+
+
+def _admin_allowed_leagues(user):
+    """Leagues an admin profile may switch between: superusers get all,
+    staff scoped via LeagueAdminAccess get only their league."""
+    queryset = League.objects.filter(results_type__in=SCOREABLE_TYPES).order_by('name')
+    if user.is_superuser:
+        return list(queryset)
+    access = getattr(user, 'league_admin_access', None)
+    if access is not None:
+        return [league for league in queryset if league.pk == access.league_id]
+    return []
+
+
 def _get_profile(request):
     if not request.user.is_authenticated:
         return None
@@ -25,14 +44,14 @@ def _get_profile(request):
 
     if profile is None and request.user.is_staff:
         # Django admin users get an approved league-admin scoring profile
-        # automatically so they can score any match without a signup step.
-        league = League.objects.filter(
-            results_type=League.ResultsType.EIGHT_BALL
-        ).order_by('id').first()
-        if league:
+        # automatically — superusers on the first league, scoped staff on
+        # the league their LeagueAdminAccess grants. Staff without either
+        # get no profile.
+        allowed = _admin_allowed_leagues(request.user)
+        if allowed:
             profile = ScoringProfile.objects.create(
                 user=request.user,
-                league=league,
+                league=allowed[0],
                 role=ScoringProfile.Role.ADMIN,
                 is_approved=True,
             )
@@ -146,6 +165,14 @@ def _match_fully_scored(match):
             and result.away_team_score is not None
             and max(result.home_team_score, result.away_team_score) >= 3
         )
+    if league.results_type == League.ResultsType.DARTS:
+        # Darts also stores team scores directly; games have been recorded
+        # once the totals are non-zero.
+        return (
+            result.home_team_score is not None
+            and result.away_team_score is not None
+            and result.home_team_score + result.away_team_score > 0
+        )
 
     sides_with_rows = set(
         result.player_results.values_list('represented_team_id', flat=True)
@@ -159,12 +186,10 @@ def match_list(request):
     if profile is None or not profile.is_approved:
         return redirect('scoring:pending')
 
-    scoreable_types = (League.ResultsType.EIGHT_BALL, League.ResultsType.ONE_POCKET)
     admin_leagues = []
     if profile.role == ScoringProfile.Role.ADMIN:
-        admin_leagues = list(
-            League.objects.filter(results_type__in=scoreable_types).order_by('name')
-        )
+        admin_leagues = _admin_allowed_leagues(request.user)
+
         requested_league_id = request.GET.get('league')
         if requested_league_id:
             new_league = next(
@@ -173,6 +198,12 @@ def match_list(request):
             if new_league and new_league.pk != profile.league_id:
                 profile.league = new_league
                 profile.save(update_fields=['league'])
+
+        # If a scoped admin's profile points at a league they no longer
+        # administer, snap it back to one they do.
+        if admin_leagues and profile.league_id not in {lg.pk for lg in admin_leagues}:
+            profile.league = admin_leagues[0]
+            profile.save(update_fields=['league'])
 
     today = timezone.localdate()
     season = Season.objects.filter(
@@ -231,6 +262,10 @@ def enter_score(request, match_id):
     # One pocket is a single race — just the two final scores.
     if league.results_type == League.ResultsType.ONE_POCKET:
         return _enter_score_one_pocket(request, match)
+
+    # Darts: team games won plus per-player darts stats.
+    if league.results_type == League.ResultsType.DARTS:
+        return _enter_score_darts(request, match)
 
     # Captains score game by game (like the paper sheet); the totals grid
     # below stays available for admins doing quick entry.
@@ -444,6 +479,141 @@ def _enter_score_one_pocket(request, match):
         'home_score': home_score,
         'away_score': away_score,
         'score_range': range(4),
+    })
+
+
+DARTS_STAT_FIELDS = (
+    ('hat_tricks', 'HT'),
+    ('three_in_a_beds', '3-Bed'),
+    ('white_horses', 'WH'),
+    ('three_in_the_blacks', '3-Black'),
+)
+
+
+def _enter_score_darts(request, match):
+    league = match.week.season.league
+    team_size = league.team_size
+
+    result = MatchResult.objects.filter(match=match).first()
+    existing = {}
+    if result:
+        for row in result.player_results.select_related('player'):
+            existing[row.player_id] = row
+
+    sub_choices = list(
+        Player.objects.filter(league=league, team__isnull=True).order_by('name')
+    )
+
+    def build_side(team, prefix):
+        roster = list(team.players.order_by('name')) + sub_choices
+        prior_rows = [
+            row for row in existing.values() if row.represented_team_id == team.id
+        ]
+        prior_rows.sort(key=lambda r: r.player.name)
+        slots = []
+        for index in range(team_size):
+            prior = prior_rows[index] if index < len(prior_rows) else None
+            slots.append({
+                'index': index,
+                'prefix': prefix,
+                'selected': prior.player_id if prior else None,
+                'stats': [
+                    {
+                        'field': field,
+                        'label': label,
+                        'value': getattr(prior, field) if prior else 0,
+                    }
+                    for field, label in DARTS_STAT_FIELDS
+                ],
+            })
+        return {'team': team, 'prefix': prefix, 'choices': roster, 'slots': slots}
+
+    sides = [
+        build_side(match.home_team, 'home'),
+        build_side(match.away_team, 'away'),
+    ]
+
+    home_score = result.home_team_score if result and result.home_team_score is not None else 0
+    away_score = result.away_team_score if result and result.away_team_score is not None else 0
+
+    if request.method == 'POST':
+        errors = []
+        try:
+            home_score = int(request.POST.get('home_team_score', '0') or 0)
+            away_score = int(request.POST.get('away_team_score', '0') or 0)
+        except ValueError:
+            errors.append('Games won must be numbers.')
+
+        to_save = []  # (team, player, stats dict)
+        seen_player_ids = set()
+        if not errors:
+            if home_score < 0 or away_score < 0:
+                errors.append('Games won cannot be negative.')
+
+            for side in sides:
+                valid_ids = {p.id for p in side['choices']}
+                for slot in side['slots']:
+                    raw = request.POST.get(f"{side['prefix']}_player_{slot['index']}", '').strip()
+                    if not raw:
+                        continue
+                    try:
+                        player_id = int(raw)
+                    except ValueError:
+                        errors.append('Invalid player selection.')
+                        continue
+                    if player_id not in valid_ids:
+                        errors.append('Selected player is not eligible for this team.')
+                        continue
+                    if player_id in seen_player_ids:
+                        errors.append('A player cannot be selected in more than one slot.')
+                        continue
+                    seen_player_ids.add(player_id)
+
+                    stats = {}
+                    for field, label in DARTS_STAT_FIELDS:
+                        try:
+                            value = int(
+                                request.POST.get(f"{side['prefix']}_{field}_{slot['index']}", '0') or 0
+                            )
+                        except ValueError:
+                            errors.append(f'{label} must be a number.')
+                            value = 0
+                        if value < 0:
+                            errors.append(f'{label} cannot be negative.')
+                        stats[field] = value
+
+                    player = next(p for p in side['choices'] if p.id == player_id)
+                    to_save.append((side['team'], player, stats))
+
+        if not errors:
+            with transaction.atomic():
+                match_result, _ = MatchResult.objects.get_or_create(match=match)
+                saved_ids = []
+                for team, player, stats in to_save:
+                    PlayerMatchResult.objects.update_or_create(
+                        match_result=match_result,
+                        player=player,
+                        defaults={'represented_team': team, **stats},
+                    )
+                    saved_ids.append(player.id)
+                match_result.player_results.exclude(player_id__in=saved_ids).delete()
+
+                match_result.home_team_score = home_score
+                match_result.away_team_score = away_score
+                match_result.save()
+
+            messages.success(request, 'Match score saved.')
+            return redirect('scoring:match_list')
+
+        for error in errors:
+            messages.error(request, error)
+
+    return render(request, 'scoring/enter_score_darts.html', {
+        'match': match,
+        'sides': sides,
+        'home_score': home_score,
+        'away_score': away_score,
+        'stat_fields': DARTS_STAT_FIELDS,
     })
 
 

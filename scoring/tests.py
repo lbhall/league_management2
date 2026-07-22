@@ -77,9 +77,12 @@ class ScoringBase(TestCase):
         )
         return user, profile
 
-    def make_admin(self, approved=True):
+    def make_admin(self, approved=True, superuser=True):
+        # Real league operators are superusers; scoped staff are covered by
+        # LeagueScopingTests.
         user = User.objects.create_user(
-            username='admin@example.com', email='admin@example.com', password='pw12345!'
+            username='admin@example.com', email='admin@example.com', password='pw12345!',
+            is_staff=True, is_superuser=superuser,
         )
         profile = ScoringProfile.objects.create(
             user=user,
@@ -533,10 +536,10 @@ class AddPlayerTests(ScoringBase):
 
 
 class StaffAutoProvisionTests(ScoringBase):
-    def test_staff_user_gets_admin_profile_automatically(self):
+    def test_superuser_gets_admin_profile_automatically(self):
         staff = User.objects.create_user(
             username='siteadmin', email='siteadmin@example.com',
-            password='pw12345!', is_staff=True,
+            password='pw12345!', is_staff=True, is_superuser=True,
         )
         self.client.force_login(staff)
 
@@ -557,6 +560,193 @@ class StaffAutoProvisionTests(ScoringBase):
         response = self.client.get('/score/', follow=True)
         self.assertContains(response, 'No scoring account')
         self.assertFalse(ScoringProfile.objects.filter(user=plain).exists())
+
+
+class LeagueScopingTests(ScoringBase):
+    """Admin access in the score app must honor LeagueAdminAccess."""
+
+    def setUp(self):
+        super().setUp()
+        self.darts_league = League.objects.create(
+            name='COED Dart League',
+            team_size=2,
+            results_type=League.ResultsType.DARTS,
+            day_of_week=League.DayOfWeek.FRIDAY,
+        )
+
+    def _make_scoped_staff(self, league):
+        from core.models import LeagueAdminAccess
+        user = User.objects.create_user(
+            username='scoped', email='scoped@example.com',
+            password='pw12345!', is_staff=True,
+        )
+        LeagueAdminAccess.objects.create(user=user, league=league)
+        return user
+
+    def test_superuser_sees_all_league_pills(self):
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+
+        response = self.client.get('/score/')
+        league_ids = {lg.pk for lg in response.context['admin_leagues']}
+        self.assertIn(self.league.pk, league_ids)
+        self.assertIn(self.darts_league.pk, league_ids)
+
+    def test_scoped_staff_provisioned_onto_their_league(self):
+        user = self._make_scoped_staff(self.darts_league)
+        self.client.force_login(user)
+
+        response = self.client.get('/score/')
+        self.assertEqual(response.status_code, 200)
+
+        profile = ScoringProfile.objects.get(user=user)
+        self.assertEqual(profile.league, self.darts_league)
+        self.assertEqual(
+            [lg.pk for lg in response.context['admin_leagues']],
+            [self.darts_league.pk],
+        )
+
+    def test_scoped_staff_cannot_switch_to_other_league(self):
+        user = self._make_scoped_staff(self.darts_league)
+        self.client.force_login(user)
+        self.client.get('/score/')  # provision
+
+        self.client.get(f'/score/?league={self.league.pk}')
+        profile = ScoringProfile.objects.get(user=user)
+        self.assertEqual(profile.league, self.darts_league)
+
+    def test_scoped_staff_cannot_score_other_league_match_directly(self):
+        user = self._make_scoped_staff(self.darts_league)
+        self.client.force_login(user)
+        self.client.get('/score/')  # provision
+
+        # self.match belongs to the EMC 8-ball league.
+        response = self.client.get(f'/score/match/{self.match.pk}/')
+        self.assertRedirects(response, '/score/')
+
+    def test_staff_without_access_gets_no_profile(self):
+        user = User.objects.create_user(
+            username='unscoped', email='unscoped@example.com',
+            password='pw12345!', is_staff=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get('/score/', follow=True)
+        self.assertContains(response, 'No scoring account')
+        self.assertFalse(ScoringProfile.objects.filter(user=user).exists())
+
+
+class DartsScoringTests(ScoringBase):
+    """Darts entry: team games won plus per-player HT/3-Bed/WH/3-Black."""
+
+    def setUp(self):
+        super().setUp()
+        self.darts_league = League.objects.create(
+            name='COED Dart League',
+            team_size=2,
+            results_type=League.ResultsType.DARTS,
+            day_of_week=League.DayOfWeek.FRIDAY,
+        )
+        venue = make_venue(self.darts_league, name='Dart Bar')
+        self.d_home = Team.objects.create(league=self.darts_league, venue=venue, name='Bullseyes')
+        self.d_away = Team.objects.create(league=self.darts_league, venue=venue, name='Triples')
+        self.d_home_players = [
+            Player.objects.create(league=self.darts_league, team=self.d_home, name=f'DH{i}')
+            for i in (1, 2)
+        ]
+        self.d_away_players = [
+            Player.objects.create(league=self.darts_league, team=self.d_away, name=f'DA{i}')
+            for i in (1, 2)
+        ]
+        self.d_season = Season.objects.create(
+            league=self.darts_league, name='D1', status=Season.Status.ACTIVE,
+        )
+        self.d_week = Week.objects.create(
+            season=self.d_season, date=timezone.localdate(), number=1,
+        )
+        self.d_match = Match.objects.create(
+            week=self.d_week, home_team=self.d_home, away_team=self.d_away,
+        )
+
+    def _login_admin_on_darts(self):
+        user, profile = self.make_admin()
+        self.client.force_login(user)
+        self.client.get(f'/score/?league={self.darts_league.pk}')
+        return user, profile
+
+    def test_darts_match_uses_darts_form(self):
+        self._login_admin_on_darts()
+
+        response = self.client.get(f'/score/match/{self.d_match.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'scoring/enter_score_darts.html')
+        self.assertContains(response, 'Bullseyes')
+        self.assertContains(response, 'DH1')
+
+    def test_save_scores_and_player_stats(self):
+        self._login_admin_on_darts()
+
+        response = self.client.post(f'/score/match/{self.d_match.pk}/', {
+            'home_team_score': '6',
+            'away_team_score': '3',
+            'home_player_0': str(self.d_home_players[0].id),
+            'home_hat_tricks_0': '2',
+            'home_three_in_a_beds_0': '1',
+            'home_white_horses_0': '0',
+            'home_three_in_the_blacks_0': '1',
+            'home_player_1': str(self.d_home_players[1].id),
+            'away_player_0': str(self.d_away_players[0].id),
+            'away_white_horses_0': '1',
+        })
+        self.assertRedirects(response, '/score/')
+
+        result = MatchResult.objects.get(match=self.d_match)
+        self.assertEqual(result.home_team_score, 6)
+        self.assertEqual(result.away_team_score, 3)
+
+        top = result.player_results.get(player=self.d_home_players[0])
+        self.assertEqual(top.hat_tricks, 2)
+        self.assertEqual(top.three_in_a_beds, 1)
+        self.assertEqual(top.three_in_the_blacks, 1)
+
+        away = result.player_results.get(player=self.d_away_players[0])
+        self.assertEqual(away.white_horses, 1)
+        # Only three slots were filled.
+        self.assertEqual(result.player_results.count(), 3)
+
+    def test_duplicate_player_rejected(self):
+        self._login_admin_on_darts()
+
+        response = self.client.post(f'/score/match/{self.d_match.pk}/', {
+            'home_team_score': '5',
+            'away_team_score': '4',
+            'home_player_0': str(self.d_home_players[0].id),
+            'home_player_1': str(self.d_home_players[0].id),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(MatchResult.objects.filter(match=self.d_match).exists())
+
+    def test_negative_score_rejected(self):
+        self._login_admin_on_darts()
+
+        response = self.client.post(f'/score/match/{self.d_match.pk}/', {
+            'home_team_score': '-1',
+            'away_team_score': '4',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(MatchResult.objects.filter(match=self.d_match).exists())
+
+    def test_scored_darts_match_leaves_needs_score(self):
+        MatchResult.objects.create(match=self.d_match, home_team_score=6, away_team_score=3)
+
+        self._login_admin_on_darts()
+        response = self.client.get('/score/')
+        self.assertEqual(response.context['needs_score'], [])
+
+    def test_unscored_darts_match_needs_score(self):
+        self._login_admin_on_darts()
+        response = self.client.get('/score/')
+        self.assertEqual(len(response.context['needs_score']), 1)
 
 
 class GameFlowTests(ScoringBase):

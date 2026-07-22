@@ -55,10 +55,18 @@ class ScoringProfile(models.Model):
         """Whether this profile may enter scores for the given match."""
         if not self.is_approved:
             return False
-        if match.week.season.league_id != self.league_id:
-            return False
+        match_league_id = match.week.season.league_id
         if self.role == self.Role.ADMIN:
-            return True
+            if self.user.is_superuser:
+                return True
+            # Staff scoped via LeagueAdminAccess may only score that league;
+            # otherwise fall back to the profile's own league.
+            access = getattr(self.user, 'league_admin_access', None)
+            if access is not None:
+                return access.league_id == match_league_id
+            return self.league_id == match_league_id
+        if match_league_id != self.league_id:
+            return False
         team = self.team
         if team is None:
             return False

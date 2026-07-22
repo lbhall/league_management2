@@ -1,0 +1,61 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Enter score — Darts{% endblock %}
+{% block header %}Enter score{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <div class="match-teams">{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
+        <div class="muted">Week {{ match.week.number }} — {{ match.week.date }}{% if match.location %} — {{ match.location }}{% endif %}</div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="card">
+            <h2>Games won</h2>
+            <div style="display:flex;gap:14px;align-items:end;">
+                <div style="flex:1;">
+                    <label>{{ match.home_team.name }}</label>
+                    <input type="number" name="home_team_score" value="{{ home_score }}" min="0" inputmode="numeric">
+                </div>
+                <div style="padding-bottom:12px;font-weight:700;color:#64748b;">—</div>
+                <div style="flex:1;">
+                    <label>{{ match.away_team.name }}</label>
+                    <input type="number" name="away_team_score" value="{{ away_score }}" min="0" inputmode="numeric">
+                </div>
+            </div>
+        </div>
+
+        {% for side in sides %}
+            <div class="card">
+                <h2>{{ side.team.name }} players</h2>
+                {% for slot in side.slots %}
+                    <div style="padding:10px 0;{% if not forloop.first %}border-top:1px solid #e2e8f0;{% endif %}">
+                        <select name="{{ side.prefix }}_player_{{ slot.index }}">
+                            <option value="">— Select player —</option>
+                            {% for player in side.choices %}
+                                <option value="{{ player.id }}" {% if slot.selected == player.id %}selected{% endif %}>
+                                    {{ player.name }}{% if not player.team_id %} (sub){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div style="display:flex;gap:8px;margin-top:8px;">
+                            {% for stat in slot.stats %}
+                                <div style="flex:1;">
+                                    <label style="margin:0 0 4px;font-size:0.75rem;">{{ stat.label }}</label>
+                                    <input type="number" name="{{ side.prefix }}_{{ stat.field }}_{{ slot.index }}"
+                                           value="{{ stat.value }}" min="0" inputmode="numeric">
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+
+        <button type="submit" class="btn">Save score</button>
+        <div style="height:10px;"></div>
+        <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
+    </form>
+{% endblock %}
