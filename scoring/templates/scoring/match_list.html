@@ -55,5 +55,23 @@
                 {% endfor %}
             </div>
         {% endif %}
+
+        {% if recent_scored %}
+            <div class="card">
+                <h2>Scored</h2>
+                {% for entry in recent_scored %}
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0; {% if not forloop.last %}border-bottom:1px solid #e2e8f0;{% endif %}">
+                        <div>
+                            <div>{{ entry.match.home_team.name }} vs {{ entry.match.away_team.name }}</div>
+                            <div class="muted">Week {{ entry.match.week.number }} — {{ entry.match.week.date }}</div>
+                        </div>
+                        <a href="{% url 'scoring:enter_score' entry.match.id %}"
+                           style="font-weight:700;text-decoration:none;">
+                            {{ entry.result_label }}
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
     {% endif %}
 {% endblock %}

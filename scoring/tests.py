@@ -1064,6 +1064,41 @@ class OnePocketScoringTests(ScoringBase):
         response = self.client.get('/score/')
         self.assertEqual(len(response.context['needs_score']), 1)
 
+    def test_upcoming_shows_full_next_week(self):
+        from datetime import timedelta
+        # Next week has 6 matches — more than the old 5-match cap.
+        next_week = Week.objects.create(
+            season=self.op_season,
+            date=timezone.localdate() + timedelta(days=5),
+            number=2,
+        )
+        venue = self.op_home.venue
+        teams = [
+            Team.objects.create(
+                league=self.op_league, venue=venue, name=f'P{i}', team_rank=3,
+            )
+            for i in range(12)
+        ]
+        for i in range(0, 12, 2):
+            Match.objects.create(week=next_week, home_team=teams[i], away_team=teams[i + 1])
+
+        self._login_admin_on_op_league()
+        response = self.client.get('/score/')
+        self.assertEqual(len(response.context['upcoming']), 6)
+
+    def test_scored_matches_listed_with_result(self):
+        MatchResult.objects.create(match=self.op_match, home_team_score=3, away_team_score=1)
+
+        self._login_admin_on_op_league()
+        response = self.client.get('/score/')
+
+        scored = response.context['recent_scored']
+        self.assertEqual(len(scored), 1)
+        self.assertEqual(scored[0]['match'], self.op_match)
+        self.assertEqual(scored[0]['result_label'], '3-1')
+        # Scored matches are shown on the page with their result.
+        self.assertContains(response, '3-1')
+
 
 class PwaEndpointTests(ScoringBase):
     def test_manifest_served(self):
