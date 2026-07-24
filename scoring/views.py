@@ -270,6 +270,49 @@ def match_list(request):
         recent_scored.reverse()
         recent_scored = recent_scored[:10]
 
+    # Player-vs-player match finder for one pocket admins: finds every match
+    # between the two players across all seasons, whichever order is entered.
+    match_search = None
+    if (
+        profile.role == ScoringProfile.Role.ADMIN
+        and profile.league.results_type == League.ResultsType.ONE_POCKET
+    ):
+        try:
+            p1 = int(request.GET.get('p1', ''))
+            p2 = int(request.GET.get('p2', ''))
+        except ValueError:
+            p1 = p2 = None
+
+        results = []
+        if p1 and p2:
+            found = (
+                Match.objects.filter(week__season__league=profile.league)
+                .filter(
+                    Q(home_team_id=p1, away_team_id=p2)
+                    | Q(home_team_id=p2, away_team_id=p1)
+                )
+                .select_related('home_team', 'away_team', 'week__season', 'result')
+                .order_by('-week__date')
+            )
+            results = [
+                {
+                    'match': m,
+                    'result_label': _result_label(m),
+                    'season_name': m.week.season.name,
+                }
+                for m in found
+            ]
+
+        match_search = {
+            'teams': list(
+                profile.league.teams.exclude(name__iexact='BYE').order_by('name')
+            ),
+            'p1': p1,
+            'p2': p2,
+            'results': results,
+            'searched': bool(p1 and p2),
+        }
+
     return render(request, 'scoring/match_list.html', {
         'profile': profile,
         'season': season,
@@ -278,6 +321,7 @@ def match_list(request):
         'upcoming': upcoming,
         'recent_scored': recent_scored,
         'admin_leagues': admin_leagues,
+        'match_search': match_search,
     })
 
 

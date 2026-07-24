@@ -960,6 +960,122 @@ class AdminViewSwitchTests(ScoringBase):
         self.assertContains(response, 'Use the round-robin sheet')
 
 
+class HomeLinkTests(ScoringBase):
+    def test_match_list_links_to_selected_league_site(self):
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+
+        response = self.client.get('/score/')
+        self.assertContains(response, f'href="/?league={self.league.pk}"')
+
+    def test_captain_link_uses_their_league(self):
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+
+        response = self.client.get('/score/')
+        self.assertContains(response, f'href="/?league={self.league.pk}"')
+
+
+class MatchSearchTests(ScoringBase):
+    """One pocket admins can find any match between two players, either order."""
+
+    def setUp(self):
+        super().setUp()
+        self.op_league = League.objects.create(
+            name='Bogies East One Pocket League',
+            team_size=1,
+            results_type=League.ResultsType.ONE_POCKET,
+            day_of_week=League.DayOfWeek.SUNDAY,
+        )
+        venue = make_venue(self.op_league, name='Bogies East')
+        self.beau = Team.objects.create(
+            league=self.op_league, venue=venue, name='Beau', team_rank=4,
+        )
+        self.marcus = Team.objects.create(
+            league=self.op_league, venue=venue, name='Marcus', team_rank=2,
+        )
+        self.danni = Team.objects.create(
+            league=self.op_league, venue=venue, name='Danni', team_rank=1,
+        )
+        self.op_season = Season.objects.create(
+            league=self.op_league, name='Mid 2026', status=Season.Status.ACTIVE,
+        )
+        self.op_week = Week.objects.create(
+            season=self.op_season, date=timezone.localdate(), number=1,
+        )
+        self.op_match = Match.objects.create(
+            week=self.op_week, home_team=self.beau, away_team=self.marcus,
+        )
+
+    def _login(self):
+        user, profile = self.make_admin()
+        self.client.force_login(user)
+        self.client.get(f'/score/?league={self.op_league.pk}')
+        return user, profile
+
+    def test_search_finds_match_in_entered_order(self):
+        self._login()
+        response = self.client.get(f'/score/?p1={self.beau.pk}&p2={self.marcus.pk}')
+
+        results = response.context['match_search']['results']
+        self.assertEqual([r['match'] for r in results], [self.op_match])
+
+    def test_search_finds_match_in_reverse_order(self):
+        self._login()
+        response = self.client.get(f'/score/?p1={self.marcus.pk}&p2={self.beau.pk}')
+
+        results = response.context['match_search']['results']
+        self.assertEqual([r['match'] for r in results], [self.op_match])
+
+    def test_search_spans_all_seasons(self):
+        old_season = Season.objects.create(
+            league=self.op_league, name='Early 2026', status=Season.Status.WORKING,
+        )
+        old_week = Week.objects.create(
+            season=old_season, date='2026-02-01', number=1,
+        )
+        old_match = Match.objects.create(
+            week=old_week, home_team=self.marcus, away_team=self.beau,
+        )
+
+        self._login()
+        response = self.client.get(f'/score/?p1={self.beau.pk}&p2={self.marcus.pk}')
+
+        results = [r['match'] for r in response.context['match_search']['results']]
+        self.assertIn(self.op_match, results)
+        self.assertIn(old_match, results)
+
+    def test_search_shows_result_label_for_scored_match(self):
+        MatchResult.objects.create(match=self.op_match, home_team_score=3, away_team_score=1)
+
+        self._login()
+        response = self.client.get(f'/score/?p1={self.beau.pk}&p2={self.marcus.pk}')
+
+        results = response.context['match_search']['results']
+        self.assertEqual(results[0]['result_label'], '3-1')
+
+    def test_no_match_between_players_returns_empty(self):
+        self._login()
+        response = self.client.get(f'/score/?p1={self.beau.pk}&p2={self.danni.pk}')
+
+        self.assertEqual(response.context['match_search']['results'], [])
+        self.assertTrue(response.context['match_search']['searched'])
+
+    def test_search_absent_for_eight_ball_league(self):
+        user, _ = self.make_admin()  # profile starts on the 8-ball league
+        self.client.force_login(user)
+
+        response = self.client.get('/score/')
+        self.assertIsNone(response.context['match_search'])
+
+    def test_search_absent_for_captains(self):
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+
+        response = self.client.get('/score/')
+        self.assertIsNone(response.context['match_search'])
+
+
 class OnePocketScoringTests(ScoringBase):
     """Bogies-style entry: admin picks the league, enters a simple two-score
     result where the winner must have exactly 3."""
