@@ -1,0 +1,11 @@
+[run]
+source = core,scheduling,content,results,scoring,finance,competition,tournaments
+omit =
+    */migrations/*
+    */tests.py
+    */tests/*
+    */__init__.py
+    */apps.py
+
+[report]
+show_missing = True
