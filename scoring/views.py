@@ -906,6 +906,7 @@ def games(request, match_id):
     }
 
     allow_clear = league.allow_game_winner_clear
+    show_breaks = league.show_breaks
 
     if request.method == 'POST':
         with transaction.atomic():
@@ -921,6 +922,11 @@ def games(request, match_id):
                                 match=match, round_number=rnd, home_position=pos,
                             ).delete()
                         continue
+                    eight_on_break = request.POST.get(f'eb_{rnd}_{pos}') == 'on'
+                    # Only the side that broke can win on the break, so ignore an
+                    # 8-on-break flag unless the winner is the breaker.
+                    if show_breaks and winner != GameResult.breaker_for(rnd, pos, team_size):
+                        eight_on_break = False
                     GameResult.objects.update_or_create(
                         match=match,
                         round_number=rnd,
@@ -928,7 +934,7 @@ def games(request, match_id):
                         defaults={
                             'winner': winner,
                             'runout': request.POST.get(f'ro_{rnd}_{pos}') == 'on',
-                            'eight_on_break': request.POST.get(f'eb_{rnd}_{pos}') == 'on',
+                            'eight_on_break': eight_on_break,
                         },
                     )
         completed = _recompute_from_games(match)
@@ -958,6 +964,7 @@ def games(request, match_id):
                     home_score += 1
                 elif game.winner == GameResult.Winner.AWAY:
                     away_score += 1
+            breaker = GameResult.breaker_for(rnd, pos, team_size)
             game_rows.append({
                 'home_position': pos,
                 'away_position': away_pos,
@@ -967,6 +974,9 @@ def games(request, match_id):
                 'winner': game.winner if game else '',
                 'runout': game.runout if game else False,
                 'eight_on_break': game.eight_on_break if game else False,
+                'breaker': breaker,
+                'home_breaks': breaker == GameResult.Winner.HOME,
+                'away_breaks': breaker == GameResult.Winner.AWAY,
             })
         rounds.append({'number': rnd, 'games': game_rows})
 
@@ -980,6 +990,7 @@ def games(request, match_id):
         'show_current_score': league.show_current_score,
         'current_home_score': home_score,
         'current_away_score': away_score,
+        'show_breaks': show_breaks,
     })
 
 

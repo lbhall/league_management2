@@ -46,6 +46,14 @@ class League(models.Model):
             'by each side) while games are being entered.'
         ),
     )
+    show_breaks = models.BooleanField(
+        default=False,
+        help_text=(
+            'When on, the scoring app marks whose break each game is (home breaks '
+            'odd rounds, away even rounds; the final round of an odd roster splits '
+            'by position) and only allows "8 on the break" for the breaking side.'
+        ),
+    )
 
     fee_per_player = models.DecimalField(
         max_digits=6,

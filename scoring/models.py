@@ -146,6 +146,23 @@ class GameResult(models.Model):
     def away_position_for(home_position, round_number, team_size):
         return ((home_position - 1 + round_number - 1) % team_size) + 1
 
+    @staticmethod
+    def breaker_for(round_number, home_position, team_size):
+        """Which side breaks a given game. Home breaks odd rounds, away breaks
+        even rounds; in the final round of an odd-sized roster the break splits
+        by position (home on odd, away on even) so the total stays balanced.
+        For a 5-player match: R1/R3 home, R2/R4 away, R5 home on 1/3/5 & away on
+        2/4."""
+        if round_number == team_size and team_size % 2 == 1:
+            return (
+                GameResult.Winner.HOME if home_position % 2 == 1
+                else GameResult.Winner.AWAY
+            )
+        return (
+            GameResult.Winner.HOME if round_number % 2 == 1
+            else GameResult.Winner.AWAY
+        )
+
     @property
     def away_position(self):
         team_size = self.match.week.season.league.team_size

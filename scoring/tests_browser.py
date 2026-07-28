@@ -23,7 +23,7 @@ from .models import LineupSlot, ScoringProfile
 from .tests import make_venue
 
 try:
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import expect, sync_playwright
     _PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     _PLAYWRIGHT_AVAILABLE = False
@@ -188,5 +188,22 @@ class WinnerToggleBrowserTests(StaticLiveServerTestCase):
             )
             # ...and the newly added player is now selectable.
             self.assertIn('Fresh Sub', page.content())
+        finally:
+            context.close()
+
+    def test_eight_on_break_enabled_only_for_the_breaker(self):
+        self.league.show_breaks = True
+        self.league.save(update_fields=['show_breaks'])
+        context, page = self._new_logged_in_page()
+        try:
+            page.goto(f'{self.live_server_url}/score/match/{self.match.pk}/games/')
+            eb = page.locator('input[name="eb_1_1"]')
+
+            # Round 1 -> home breaks. No winner picked yet, so it's disabled.
+            expect(eb).to_be_disabled()
+            page.locator('label:has(input[name="winner_1_1"][value="home"])').click()
+            expect(eb).to_be_enabled()   # breaker won -> can mark 8-on-break
+            page.locator('label:has(input[name="winner_1_1"][value="away"])').click()
+            expect(eb).to_be_disabled()  # non-breaker won -> not allowed
         finally:
             context.close()
