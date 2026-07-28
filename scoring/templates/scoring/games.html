@@ -109,17 +109,26 @@
         <script>
             // Make the winner pills deselectable: tapping the player already
             // marked as the winner clears that game's selection.
-            document.querySelectorAll('.winner-toggle input[type="radio"]').forEach(function (radio) {
-                radio.addEventListener('mousedown', function () {
-                    this._wasChecked = this.checked;
+            //
+            // The radios are display:none and driven by tapping the label/span,
+            // so mousedown never fires on the input — we can't capture the prior
+            // checked state that way. Instead track it in JS: seed from the
+            // server-rendered state, and refresh after each click.
+            (function () {
+                var radios = document.querySelectorAll('.winner-toggle input[type="radio"]');
+                radios.forEach(function (r) { r._wasChecked = r.checked; });
+                radios.forEach(function (radio) {
+                    radio.addEventListener('click', function () {
+                        if (radio._wasChecked) {
+                            radio.checked = false;
+                        }
+                        // Refresh the whole group's remembered state.
+                        document.querySelectorAll(
+                            '.winner-toggle input[name="' + radio.name + '"]'
+                        ).forEach(function (r) { r._wasChecked = r.checked; });
+                    });
                 });
-                radio.addEventListener('click', function () {
-                    if (this._wasChecked) {
-                        this.checked = false;
-                    }
-                    this._wasChecked = false;
-                });
-            });
+            })();
         </script>
     {% endif %}
 
