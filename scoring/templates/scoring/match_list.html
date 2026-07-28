@@ -63,21 +63,58 @@
         {% endif %}
 
         {% if recent_scored %}
+            <style>
+                .scored-row.scored-hidden { display: none; }
+                .scored-more {
+                    display: flex; align-items: center; justify-content: center; gap: 6px;
+                    width: 100%; margin-top: 10px; padding: 10px;
+                    background: none; border: none; border-top: 1px solid #e2e8f0;
+                    color: #0c385f; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+                }
+            </style>
             <div class="card">
                 <h2>Scored</h2>
-                {% for entry in recent_scored %}
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0; {% if not forloop.last %}border-bottom:1px solid #e2e8f0;{% endif %}">
-                        <div>
-                            <div>{{ entry.match.home_team.name }} vs {{ entry.match.away_team.name }}</div>
-                            <div class="muted">Week {{ entry.match.week.number }} — {{ entry.match.week.date }}</div>
+                <div id="scored-list">
+                    {% for entry in recent_scored %}
+                        <div class="scored-row{% if forloop.counter0 >= 10 %} scored-hidden{% endif %}"
+                             style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;{% if not forloop.first %}border-top:1px solid #e2e8f0;{% endif %}">
+                            <div>
+                                <div>{{ entry.match.home_team.name }} vs {{ entry.match.away_team.name }}</div>
+                                <div class="muted">Week {{ entry.match.week.number }} — {{ entry.match.week.date }}</div>
+                            </div>
+                            <a href="{% url 'scoring:enter_score' entry.match.id %}"
+                               style="font-weight:700;text-decoration:none;">
+                                {{ entry.result_label }}
+                            </a>
                         </div>
-                        <a href="{% url 'scoring:enter_score' entry.match.id %}"
-                           style="font-weight:700;text-decoration:none;">
-                            {{ entry.result_label }}
-                        </a>
-                    </div>
-                {% endfor %}
+                    {% endfor %}
+                </div>
+                {% if recent_scored|length > 10 %}
+                    <button type="button" id="scored-more" class="scored-more" aria-label="Show more scored matches">
+                        Show more
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                {% endif %}
             </div>
+            <script>
+                (function () {
+                    var btn = document.getElementById('scored-more');
+                    if (!btn) return;
+                    var list = document.getElementById('scored-list');
+                    btn.addEventListener('click', function () {
+                        var hidden = list.querySelectorAll('.scored-row.scored-hidden');
+                        for (var i = 0; i < 9 && i < hidden.length; i++) {
+                            hidden[i].classList.remove('scored-hidden');
+                        }
+                        if (list.querySelectorAll('.scored-row.scored-hidden').length === 0) {
+                            btn.parentNode.removeChild(btn);
+                        }
+                    });
+                })();
+            </script>
         {% endif %}
     {% endif %}
 
