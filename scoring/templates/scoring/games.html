@@ -62,7 +62,7 @@
                 {% for game in round.games %}
                     <div class="game-row">
                         <div class="muted" style="font-size:0.8rem;">
-                            {{ game.home_position }} vs {{ game.away_letter }} — tap the winner
+                            {{ game.home_position }} vs {{ game.away_letter }} — tap the winner{% if allow_clear_winner %} (tap again to clear){% endif %}
                         </div>
                         <div class="winner-toggle">
                             <label>
@@ -95,4 +95,22 @@
         <div style="height:10px;"></div>
         <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
     </form>
+
+    {% if allow_clear_winner %}
+        <script>
+            // Make the winner pills deselectable: tapping the player already
+            // marked as the winner clears that game's selection.
+            document.querySelectorAll('.winner-toggle input[type="radio"]').forEach(function (radio) {
+                radio.addEventListener('mousedown', function () {
+                    this._wasChecked = this.checked;
+                });
+                radio.addEventListener('click', function () {
+                    if (this._wasChecked) {
+                        this.checked = false;
+                    }
+                    this._wasChecked = false;
+                });
+            });
+        </script>
+    {% endif %}
 {% endblock %}

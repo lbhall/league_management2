@@ -905,12 +905,21 @@ def games(request, match_id):
         for g in GameResult.objects.filter(match=match)
     }
 
+    allow_clear = league.allow_game_winner_clear
+
     if request.method == 'POST':
         with transaction.atomic():
             for rnd in range(1, team_size + 1):
                 for pos in range(1, team_size + 1):
                     winner = request.POST.get(f'winner_{rnd}_{pos}', '')
                     if winner not in (GameResult.Winner.HOME, GameResult.Winner.AWAY):
+                        # No winner selected. When the league allows it, a
+                        # deselected winner clears any previously recorded result
+                        # for that game; otherwise the game is left untouched.
+                        if allow_clear:
+                            GameResult.objects.filter(
+                                match=match, round_number=rnd, home_position=pos,
+                            ).delete()
                         continue
                     GameResult.objects.update_or_create(
                         match=match,
@@ -923,6 +932,11 @@ def games(request, match_id):
                         },
                     )
         completed = _recompute_from_games(match)
+        if not completed and allow_clear:
+            # A cleared game dropped the match below complete; discard any
+            # totals that were rolled up on a previous full save so it reverts
+            # to "needs a score".
+            MatchResult.objects.filter(match=match).delete()
         if completed:
             messages.success(request, 'All games recorded — match totals saved.')
             return redirect('scoring:match_list')
@@ -956,6 +970,7 @@ def games(request, match_id):
         'rounds': rounds,
         'total_games': team_size * team_size,
         'games_entered': games_entered,
+        'allow_clear_winner': allow_clear,
     })
 
 

@@ -920,6 +920,74 @@ class GameFlowTests(ScoringBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(LineupSlot.objects.filter(match=self.match).count(), 0)
 
+    def _post_games_with_one_deselected(self):
+        """Post every game as a home win except round 1 / position 1, whose
+        winner is omitted (a deselected pill)."""
+        data = {}
+        for rnd in range(1, 6):
+            for pos in range(1, 6):
+                if (rnd, pos) == (1, 1):
+                    continue
+                data[f'winner_{rnd}_{pos}'] = 'home'
+        return self.client.post(f'/score/match/{self.match.pk}/games/', data)
+
+    def test_deselected_winner_clears_game_when_league_allows(self):
+        from scoring.models import GameResult
+        self.league.allow_game_winner_clear = True
+        self.league.save(update_fields=['allow_game_winner_clear'])
+
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        self._set_lineups()
+        self._post_all_games('home')
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 25)
+        self.assertTrue(MatchResult.objects.filter(match=self.match).exists())
+
+        self._post_games_with_one_deselected()
+
+        # The deselected game is cleared...
+        self.assertFalse(
+            GameResult.objects.filter(
+                match=self.match, round_number=1, home_position=1
+            ).exists()
+        )
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 24)
+        # ...and the now-incomplete match drops its rolled-up totals.
+        self.assertFalse(MatchResult.objects.filter(match=self.match).exists())
+
+    def test_deselected_winner_left_untouched_when_league_disallows(self):
+        from scoring.models import GameResult
+        # The default league has allow_game_winner_clear = False.
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        self._set_lineups()
+        self._post_all_games('home')
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 25)
+
+        self._post_games_with_one_deselected()
+
+        # Old behavior: an omitted winner leaves the recorded game in place.
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 25)
+        self.assertTrue(
+            GameResult.objects.filter(
+                match=self.match, round_number=1, home_position=1
+            ).exists()
+        )
+        self.assertTrue(MatchResult.objects.filter(match=self.match).exists())
+
+    def test_games_page_shows_clear_hint_only_when_enabled(self):
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        self._set_lineups()
+
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertNotContains(response, 'tap again to clear')
+
+        self.league.allow_game_winner_clear = True
+        self.league.save(update_fields=['allow_game_winner_clear'])
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertContains(response, 'tap again to clear')
+
 
 class AdminViewSwitchTests(ScoringBase):
     def _set_lineups(self):
