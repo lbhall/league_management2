@@ -39,6 +39,13 @@ class League(models.Model):
             'app deselects it and clears that game result.'
         ),
     )
+    show_current_score = models.BooleanField(
+        default=False,
+        help_text=(
+            'When on, the scoring app shows the running match score (games won '
+            'by each side) while games are being entered.'
+        ),
+    )
 
     fee_per_player = models.DecimalField(
         max_digits=6,

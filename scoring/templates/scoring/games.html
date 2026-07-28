@@ -9,6 +9,15 @@
         <div class="muted">
             Week {{ match.week.number }} — {{ match.week.date }}{% if match.location %} — {{ match.location }}{% endif %}
         </div>
+        {% if show_current_score %}
+            <div id="current-score" style="margin-top:10px;font-size:1.15rem;font-weight:700;color:#0c385f;">
+                {{ match.home_team.name }}
+                <span id="cur-home">{{ current_home_score }}</span>
+                &ndash;
+                <span id="cur-away">{{ current_away_score }}</span>
+                {{ match.away_team.name }}
+            </div>
+        {% endif %}
         <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
             <span class="muted">{{ games_entered }} of {{ total_games }} games recorded</span>
             <a href="{% url 'scoring:lineup' match.id %}" style="font-size:0.85rem;">Edit lineup</a>
@@ -111,6 +120,28 @@
                     this._wasChecked = false;
                 });
             });
+        </script>
+    {% endif %}
+
+    {% if show_current_score %}
+        <script>
+            // Keep the running match score in sync as winners are tapped
+            // (deferred so it reads the final state after any deselect handler).
+            (function () {
+                var homeEl = document.getElementById('cur-home');
+                var awayEl = document.getElementById('cur-away');
+                if (!homeEl || !awayEl) return;
+                function recount() {
+                    homeEl.textContent =
+                        document.querySelectorAll('.winner-toggle input[value="home"]:checked').length;
+                    awayEl.textContent =
+                        document.querySelectorAll('.winner-toggle input[value="away"]:checked').length;
+                }
+                document.querySelectorAll('.winner-toggle input[type="radio"]').forEach(function (radio) {
+                    radio.addEventListener('click', function () { setTimeout(recount, 0); });
+                });
+                recount();
+            })();
         </script>
     {% endif %}
 {% endblock %}
