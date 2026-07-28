@@ -44,11 +44,13 @@
         {% endfor %}
 
         <p class="muted" style="margin-bottom:10px;">
-            Missing someone? <a href="{% url 'scoring:add_player' %}?next={{ request.get_full_path|urlencode }}">Add a new player</a>
+            Missing someone? <a class="js-add-player" href="{% url 'scoring:add_player' %}?next={{ request.get_full_path|urlencode }}">Add a new player</a>
         </p>
 
         <button type="submit" class="btn">Save lineup &amp; start scoring</button>
         <div style="height:10px;"></div>
         <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
     </form>
+
+    {% include "scoring/_preserve_form.html" %}
 {% endblock %}

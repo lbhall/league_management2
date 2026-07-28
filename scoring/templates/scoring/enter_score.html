@@ -58,7 +58,7 @@
                 <div style="margin-top:14px;padding-top:12px;border-top:2px dashed #cbd5e1;">
                     <div class="muted" style="font-weight:600;margin-bottom:8px;">
                         Subs (optional)
-                        — <a href="{% url 'scoring:add_player' %}?next={{ request.get_full_path|urlencode }}">Add new player</a>
+                        — <a class="js-add-player" href="{% url 'scoring:add_player' %}?next={{ request.get_full_path|urlencode }}">Add new player</a>
                     </div>
                 {% if sub_choices %}
                     <div>
@@ -132,4 +132,6 @@
             {% endif %}
         </div>
     {% endfor %}
+
+    {% include "scoring/_preserve_form.html" %}
 {% endblock %}
