@@ -57,8 +57,6 @@
                     <div style="padding:8px 0; {% if not forloop.last %}border-bottom:1px solid #e2e8f0;{% endif %}">
                         <div>{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
                         <div class="muted">Week {{ match.week.number }} — {{ match.week.date }}</div>
-                        {# TEMP(testing): let upcoming matches be scored early so new scoring features can be tried before match day. Remove this block to restore read-only upcoming. #}
-                        <a class="btn" style="margin-top:8px;" href="{% url 'scoring:enter_score' match.id %}">Enter score (preview)</a>
                     </div>
                 {% endfor %}
             </div>
