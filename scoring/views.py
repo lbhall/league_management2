@@ -345,21 +345,20 @@ def enter_score(request, match_id):
     if league.results_type == League.ResultsType.DARTS:
         return _enter_score_darts(request, match)
 
-    # Captains score game by game (like the paper sheet); the totals grid
-    # below stays available for admins doing quick entry.
-    if profile.role == ScoringProfile.Role.CAPTAIN:
+    # Everyone defaults to the round-robin game-by-game sheet. Admins can still
+    # open the quick totals grid explicitly — the "Admin view" link adds
+    # ?totals, and a totals POST comes back here.
+    wants_totals = profile.role == ScoringProfile.Role.ADMIN and (
+        request.method == 'POST' or request.GET.get('totals')
+    )
+    if not wants_totals:
         return redirect('scoring:games', match.id)
 
     team_size = league.team_size
 
-    if profile.role == ScoringProfile.Role.ADMIN:
-        editable_teams = [match.home_team, match.away_team]
-        readonly_teams = []
-    else:
-        editable_teams = [profile.team]
-        readonly_teams = [
-            match.away_team if profile.team.id == match.home_team_id else match.home_team
-        ]
+    # Only admins reach here, so both teams are editable.
+    editable_teams = [match.home_team, match.away_team]
+    readonly_teams = []
 
     result = MatchResult.objects.filter(match=match).first()
     existing = {}

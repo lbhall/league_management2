@@ -196,12 +196,22 @@ class ScoreEntryPermissionTests(ScoringBase):
         user, _ = self.make_admin()
         self.client.force_login(user)
 
-        response = self.client.get(f'/score/match/{self.match.pk}/')
+        response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
         self.assertEqual(response.status_code, 200)
         sections = response.context['sections']
         self.assertEqual(
             {s['team'].id for s in sections},
             {self.home_team.id, self.away_team.id},
+        )
+
+    def test_admin_defaults_to_round_robin_sheet(self):
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+
+        response = self.client.get(f'/score/match/{self.match.pk}/')
+        self.assertRedirects(
+            response, f'/score/match/{self.match.pk}/games/',
+            fetch_redirect_response=False,
         )
 
 
@@ -329,7 +339,7 @@ class OpponentVisibilityTests(ScoringBase):
     def test_admin_has_no_readonly_sections(self):
         user, _ = self.make_admin()
         self.client.force_login(user)
-        response = self.client.get(f'/score/match/{self.match.pk}/')
+        response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
         self.assertEqual(response.context['readonly_sections'], [])
 
 
@@ -406,7 +416,7 @@ class SubTests(ScoringBase):
 
         user, _ = self.make_admin()
         self.client.force_login(user)
-        response = self.client.get(f'/score/match/{self.match.pk}/')
+        response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
 
         section = response.context['sections'][0]
         sub_rows = [r for r in section['rows'] if r['player'] == self.sub]
@@ -431,7 +441,7 @@ class SubTests(ScoringBase):
     def test_sub_choices_offered_in_context(self):
         user, _ = self.make_admin()
         self.client.force_login(user)
-        response = self.client.get(f'/score/match/{self.match.pk}/')
+        response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
         self.assertIn(self.sub, response.context['sub_choices'])
 
 
@@ -1121,7 +1131,7 @@ class AdminViewSwitchTests(ScoringBase):
         user, _ = self.make_admin()
         self.client.force_login(user)
 
-        response = self.client.get(f'/score/match/{self.match.pk}/')
+        response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
         self.assertContains(response, 'Use the round-robin sheet')
 
 

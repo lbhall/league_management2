@@ -24,7 +24,7 @@
         </div>
         {% if profile.role == 'admin' %}
             <p class="muted" style="margin-top:6px;">
-                <a href="{% url 'scoring:enter_score' match.id %}">Admin view (totals entry)</a>
+                <a href="{% url 'scoring:enter_score' match.id %}?totals=1">Admin view (totals entry)</a>
             </p>
         {% endif %}
     </div>
