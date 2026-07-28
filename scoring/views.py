@@ -266,9 +266,9 @@ def match_list(request):
             next_date = upcoming[0].week.date
             upcoming = [m for m in upcoming if m.week.date == next_date]
 
-        # Scored: most recent first, capped for the phone screen.
+        # Scored: most recent first. The template shows an initial batch and
+        # reveals the rest in chunks via a "show more" chevron.
         recent_scored.reverse()
-        recent_scored = recent_scored[:10]
 
     # Player-vs-player match finder for one pocket admins: finds every match
     # between the two players across all seasons, whichever order is entered.

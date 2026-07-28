@@ -1215,6 +1215,48 @@ class OnePocketScoringTests(ScoringBase):
         # Scored matches are shown on the page with their result.
         self.assertContains(response, '3-1')
 
+    def test_scored_list_returns_all_matches_with_show_more_control(self):
+        from datetime import timedelta
+        # op_match (week 1) plus 11 more scored matches = 12 total, which is
+        # beyond the initial batch of 10 the template shows.
+        MatchResult.objects.create(match=self.op_match, home_team_score=3, away_team_score=1)
+        for i in range(2, 13):
+            wk = Week.objects.create(
+                season=self.op_season,
+                date=timezone.localdate() - timedelta(days=i),
+                number=i,
+            )
+            m = Match.objects.create(week=wk, home_team=self.op_home, away_team=self.op_away)
+            MatchResult.objects.create(match=m, home_team_score=3, away_team_score=i % 3)
+
+        self._login_admin_on_op_league()
+        response = self.client.get('/score/')
+
+        # The view returns every scored match (no server-side cap)...
+        self.assertEqual(len(response.context['recent_scored']), 12)
+        # ...and the template renders the reveal control plus hidden rows.
+        self.assertContains(response, 'id="scored-more"')
+        self.assertContains(response, 'scored-row scored-hidden')
+
+    def test_scored_list_has_no_show_more_control_at_ten_or_fewer(self):
+        from datetime import timedelta
+        MatchResult.objects.create(match=self.op_match, home_team_score=3, away_team_score=1)
+        for i in range(2, 11):  # weeks 2..10 -> 10 scored total
+            wk = Week.objects.create(
+                season=self.op_season,
+                date=timezone.localdate() - timedelta(days=i),
+                number=i,
+            )
+            m = Match.objects.create(week=wk, home_team=self.op_home, away_team=self.op_away)
+            MatchResult.objects.create(match=m, home_team_score=3, away_team_score=i % 3)
+
+        self._login_admin_on_op_league()
+        response = self.client.get('/score/')
+
+        self.assertEqual(len(response.context['recent_scored']), 10)
+        self.assertNotContains(response, 'id="scored-more"')
+        self.assertNotContains(response, 'scored-row scored-hidden')
+
 
 class PwaEndpointTests(ScoringBase):
     def test_manifest_served(self):
