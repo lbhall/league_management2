@@ -1,0 +1,39 @@
+<script>
+    // Preserve in-progress score-entry across the "Add a new player" round-trip.
+    // That link navigates away (GET) and back, which would otherwise reset the
+    // form to server state and lose whatever was entered. On link click we stash
+    // the form's field values in sessionStorage (keyed by path); on return we
+    // restore them, then clear the stash. The newly added player shows up in the
+    // re-rendered dropdowns, so nothing entered is lost.
+    (function () {
+        var KEY = 'scoreFormRestore:' + location.pathname;
+        var form = document.querySelector('form[method="post"]');
+        if (!form) return;
+
+        var saved = null;
+        try { saved = JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) {}
+        if (saved) {
+            sessionStorage.removeItem(KEY);
+            Object.keys(saved).forEach(function (name) {
+                var rec = saved[name];
+                form.querySelectorAll('[name="' + CSS.escape(name) + '"]').forEach(function (el) {
+                    if (el.type === 'checkbox') { el.checked = !!rec.c; }
+                    else if (el.type === 'radio') { el.checked = (el.value === rec.v); }
+                    else { el.value = rec.v; }
+                });
+            });
+        }
+
+        document.querySelectorAll('.js-add-player').forEach(function (link) {
+            link.addEventListener('click', function () {
+                var data = {};
+                form.querySelectorAll('[name]').forEach(function (el) {
+                    if (el.type === 'checkbox') { data[el.name] = { c: el.checked }; }
+                    else if (el.type === 'radio') { if (el.checked) { data[el.name] = { v: el.value }; } }
+                    else { data[el.name] = { v: el.value }; }
+                });
+                try { sessionStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {}
+            });
+        });
+    })();
+</script>

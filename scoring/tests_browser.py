@@ -158,3 +158,35 @@ class WinnerToggleBrowserTests(StaticLiveServerTestCase):
             self.assertFalse(home.is_checked())
         finally:
             context.close()
+
+    def test_score_entry_survives_adding_a_player(self):
+        # Regression: adding a sub mid-entry navigated away and back, wiping the
+        # scores already entered. They must be preserved.
+        context, page = self._new_logged_in_page()
+        try:
+            page.goto(f'{self.live_server_url}/score/match/{self.match.pk}/')
+
+            played = page.locator('input[type="checkbox"][name^="played_"]').first
+            wins = page.locator('select[name^="wins_"]').first
+            played_name = played.get_attribute('name')
+            wins_name = wins.get_attribute('name')
+
+            played.check()
+            wins.select_option(index=1)
+            wins_value = wins.input_value()
+
+            # Go add a new player for a sub in the middle of entering scores.
+            page.locator('a.js-add-player').first.click()
+            page.fill('input[name="name"]', 'Fresh Sub')
+            page.locator('button[type="submit"]').click()
+            page.wait_for_url(f'**/score/match/{self.match.pk}/')
+
+            # The entries made before adding the player are still there.
+            self.assertTrue(page.locator(f'input[name="{played_name}"]').is_checked())
+            self.assertEqual(
+                page.locator(f'select[name="{wins_name}"]').input_value(), wins_value,
+            )
+            # ...and the newly added player is now selectable.
+            self.assertIn('Fresh Sub', page.content())
+        finally:
+            context.close()
