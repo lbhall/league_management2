@@ -945,6 +945,8 @@ def games(request, match_id):
 
     rounds = []
     games_entered = 0
+    home_score = 0
+    away_score = 0
     for rnd in range(1, team_size + 1):
         game_rows = []
         for pos in range(1, team_size + 1):
@@ -952,6 +954,10 @@ def games(request, match_id):
             game = existing.get((rnd, pos))
             if game:
                 games_entered += 1
+                if game.winner == GameResult.Winner.HOME:
+                    home_score += 1
+                elif game.winner == GameResult.Winner.AWAY:
+                    away_score += 1
             game_rows.append({
                 'home_position': pos,
                 'away_position': away_pos,
@@ -971,6 +977,9 @@ def games(request, match_id):
         'total_games': team_size * team_size,
         'games_entered': games_entered,
         'allow_clear_winner': allow_clear,
+        'show_current_score': league.show_current_score,
+        'current_home_score': home_score,
+        'current_away_score': away_score,
     })
 
 

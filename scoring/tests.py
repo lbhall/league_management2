@@ -988,6 +988,39 @@ class GameFlowTests(ScoringBase):
         response = self.client.get(f'/score/match/{self.match.pk}/games/')
         self.assertContains(response, 'tap again to clear')
 
+    def test_current_score_shown_only_when_enabled(self):
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        self._set_lineups()
+
+        # Off by default: no running-score element.
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertNotContains(response, 'id="current-score"')
+
+        self.league.show_current_score = True
+        self.league.save(update_fields=['show_current_score'])
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertContains(response, 'id="current-score"')
+
+    def test_current_score_counts_entered_games(self):
+        self.league.show_current_score = True
+        self.league.save(update_fields=['show_current_score'])
+
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        self._set_lineups()
+
+        # Record round 1: 3 home wins, 2 away wins.
+        data = {
+            'winner_1_1': 'home', 'winner_1_2': 'home', 'winner_1_3': 'home',
+            'winner_1_4': 'away', 'winner_1_5': 'away',
+        }
+        self.client.post(f'/score/match/{self.match.pk}/games/', data)
+
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertEqual(response.context['current_home_score'], 3)
+        self.assertEqual(response.context['current_away_score'], 2)
+
 
 class AdminViewSwitchTests(ScoringBase):
     def _set_lineups(self):
