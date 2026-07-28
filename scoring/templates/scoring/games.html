@@ -56,7 +56,9 @@
             color: #fff;
             font-weight: 600;
         }
+        .break-note { font-size: 0.8rem; font-weight: 600; color: #0c385f; margin-top: 4px; }
         .game-flags { display: flex; gap: 16px; margin-top: 6px; }
+        .game-flags label.eb-disabled { opacity: 0.4; }
         .game-flags label {
             display: flex; align-items: center; gap: 5px;
             margin: 0; font-weight: 400; font-size: 0.82rem; color: #64748b;
@@ -69,10 +71,15 @@
             <div class="card">
                 <h2>Round {{ round.number }}</h2>
                 {% for game in round.games %}
-                    <div class="game-row">
+                    <div class="game-row"{% if show_breaks %} data-breaker="{{ game.breaker }}"{% endif %}>
                         <div class="muted" style="font-size:0.8rem;">
                             {{ game.home_position }} vs {{ game.away_letter }} — tap the winner{% if allow_clear_winner %} (tap again to clear){% endif %}
                         </div>
+                        {% if show_breaks %}
+                            <div class="break-note">
+                                🎱 {% if game.home_breaks %}{{ game.home_player.name }}{% else %}{{ game.away_player.name }}{% endif %} breaks
+                            </div>
+                        {% endif %}
                         <div class="winner-toggle">
                             <label>
                                 <input type="radio" name="winner_{{ round.number }}_{{ game.home_position }}"
@@ -150,6 +157,32 @@
                     radio.addEventListener('click', function () { setTimeout(recount, 0); });
                 });
                 recount();
+            })();
+        </script>
+    {% endif %}
+
+    {% if show_breaks %}
+        <script>
+            // Only the side that broke can win on the break, so enable the
+            // "8 on the break" flag only when the selected winner is the breaker.
+            (function () {
+                document.querySelectorAll('.game-row[data-breaker]').forEach(function (row) {
+                    var breaker = row.getAttribute('data-breaker');
+                    var eb = row.querySelector('input[name^="eb_"]');
+                    if (!eb) return;
+                    var label = eb.closest('label');
+                    function sync() {
+                        var sel = row.querySelector('.winner-toggle input[type="radio"]:checked');
+                        var canBreak = sel && sel.value === breaker;
+                        eb.disabled = !canBreak;
+                        if (!canBreak) { eb.checked = false; }
+                        if (label) { label.classList.toggle('eb-disabled', !canBreak); }
+                    }
+                    row.querySelectorAll('.winner-toggle input[type="radio"]').forEach(function (radio) {
+                        radio.addEventListener('click', function () { setTimeout(sync, 0); });
+                    });
+                    sync();
+                });
             })();
         </script>
     {% endif %}

@@ -1021,6 +1021,70 @@ class GameFlowTests(ScoringBase):
         self.assertEqual(response.context['current_home_score'], 3)
         self.assertEqual(response.context['current_away_score'], 2)
 
+    def test_break_note_shown_only_when_enabled(self):
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        self._set_lineups()
+
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertNotContains(response, 'class="break-note"')
+
+        self.league.show_breaks = True
+        self.league.save(update_fields=['show_breaks'])
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertContains(response, 'class="break-note"')
+
+    def test_eight_on_break_gated_to_breaker_when_enabled(self):
+        from scoring.models import GameResult
+        self.league.show_breaks = True
+        self.league.save(update_fields=['show_breaks'])
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        self._set_lineups()
+
+        # Everyone wins as "home". Round 1 -> home breaks (winner is the breaker,
+        # so 8-on-break is kept); round 2 -> away breaks (home won, so it drops).
+        self._post_all_games('home', flags={(1, 1): {'eb': 'on'}, (2, 1): {'eb': 'on'}})
+
+        kept = GameResult.objects.get(match=self.match, round_number=1, home_position=1)
+        dropped = GameResult.objects.get(match=self.match, round_number=2, home_position=1)
+        self.assertTrue(kept.eight_on_break)
+        self.assertFalse(dropped.eight_on_break)
+
+    def test_eight_on_break_not_gated_when_disabled(self):
+        from scoring.models import GameResult
+        # Default league has show_breaks off -> flag honored as entered.
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        self._set_lineups()
+
+        self._post_all_games('home', flags={(2, 1): {'eb': 'on'}})
+
+        game = GameResult.objects.get(match=self.match, round_number=2, home_position=1)
+        self.assertTrue(game.eight_on_break)
+
+
+class BreakerRuleTests(TestCase):
+    def test_breaker_schedule_for_five_player_match(self):
+        from scoring.models import GameResult
+        # Home breaks odd rounds, away breaks even rounds...
+        for pos in range(1, 6):
+            self.assertEqual(GameResult.breaker_for(1, pos, 5), 'home')
+            self.assertEqual(GameResult.breaker_for(2, pos, 5), 'away')
+            self.assertEqual(GameResult.breaker_for(3, pos, 5), 'home')
+            self.assertEqual(GameResult.breaker_for(4, pos, 5), 'away')
+        # ...and the odd final round splits: home on 1/3/5, away on 2/4.
+        self.assertEqual(GameResult.breaker_for(5, 1, 5), 'home')
+        self.assertEqual(GameResult.breaker_for(5, 2, 5), 'away')
+        self.assertEqual(GameResult.breaker_for(5, 3, 5), 'home')
+        self.assertEqual(GameResult.breaker_for(5, 4, 5), 'away')
+        self.assertEqual(GameResult.breaker_for(5, 5, 5), 'home')
+
+    def test_even_roster_has_no_final_round_split(self):
+        from scoring.models import GameResult
+        for pos in range(1, 5):
+            self.assertEqual(GameResult.breaker_for(4, pos, 4), 'away')
+
 
 class AdminViewSwitchTests(ScoringBase):
     def _set_lineups(self):
