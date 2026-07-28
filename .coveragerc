@@ -4,6 +4,7 @@ omit =
     */migrations/*
     */tests.py
     */tests/*
+    */tests_browser.py
     */__init__.py
     */apps.py
     # One-off import/generate utilities run by hand, not part of the app surface.

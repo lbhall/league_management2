@@ -48,10 +48,32 @@ jobs:
       - name: Enforce coverage threshold (80%)
         run: coverage report --fail-under=80
 
+  browser:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install playwright
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run browser smoke tests
+        run: python manage.py test scoring.tests_browser --no-input
+
   deploy:
     name: Deploy to production
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, browser]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Deploy over SSH
