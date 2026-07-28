@@ -32,6 +32,14 @@ class League(models.Model):
     )
     wide_logo_url = models.URLField(blank=True)
 
+    allow_game_winner_clear = models.BooleanField(
+        default=False,
+        help_text=(
+            'When on, tapping the already-selected game winner in the scoring '
+            'app deselects it and clears that game result.'
+        ),
+    )
+
     fee_per_player = models.DecimalField(
         max_digits=6,
         decimal_places=2,
