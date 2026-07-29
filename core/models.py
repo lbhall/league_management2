@@ -54,6 +54,14 @@ class League(models.Model):
             'by position) and only allows "8 on the break" for the breaking side.'
         ),
     )
+    dual_entry_scoring = models.BooleanField(
+        default=False,
+        help_text=(
+            'When on, each captain records their own copy of a match; the app '
+            'compares them and auto-finalizes when they agree, or shows the '
+            'differing games/stats for the captains to reconcile.'
+        ),
+    )
 
     fee_per_player = models.DecimalField(
         max_digits=6,
