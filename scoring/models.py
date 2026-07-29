@@ -170,3 +170,102 @@ class GameResult(models.Model):
 
     def __str__(self):
         return f'{self.match} R{self.round_number} G{self.home_position} — {self.winner}'
+
+
+class MatchEntry(models.Model):
+    """One captain's independent copy of a match, for leagues using dual-entry
+    scoring. Each side submits their own lineups + game results; the two are
+    compared and auto-finalized into the authoritative LineupSlot/GameResult
+    records when they agree."""
+
+    class Side(models.TextChoices):
+        HOME = 'home', 'Home'
+        AWAY = 'away', 'Away'
+
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        SUBMITTED = 'submitted', 'Submitted'
+
+    match = models.ForeignKey(
+        Match,
+        on_delete=models.CASCADE,
+        related_name='score_entries',
+    )
+    side = models.CharField(max_length=4, choices=Side.choices)
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.DRAFT,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['match', 'side'],
+                name='unique_entry_per_match_side',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.match} — {self.get_side_display()} entry ({self.status})'
+
+
+class MatchEntryGame(models.Model):
+    """A captain's recorded result for one game within their MatchEntry."""
+
+    entry = models.ForeignKey(
+        MatchEntry,
+        on_delete=models.CASCADE,
+        related_name='games',
+    )
+    round_number = models.PositiveSmallIntegerField()
+    home_position = models.PositiveSmallIntegerField()
+    winner = models.CharField(max_length=4, choices=GameResult.Winner.choices)
+    runout = models.BooleanField(default=False)
+    eight_on_break = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['entry', 'round_number', 'home_position'],
+                name='unique_entry_game_per_round_position',
+            ),
+        ]
+        ordering = ['round_number', 'home_position']
+
+    def __str__(self):
+        return f'{self.entry} R{self.round_number} G{self.home_position} — {self.winner}'
+
+
+class MatchEntryLineup(models.Model):
+    """A captain's recorded lineup slot within their MatchEntry. Both teams'
+    lineups are recorded so they can be compared across the two entries."""
+
+    entry = models.ForeignKey(
+        MatchEntry,
+        on_delete=models.CASCADE,
+        related_name='lineup',
+    )
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    position = models.PositiveSmallIntegerField()
+    player = models.ForeignKey(Player, on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['entry', 'team', 'position'],
+                name='unique_entry_lineup_per_team_position',
+            ),
+        ]
+        ordering = ['team_id', 'position']
+
+    def __str__(self):
+        return f'{self.entry} — {self.team} pos {self.position}: {self.player}'

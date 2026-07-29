@@ -1443,3 +1443,36 @@ class PwaEndpointTests(ScoringBase):
         response = self.client.get('/score/sw.js')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/javascript')
+
+
+class MatchEntryModelTests(ScoringBase):
+    """Phase 1 of dual-entry scoring: the per-captain entry records exist and
+    enforce one entry per (match, side)."""
+
+    def test_entry_with_games_and_lineup(self):
+        from scoring.models import MatchEntry, MatchEntryGame, MatchEntryLineup
+        entry = MatchEntry.objects.create(match=self.match, side=MatchEntry.Side.HOME)
+        self.assertEqual(entry.status, MatchEntry.Status.DRAFT)
+
+        game = MatchEntryGame.objects.create(
+            entry=entry, round_number=1, home_position=1, winner='home', runout=True,
+        )
+        lineup = MatchEntryLineup.objects.create(
+            entry=entry, team=self.home_team, position=1, player=self.home_players[0],
+        )
+        self.assertIn('Home entry', str(entry))
+        self.assertIn('R1 G1', str(game))
+        self.assertIn(self.home_players[0].name, str(lineup))
+        self.assertEqual(entry.games.count(), 1)
+        self.assertEqual(entry.lineup.count(), 1)
+
+    def test_one_entry_per_match_side(self):
+        from django.db import IntegrityError, transaction
+        from scoring.models import MatchEntry
+        MatchEntry.objects.create(match=self.match, side=MatchEntry.Side.HOME)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                MatchEntry.objects.create(match=self.match, side=MatchEntry.Side.HOME)
+        # The other side is still allowed.
+        MatchEntry.objects.create(match=self.match, side=MatchEntry.Side.AWAY)
+        self.assertEqual(MatchEntry.objects.filter(match=self.match).count(), 2)
