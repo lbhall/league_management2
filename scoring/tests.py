@@ -1584,3 +1584,126 @@ class DualEntryCaptureTests(TestCase):
         self._set_lineup()
         self.assertEqual(LineupSlot.objects.filter(match=self.match).count(), 4)
         self.assertFalse(MatchEntry.objects.filter(match=self.match).exists())
+
+
+class DualEntryReconcileTests(TestCase):
+    """Phase 3: both captains submit; agreement auto-finalizes, disagreement
+    leaves a conflict the captains resolve by re-submitting."""
+
+    LINEUP_KEYS = ('home_1', 'home_2', 'away_1', 'away_2')
+    AGREE = {
+        'winner_1_1': 'home', 'winner_1_2': 'home',
+        'winner_2_1': 'away', 'winner_2_2': 'away',
+    }
+
+    def setUp(self):
+        self.league = make_league(
+            name='Dual League', team_size=2, dual_entry_scoring=True,
+        )
+        venue = make_venue(self.league)
+        self.home = Team.objects.create(league=self.league, venue=venue, name='Home')
+        self.away = Team.objects.create(league=self.league, venue=venue, name='Away')
+        self.hp = [
+            Player.objects.create(league=self.league, team=self.home, name=f'H{i}')
+            for i in (1, 2)
+        ]
+        self.ap = [
+            Player.objects.create(league=self.league, team=self.away, name=f'A{i}')
+            for i in (1, 2)
+        ]
+        season = Season.objects.create(
+            league=self.league, name='S', status=Season.Status.ACTIVE,
+        )
+        week = Week.objects.create(season=season, date=timezone.localdate(), number=1)
+        self.match = Match.objects.create(
+            week=week, home_team=self.home, away_team=self.away,
+        )
+        self.home_cap = self._captain('home@example.com', self.hp[0])
+        self.away_cap = self._captain('away@example.com', self.ap[0])
+        self.lineup = {
+            f'lineup_{self.home.id}_1': self.hp[0].id,
+            f'lineup_{self.home.id}_2': self.hp[1].id,
+            f'lineup_{self.away.id}_1': self.ap[0].id,
+            f'lineup_{self.away.id}_2': self.ap[1].id,
+        }
+
+    def _captain(self, email, player):
+        user = User.objects.create_user(email, email, 'pw12345!')
+        ScoringProfile.objects.create(
+            user=user, league=self.league, player=player,
+            role=ScoringProfile.Role.CAPTAIN, is_approved=True,
+        )
+        return user
+
+    def _submit(self, user, games):
+        client = Client()
+        client.force_login(user)
+        client.post(f'/score/match/{self.match.pk}/lineup/', self.lineup)
+        client.post(
+            f'/score/match/{self.match.pk}/games/', {**games, 'submit_entry': '1'},
+        )
+        return client
+
+    def _status(self, side):
+        from scoring.models import MatchEntry
+        return MatchEntry.objects.get(match=self.match, side=side).status
+
+    def test_both_agree_auto_finalizes(self):
+        from results.models import MatchResult
+        from scoring.models import GameResult, MatchEntry
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, self.AGREE)
+
+        self.assertEqual(self._status('home'), MatchEntry.Status.FINALIZED)
+        self.assertEqual(self._status('away'), MatchEntry.Status.FINALIZED)
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 4)
+        self.assertTrue(MatchResult.objects.filter(match=self.match).exists())
+
+    def test_disagreement_leaves_conflict(self):
+        from scoring.models import GameResult, MatchEntry
+        from scoring.views import _entry_conflicts
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, {**self.AGREE, 'winner_1_1': 'away'})
+
+        self.assertEqual(self._status('home'), MatchEntry.Status.SUBMITTED)
+        self.assertEqual(self._status('away'), MatchEntry.Status.SUBMITTED)
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 0)
+
+        home_e = MatchEntry.objects.get(match=self.match, side='home')
+        away_e = MatchEntry.objects.get(match=self.match, side='away')
+        diffs = _entry_conflicts(self.match, home_e, away_e)
+        self.assertTrue(any('Game 1' in d for d in diffs))
+
+    def test_captains_resolve_by_resubmitting(self):
+        from scoring.models import MatchEntry
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, {**self.AGREE, 'winner_1_1': 'away'})  # conflict
+        # Away captain fixes their entry to match and re-submits.
+        self._submit(self.away_cap, self.AGREE)
+        self.assertEqual(self._status('home'), MatchEntry.Status.FINALIZED)
+        self.assertEqual(self._status('away'), MatchEntry.Status.FINALIZED)
+
+    def test_finalized_blocks_further_edits(self):
+        from scoring.models import GameResult, MatchEntry
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, self.AGREE)
+
+        client = Client()
+        client.force_login(self.home_cap)
+        response = client.post(
+            f'/score/match/{self.match.pk}/games/', dict(self.AGREE),
+        )
+        self.assertRedirects(response, '/score/', fetch_redirect_response=False)
+        self.assertEqual(self._status('home'), MatchEntry.Status.FINALIZED)
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 4)
+
+    def test_conflict_list_shown_to_captain_on_games_screen(self):
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, {**self.AGREE, 'winner_1_1': 'away'})
+
+        client = Client()
+        client.force_login(self.home_cap)
+        response = client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertEqual(response.context['dual_state'], 'conflict')
+        self.assertTrue(response.context['entry_conflicts'])
+        self.assertContains(response, "don't match the other team")

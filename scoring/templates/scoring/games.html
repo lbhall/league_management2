@@ -23,9 +23,17 @@
             <a href="{% url 'scoring:lineup' match.id %}" style="font-size:0.85rem;">Edit lineup</a>
         </div>
         {% if dual_entry %}
-            <div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:{% if entry_status == 'submitted' %}#d1fae5{% else %}#fef3c7{% endif %};font-size:0.85rem;">
-                {% if entry_status == 'submitted' %}
-                    <strong>Submitted</strong> — waiting for the other team. Editing will reopen your entry.
+            <div class="dual-status dual-{{ dual_state }}">
+                {% if dual_state == 'finalized' %}
+                    ✅ <strong>Finalized</strong> — both teams agreed on this match.
+                {% elif dual_state == 'conflict' %}
+                    ⚠️ <strong>Your scores don't match the other team.</strong>
+                    Re-check the items below, then save and re-submit — no admin needed once you agree.
+                    <ul style="margin:6px 0 0 18px;">
+                        {% for item in entry_conflicts %}<li>{{ item }}</li>{% endfor %}
+                    </ul>
+                {% elif dual_state == 'waiting' %}
+                    <strong>Submitted</strong> — waiting for the other team. Editing reopens your entry.
                 {% else %}
                     <strong>Draft</strong> — not submitted yet. Save as you go, then submit when your sheet is complete.
                 {% endif %}
@@ -66,6 +74,10 @@
             font-weight: 600;
         }
         .break-note { font-size: 0.8rem; font-weight: 600; color: #0c385f; margin-top: 4px; }
+        .dual-status { margin-top: 8px; padding: 8px 10px; border-radius: 8px; font-size: 0.85rem; }
+        .dual-status.dual-draft, .dual-status.dual-waiting { background: #fef3c7; }
+        .dual-status.dual-finalized { background: #d1fae5; }
+        .dual-status.dual-conflict { background: #fee2e2; color: #991b1b; }
         .game-flags { display: flex; gap: 16px; margin-top: 6px; }
         .game-flags label.eb-disabled { opacity: 0.4; }
         .game-flags label {
@@ -116,8 +128,10 @@
             </div>
         {% endfor %}
 
-        <button type="submit" class="btn">{% if dual_entry %}Save (draft){% else %}Save games{% endif %}</button>
-        {% if dual_entry %}
+        {% if not dual_entry %}
+            <button type="submit" class="btn">Save games</button>
+        {% elif dual_state != 'finalized' %}
+            <button type="submit" class="btn">Save (draft)</button>
             <div style="height:10px;"></div>
             <button type="submit" name="submit_entry" value="1" class="btn">Submit final scores</button>
         {% endif %}

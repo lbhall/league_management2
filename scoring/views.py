@@ -806,6 +806,85 @@ def _reopen_if_submitted(entry):
         entry.save(update_fields=['status', 'submitted_at', 'updated_at'])
 
 
+def _entry_conflicts(match, home_entry, away_entry):
+    """Exactly which lineup spots / games / stats differ between the two
+    submitted entries — labels only, no values (captains re-check, not copy)."""
+    team_size = match.week.season.league.team_size
+    items = []
+
+    home_lineup = {(r.team_id, r.position): r.player_id for r in home_entry.lineup.all()}
+    away_lineup = {(r.team_id, r.position): r.player_id for r in away_entry.lineup.all()}
+    for team in (match.home_team, match.away_team):
+        is_home = team.id == match.home_team_id
+        for pos in range(1, team_size + 1):
+            key = (team.id, pos)
+            if home_lineup.get(key) != away_lineup.get(key):
+                label = str(pos) if is_home else chr(64 + pos)
+                items.append(f'{team.name} lineup — position {label}')
+
+    home_games = {(g.round_number, g.home_position): g for g in home_entry.games.all()}
+    away_games = {(g.round_number, g.home_position): g for g in away_entry.games.all()}
+    for rnd in range(1, team_size + 1):
+        for pos in range(1, team_size + 1):
+            g1 = home_games.get((rnd, pos))
+            g2 = away_games.get((rnd, pos))
+            v1 = (g1.winner, g1.runout, g1.eight_on_break) if g1 else None
+            v2 = (g2.winner, g2.runout, g2.eight_on_break) if g2 else None
+            if v1 == v2:
+                continue
+            fields = []
+            if (g1.winner if g1 else None) != (g2.winner if g2 else None):
+                fields.append('winner')
+            if (g1.runout if g1 else None) != (g2.runout if g2 else None):
+                fields.append('run out')
+            if (g1.eight_on_break if g1 else None) != (g2.eight_on_break if g2 else None):
+                fields.append('8 on the break')
+            detail = ', '.join(fields) if fields else 'not recorded by both'
+            items.append(f'Round {rnd}, Game {pos} — {detail}')
+    return items
+
+
+def _finalize_from_entries(match, home_entry, away_entry):
+    """The two entries agree — write the authoritative records from one of them
+    and roll up the match totals."""
+    with transaction.atomic():
+        LineupSlot.objects.filter(match=match).delete()
+        LineupSlot.objects.bulk_create([
+            LineupSlot(
+                match=match, team_id=r.team_id, position=r.position,
+                player_id=r.player_id,
+            )
+            for r in home_entry.lineup.all()
+        ])
+        GameResult.objects.filter(match=match).delete()
+        GameResult.objects.bulk_create([
+            GameResult(
+                match=match, round_number=g.round_number,
+                home_position=g.home_position, winner=g.winner,
+                runout=g.runout, eight_on_break=g.eight_on_break,
+            )
+            for g in home_entry.games.all()
+        ])
+        for entry in (home_entry, away_entry):
+            entry.status = MatchEntry.Status.FINALIZED
+            entry.save(update_fields=['status', 'updated_at'])
+    _recompute_from_games(match)
+
+
+def _reconcile(match):
+    """When both sides have submitted, auto-finalize if they fully agree.
+    Otherwise leave both submitted — a derived conflict the captains resolve by
+    adjusting and re-submitting."""
+    entries = {e.side: e for e in MatchEntry.objects.filter(match=match)}
+    home = entries.get(MatchEntry.Side.HOME)
+    away = entries.get(MatchEntry.Side.AWAY)
+    if not (home and away):
+        return
+    if home.status == MatchEntry.Status.SUBMITTED and away.status == MatchEntry.Status.SUBMITTED:
+        if not _entry_conflicts(match, home, away):
+            _finalize_from_entries(match, home, away)
+
+
 def _lineup_dual(request, match, profile):
     league = match.week.season.league
     team_size = league.team_size
@@ -904,6 +983,10 @@ def _games_dual(request, match, profile):
     team_size = league.team_size
     entry = _get_or_create_entry(match, profile)
 
+    if entry.status == MatchEntry.Status.FINALIZED and request.method == 'POST':
+        messages.info(request, 'This match is finalized and can no longer be edited.')
+        return redirect('scoring:match_list')
+
     slots = {
         (row.team_id, row.position): row.player
         for row in entry.lineup.select_related('player')
@@ -956,9 +1039,24 @@ def _games_dual(request, match, profile):
             entry.save(update_fields=[
                 'status', 'submitted_by', 'submitted_at', 'updated_at',
             ])
-            messages.success(
-                request, 'Scores submitted. Waiting for the other team to submit.',
-            )
+            # Compare with the other side; auto-finalize if they agree.
+            _reconcile(match)
+            entry.refresh_from_db()
+            other = MatchEntry.objects.filter(
+                match=match,
+            ).exclude(side=entry.side).first()
+            if entry.status == MatchEntry.Status.FINALIZED:
+                messages.success(request, 'Both teams agree — match finalized.')
+            elif other and other.status == MatchEntry.Status.SUBMITTED:
+                messages.warning(
+                    request,
+                    "Your scores don't match the other team. Re-check the "
+                    'flagged games, then save and re-submit.',
+                )
+            else:
+                messages.success(
+                    request, 'Scores submitted. Waiting for the other team.',
+                )
             return redirect('scoring:match_list')
 
         messages.success(request, 'Saved. Keep going!')
@@ -995,6 +1093,21 @@ def _games_dual(request, match, profile):
             })
         rounds.append({'number': rnd, 'games': game_rows})
 
+    other = MatchEntry.objects.filter(match=match).exclude(side=entry.side).first()
+    conflicts = []
+    if entry.status == MatchEntry.Status.FINALIZED:
+        dual_state = 'finalized'
+    elif entry.status == MatchEntry.Status.SUBMITTED:
+        if other and other.status == MatchEntry.Status.SUBMITTED:
+            home_e = entry if entry.side == MatchEntry.Side.HOME else other
+            away_e = entry if entry.side == MatchEntry.Side.AWAY else other
+            conflicts = _entry_conflicts(match, home_e, away_e)
+            dual_state = 'conflict'
+        else:
+            dual_state = 'waiting'
+    else:
+        dual_state = 'draft'
+
     return render(request, 'scoring/games.html', {
         'profile': profile,
         'match': match,
@@ -1007,7 +1120,8 @@ def _games_dual(request, match, profile):
         'current_away_score': away_score,
         'show_breaks': show_breaks,
         'dual_entry': True,
-        'entry_status': entry.status,
+        'dual_state': dual_state,
+        'entry_conflicts': conflicts,
     })
 
 

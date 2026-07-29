@@ -185,6 +185,7 @@ class MatchEntry(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Draft'
         SUBMITTED = 'submitted', 'Submitted'
+        FINALIZED = 'finalized', 'Finalized'
 
     match = models.ForeignKey(
         Match,
