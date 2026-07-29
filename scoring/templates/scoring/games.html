@@ -22,6 +22,15 @@
             <span class="muted">{{ games_entered }} of {{ total_games }} games recorded</span>
             <a href="{% url 'scoring:lineup' match.id %}" style="font-size:0.85rem;">Edit lineup</a>
         </div>
+        {% if dual_entry %}
+            <div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:{% if entry_status == 'submitted' %}#d1fae5{% else %}#fef3c7{% endif %};font-size:0.85rem;">
+                {% if entry_status == 'submitted' %}
+                    <strong>Submitted</strong> — waiting for the other team. Editing will reopen your entry.
+                {% else %}
+                    <strong>Draft</strong> — not submitted yet. Save as you go, then submit when your sheet is complete.
+                {% endif %}
+            </div>
+        {% endif %}
         {% if profile.role == 'admin' %}
             <p class="muted" style="margin-top:6px;">
                 <a href="{% url 'scoring:enter_score' match.id %}?totals=1">Admin view (totals entry)</a>
@@ -107,7 +116,11 @@
             </div>
         {% endfor %}
 
-        <button type="submit" class="btn">Save games</button>
+        <button type="submit" class="btn">{% if dual_entry %}Save (draft){% else %}Save games{% endif %}</button>
+        {% if dual_entry %}
+            <div style="height:10px;"></div>
+            <button type="submit" name="submit_entry" value="1" class="btn">Submit final scores</button>
+        {% endif %}
         <div style="height:10px;"></div>
         <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
     </form>

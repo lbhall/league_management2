@@ -1476,3 +1476,111 @@ class MatchEntryModelTests(ScoringBase):
         # The other side is still allowed.
         MatchEntry.objects.create(match=self.match, side=MatchEntry.Side.AWAY)
         self.assertEqual(MatchEntry.objects.filter(match=self.match).count(), 2)
+
+
+class DualEntryCaptureTests(TestCase):
+    """Phase 2: with dual-entry on, a captain's lineup/games write into their
+    own MatchEntry, plus a submit action + draft/submitted status."""
+
+    def setUp(self):
+        self.league = make_league(
+            name='Dual League', team_size=2, dual_entry_scoring=True,
+        )
+        venue = make_venue(self.league)
+        self.home = Team.objects.create(league=self.league, venue=venue, name='Home')
+        self.away = Team.objects.create(league=self.league, venue=venue, name='Away')
+        self.home_players = [
+            Player.objects.create(league=self.league, team=self.home, name=f'H{i}')
+            for i in (1, 2)
+        ]
+        self.away_players = [
+            Player.objects.create(league=self.league, team=self.away, name=f'A{i}')
+            for i in (1, 2)
+        ]
+        season = Season.objects.create(
+            league=self.league, name='S', status=Season.Status.ACTIVE,
+        )
+        week = Week.objects.create(season=season, date=timezone.localdate(), number=1)
+        self.match = Match.objects.create(
+            week=week, home_team=self.home, away_team=self.away,
+        )
+        self.user = User.objects.create_user(
+            'cap@example.com', 'cap@example.com', 'pw12345!',
+        )
+        ScoringProfile.objects.create(
+            user=self.user, league=self.league, player=self.home_players[0],
+            role=ScoringProfile.Role.CAPTAIN, is_approved=True,
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def _set_lineup(self):
+        return self.client.post(f'/score/match/{self.match.pk}/lineup/', {
+            f'lineup_{self.home.id}_1': self.home_players[0].id,
+            f'lineup_{self.home.id}_2': self.home_players[1].id,
+            f'lineup_{self.away.id}_1': self.away_players[0].id,
+            f'lineup_{self.away.id}_2': self.away_players[1].id,
+        })
+
+    _ALL_GAMES = {
+        'winner_1_1': 'home', 'winner_1_2': 'home',
+        'winner_2_1': 'away', 'winner_2_2': 'away',
+    }
+
+    def test_captain_lineup_writes_matchentry_not_shared(self):
+        from scoring.models import LineupSlot, MatchEntry, MatchEntryLineup
+        self._set_lineup()
+        entry = MatchEntry.objects.get(match=self.match, side=MatchEntry.Side.HOME)
+        self.assertEqual(MatchEntryLineup.objects.filter(entry=entry).count(), 4)
+        self.assertEqual(LineupSlot.objects.filter(match=self.match).count(), 0)
+
+    def test_captain_games_write_matchentry_not_shared(self):
+        from scoring.models import GameResult, MatchEntry, MatchEntryGame
+        self._set_lineup()
+        self.client.post(f'/score/match/{self.match.pk}/games/', dict(self._ALL_GAMES))
+        entry = MatchEntry.objects.get(match=self.match, side=MatchEntry.Side.HOME)
+        self.assertEqual(MatchEntryGame.objects.filter(entry=entry).count(), 4)
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 0)
+        self.assertEqual(entry.status, MatchEntry.Status.DRAFT)
+
+    def test_submit_incomplete_is_rejected(self):
+        from scoring.models import MatchEntry
+        self._set_lineup()
+        self.client.post(f'/score/match/{self.match.pk}/games/', {
+            'winner_1_1': 'home', 'submit_entry': '1',
+        })
+        entry = MatchEntry.objects.get(match=self.match, side=MatchEntry.Side.HOME)
+        self.assertEqual(entry.status, MatchEntry.Status.DRAFT)
+
+    def test_submit_complete_marks_submitted(self):
+        from scoring.models import MatchEntry
+        self._set_lineup()
+        self.client.post(
+            f'/score/match/{self.match.pk}/games/',
+            {**self._ALL_GAMES, 'submit_entry': '1'},
+        )
+        entry = MatchEntry.objects.get(match=self.match, side=MatchEntry.Side.HOME)
+        self.assertEqual(entry.status, MatchEntry.Status.SUBMITTED)
+        self.assertIsNotNone(entry.submitted_at)
+        self.assertEqual(entry.submitted_by, self.user)
+
+    def test_editing_after_submit_reopens_to_draft(self):
+        from scoring.models import MatchEntry
+        self._set_lineup()
+        self.client.post(
+            f'/score/match/{self.match.pk}/games/',
+            {**self._ALL_GAMES, 'submit_entry': '1'},
+        )
+        entry = MatchEntry.objects.get(match=self.match, side=MatchEntry.Side.HOME)
+        self.assertEqual(entry.status, MatchEntry.Status.SUBMITTED)
+        self.client.post(f'/score/match/{self.match.pk}/games/', dict(self._ALL_GAMES))
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, MatchEntry.Status.DRAFT)
+
+    def test_flag_off_falls_back_to_shared_records(self):
+        from scoring.models import LineupSlot, MatchEntry
+        self.league.dual_entry_scoring = False
+        self.league.save(update_fields=['dual_entry_scoring'])
+        self._set_lineup()
+        self.assertEqual(LineupSlot.objects.filter(match=self.match).count(), 4)
+        self.assertFalse(MatchEntry.objects.filter(match=self.match).exists())

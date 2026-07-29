@@ -13,7 +13,14 @@ from results.models import MatchResult, PlayerMatchResult
 from scheduling.models import Match, Season
 
 from .forms import LoginForm, SignupForm
-from .models import GameResult, LineupSlot, ScoringProfile
+from .models import (
+    GameResult,
+    LineupSlot,
+    MatchEntry,
+    MatchEntryGame,
+    MatchEntryLineup,
+    ScoringProfile,
+)
 
 
 SCOREABLE_TYPES = (
@@ -769,6 +776,241 @@ def _recompute_from_games(match):
     return True
 
 
+# --- Dual-entry capture (phase 2) -------------------------------------------
+# When a league uses dual-entry scoring, each captain records into their own
+# MatchEntry (lineups + game results) instead of the shared LineupSlot/
+# GameResult. Comparison and finalization land in a later phase.
+
+def _dual_capture_active(league, profile):
+    return (
+        league.dual_entry_scoring
+        and profile.role == ScoringProfile.Role.CAPTAIN
+        and profile.team is not None
+    )
+
+
+def _get_or_create_entry(match, profile):
+    side = (
+        MatchEntry.Side.HOME if profile.team.id == match.home_team_id
+        else MatchEntry.Side.AWAY
+    )
+    entry, _ = MatchEntry.objects.get_or_create(match=match, side=side)
+    return entry
+
+
+def _reopen_if_submitted(entry):
+    """Editing after submitting returns the entry to draft."""
+    if entry.status == MatchEntry.Status.SUBMITTED:
+        entry.status = MatchEntry.Status.DRAFT
+        entry.submitted_at = None
+        entry.save(update_fields=['status', 'submitted_at', 'updated_at'])
+
+
+def _lineup_dual(request, match, profile):
+    league = match.week.season.league
+    team_size = league.team_size
+    positions = list(range(1, team_size + 1))
+    entry = _get_or_create_entry(match, profile)
+
+    existing = {
+        (row.team_id, row.position): row.player_id for row in entry.lineup.all()
+    }
+
+    teams = [match.home_team, match.away_team]
+    if profile.team and profile.team.id == match.away_team_id:
+        teams.reverse()
+
+    sub_choices = list(
+        Player.objects.filter(league=league, team__isnull=True).order_by('name')
+    )
+    team_blocks = []
+    for team in teams:
+        is_home = team.id == match.home_team_id
+        choices = list(team.players.order_by('name')) + sub_choices
+        team_blocks.append({
+            'team': team,
+            'is_home': is_home,
+            'choices': choices,
+            'slots': [
+                {
+                    'position': pos,
+                    'label': str(pos) if is_home else chr(64 + pos),
+                    'selected': existing.get((team.id, pos)),
+                }
+                for pos in positions
+            ],
+        })
+
+    if request.method == 'POST':
+        errors = []
+        new_slots = {}
+        for block in team_blocks:
+            team = block['team']
+            valid_ids = {p.id for p in block['choices']}
+            chosen = []
+            for pos in positions:
+                raw = request.POST.get(f'lineup_{team.id}_{pos}', '').strip()
+                if not raw:
+                    continue
+                try:
+                    player_id = int(raw)
+                except ValueError:
+                    errors.append(f'{team.name}: invalid player for position {pos}.')
+                    continue
+                if player_id not in valid_ids:
+                    errors.append(f'{team.name}: player for position {pos} is not eligible.')
+                    continue
+                chosen.append((pos, player_id))
+            if not chosen:
+                continue
+            if len(chosen) != team_size:
+                errors.append(f'{team.name}: all {team_size} positions must be filled.')
+            player_ids = [pid for _, pid in chosen]
+            if len(set(player_ids)) != len(player_ids):
+                errors.append(f'{team.name}: each player can only appear once.')
+            new_slots[team.id] = chosen
+
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+        elif not new_slots:
+            messages.error(request, 'Set the play order before saving.')
+        else:
+            with transaction.atomic():
+                for team_id, chosen in new_slots.items():
+                    entry.lineup.filter(team_id=team_id).delete()
+                    MatchEntryLineup.objects.bulk_create([
+                        MatchEntryLineup(
+                            entry=entry, team_id=team_id, position=pos, player_id=pid,
+                        )
+                        for pos, pid in chosen
+                    ])
+                _reopen_if_submitted(entry)
+            messages.success(request, 'Lineup saved.')
+            return redirect('scoring:games', match.id)
+
+    return render(request, 'scoring/lineup.html', {
+        'profile': profile,
+        'match': match,
+        'team_blocks': team_blocks,
+        'positions': positions,
+        'dual_entry': True,
+        'entry_status': entry.status,
+    })
+
+
+def _games_dual(request, match, profile):
+    league = match.week.season.league
+    team_size = league.team_size
+    entry = _get_or_create_entry(match, profile)
+
+    slots = {
+        (row.team_id, row.position): row.player
+        for row in entry.lineup.select_related('player')
+    }
+    home_ready = all((match.home_team_id, pos) in slots for pos in range(1, team_size + 1))
+    away_ready = all((match.away_team_id, pos) in slots for pos in range(1, team_size + 1))
+    if not (home_ready and away_ready):
+        messages.error(request, 'Both lineups must be set before entering games.')
+        return redirect('scoring:lineup', match.id)
+
+    existing = {
+        (g.round_number, g.home_position): g for g in entry.games.all()
+    }
+    allow_clear = league.allow_game_winner_clear
+    show_breaks = league.show_breaks
+
+    if request.method == 'POST':
+        with transaction.atomic():
+            for rnd in range(1, team_size + 1):
+                for pos in range(1, team_size + 1):
+                    winner = request.POST.get(f'winner_{rnd}_{pos}', '')
+                    if winner not in (GameResult.Winner.HOME, GameResult.Winner.AWAY):
+                        if allow_clear:
+                            entry.games.filter(
+                                round_number=rnd, home_position=pos,
+                            ).delete()
+                        continue
+                    eight_on_break = request.POST.get(f'eb_{rnd}_{pos}') == 'on'
+                    if show_breaks and winner != GameResult.breaker_for(rnd, pos, team_size):
+                        eight_on_break = False
+                    MatchEntryGame.objects.update_or_create(
+                        entry=entry,
+                        round_number=rnd,
+                        home_position=pos,
+                        defaults={
+                            'winner': winner,
+                            'runout': request.POST.get(f'ro_{rnd}_{pos}') == 'on',
+                            'eight_on_break': eight_on_break,
+                        },
+                    )
+            _reopen_if_submitted(entry)
+
+        if request.POST.get('submit_entry'):
+            if entry.games.count() < team_size * team_size:
+                messages.error(request, 'Record every game before submitting.')
+                return redirect('scoring:games', match.id)
+            entry.status = MatchEntry.Status.SUBMITTED
+            entry.submitted_by = request.user
+            entry.submitted_at = timezone.now()
+            entry.save(update_fields=[
+                'status', 'submitted_by', 'submitted_at', 'updated_at',
+            ])
+            messages.success(
+                request, 'Scores submitted. Waiting for the other team to submit.',
+            )
+            return redirect('scoring:match_list')
+
+        messages.success(request, 'Saved. Keep going!')
+        return redirect('scoring:games', match.id)
+
+    rounds = []
+    games_entered = 0
+    home_score = 0
+    away_score = 0
+    for rnd in range(1, team_size + 1):
+        game_rows = []
+        for pos in range(1, team_size + 1):
+            away_pos = GameResult.away_position_for(pos, rnd, team_size)
+            game = existing.get((rnd, pos))
+            if game:
+                games_entered += 1
+                if game.winner == GameResult.Winner.HOME:
+                    home_score += 1
+                elif game.winner == GameResult.Winner.AWAY:
+                    away_score += 1
+            breaker = GameResult.breaker_for(rnd, pos, team_size)
+            game_rows.append({
+                'home_position': pos,
+                'away_position': away_pos,
+                'away_letter': chr(64 + away_pos),
+                'home_player': slots[(match.home_team_id, pos)],
+                'away_player': slots[(match.away_team_id, away_pos)],
+                'winner': game.winner if game else '',
+                'runout': game.runout if game else False,
+                'eight_on_break': game.eight_on_break if game else False,
+                'breaker': breaker,
+                'home_breaks': breaker == GameResult.Winner.HOME,
+                'away_breaks': breaker == GameResult.Winner.AWAY,
+            })
+        rounds.append({'number': rnd, 'games': game_rows})
+
+    return render(request, 'scoring/games.html', {
+        'profile': profile,
+        'match': match,
+        'rounds': rounds,
+        'total_games': team_size * team_size,
+        'games_entered': games_entered,
+        'allow_clear_winner': allow_clear,
+        'show_current_score': league.show_current_score,
+        'current_home_score': home_score,
+        'current_away_score': away_score,
+        'show_breaks': show_breaks,
+        'dual_entry': True,
+        'entry_status': entry.status,
+    })
+
+
 @login_required(login_url='scoring:login')
 def lineup(request, match_id):
     profile = _get_profile(request)
@@ -780,6 +1022,9 @@ def lineup(request, match_id):
         return redirect('scoring:match_list')
 
     league = match.week.season.league
+    if _dual_capture_active(league, profile):
+        return _lineup_dual(request, match, profile)
+
     team_size = league.team_size
     positions = list(range(1, team_size + 1))
 
@@ -887,6 +1132,9 @@ def games(request, match_id):
         return redirect('scoring:match_list')
 
     league = match.week.season.league
+    if _dual_capture_active(league, profile):
+        return _games_dual(request, match, profile)
+
     team_size = league.team_size
 
     slots = {
