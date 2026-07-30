@@ -79,10 +79,22 @@ WSGI_APPLICATION = 'leagues.wsgi.application'
 
 PRODUCTION_DB_PATH = Path('/var/www/emcfunleague.com/source/db.sqlite3')
 
+# Each checkout gets its own database. Only the production checkout itself uses
+# the production DB; every other checkout on the box (beta vhost, dev) uses its
+# own local db.sqlite3 — so beta can never read or migrate production's data.
+# DJANGO_DB_PATH can still override the path explicitly if ever needed.
+_db_path_env = os.environ.get('DJANGO_DB_PATH')
+if _db_path_env:
+    _db_name = Path(_db_path_env)
+elif BASE_DIR == PRODUCTION_DB_PATH.parent and PRODUCTION_DB_PATH.exists():
+    _db_name = PRODUCTION_DB_PATH
+else:
+    _db_name = BASE_DIR / 'db.sqlite3'
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': PRODUCTION_DB_PATH if PRODUCTION_DB_PATH.exists() else BASE_DIR / 'db.sqlite3',
+        'NAME': _db_name,
     }
 }
 
@@ -156,9 +168,8 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 0  # 1 hour — increase to 31536000 once confirmed working
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    # Trust https for every configured host (beta included, via ALLOWED_HOSTS).
     CSRF_TRUSTED_ORIGINS = [
-        'https://emcfunleague.com',
-        'https://www.emcfunleague.com',
-        'https://coed.emcfunleague.com',
-        'https://bogies.emcfunleague.com',
+        f'https://{host}' for host in ALLOWED_HOSTS
+        if host not in ('localhost', '127.0.0.1')
     ]
