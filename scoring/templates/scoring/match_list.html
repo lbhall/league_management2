@@ -68,7 +68,7 @@
             </div>
         {% endif %}
 
-        {% if recent_scored %}
+        {% if recent_scored and profile.role == 'admin' %}
             <style>
                 .scored-row.scored-hidden { display: none; }
                 .scored-more {

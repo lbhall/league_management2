@@ -1816,3 +1816,35 @@ class ScoreUpcomingTests(ScoringBase):
         response = self.client.get('/score/')
         self.assertFalse(response.context['score_upcoming'])
         self.assertNotContains(response, 'Enter score (preview)')
+
+
+class ScoredSectionVisibilityTests(ScoringBase):
+    """The Scored section (links into already-scored matches) is admin-only,
+    so captains can't reopen and change old games."""
+
+    def setUp(self):
+        super().setUp()
+        result = MatchResult.objects.create(match=self.match)
+        PlayerMatchResult.objects.create(
+            match_result=result, player=self.home_players[0],
+            represented_team=self.home_team, wins=3, losses=2,
+        )
+        PlayerMatchResult.objects.create(
+            match_result=result, player=self.away_players[0],
+            represented_team=self.away_team, wins=2, losses=3,
+        )
+
+    def test_captain_does_not_see_scored_section(self):
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        response = self.client.get('/score/')
+        # The scored match is in context for the captain's team...
+        self.assertTrue(response.context['recent_scored'])
+        # ...but the section is hidden from captains.
+        self.assertNotContains(response, '<h2>Scored</h2>')
+
+    def test_admin_sees_scored_section(self):
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+        response = self.client.get('/score/')
+        self.assertContains(response, '<h2>Scored</h2>')
