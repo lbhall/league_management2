@@ -723,6 +723,17 @@ def _get_scoreable_match(request, profile, match_id):
     if not profile.can_score_match(match):
         messages.error(request, 'You are not allowed to enter scores for this match.')
         return None
+    # Captains can't reopen an old finalized match (even by direct URL) — only
+    # admins can change a scored match from a past week. A match from today
+    # stays editable so a captain can still fix a same-day mistake (e.g. via the
+    # clear-winner flow); only admins touch prior weeks.
+    if (
+        profile.role == ScoringProfile.Role.CAPTAIN
+        and _match_fully_scored(match)
+        and match.week.date < timezone.localdate()
+    ):
+        messages.error(request, 'This match is already scored — ask an admin to change it.')
+        return None
     return match
 
 
