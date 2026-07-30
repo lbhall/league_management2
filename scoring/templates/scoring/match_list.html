@@ -60,6 +60,9 @@
                     <div style="padding:8px 0; {% if not forloop.last %}border-bottom:1px solid #e2e8f0;{% endif %}">
                         <div>{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
                         <div class="muted">Week {{ match.week.number }} — {{ match.week.date }}</div>
+                        {% if score_upcoming %}
+                            <a class="btn" style="margin-top:8px;" href="{% url 'scoring:enter_score' match.id %}">Enter score (preview)</a>
+                        {% endif %}
                     </div>
                 {% endfor %}
             </div>

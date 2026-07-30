@@ -14,6 +14,8 @@ Environment="DEBUG=false"
 Environment="DJANGO_DB_PATH=/var/www/beta.emcfunleague.com/source/db.sqlite3"
 Environment="ALLOWED_HOSTS=beta.emcfunleague.com"
 Environment="SECRET_KEY=REPLACE_WITH_A_LONG_RANDOM_STRING"
+# Beta-only: allow entering scores for upcoming (future-dated) matches.
+Environment="SCORE_UPCOMING=true"
 ExecStart=/var/www/beta.emcfunleague.com/venv/bin/gunicorn \
           --workers 3 \
           --bind unix:/run/gunicorn.beta.sock \
