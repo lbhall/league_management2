@@ -1707,3 +1707,81 @@ class DualEntryReconcileTests(TestCase):
         self.assertEqual(response.context['dual_state'], 'conflict')
         self.assertTrue(response.context['entry_conflicts'])
         self.assertContains(response, "don't match the other team")
+
+
+class DualEntryAdminResolveTests(DualEntryReconcileTests):
+    """Phase 4: admin referee — routing, conflict resolution, no-show fallback,
+    and match-list status."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin_user = User.objects.create_user(
+            'ref@example.com', 'ref@example.com', 'pw12345!',
+            is_staff=True, is_superuser=True,
+        )
+        ScoringProfile.objects.create(
+            user=self.admin_user, league=self.league,
+            role=ScoringProfile.Role.ADMIN, is_approved=True,
+        )
+
+    def _admin(self):
+        client = Client()
+        client.force_login(self.admin_user)
+        return client
+
+    def _resolve_url(self):
+        return f'/score/match/{self.match.pk}/resolve/'
+
+    def test_admin_match_views_redirect_to_resolve(self):
+        client = self._admin()
+        for suffix in ('', 'lineup/', 'games/'):
+            response = client.get(f'/score/match/{self.match.pk}/{suffix}')
+            self.assertRedirects(
+                response, self._resolve_url(), fetch_redirect_response=False,
+            )
+
+    def test_resolve_lists_conflicts(self):
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, {**self.AGREE, 'winner_1_1': 'away'})
+        response = self._admin().get(self._resolve_url())
+        self.assertEqual(len(response.context['disputed_games']), 1)
+        self.assertContains(response, 'Conflicts to resolve')
+
+    def test_admin_per_item_resolution_finalizes(self):
+        from scoring.models import GameResult, MatchEntry
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, {**self.AGREE, 'winner_1_1': 'away'})
+        self._admin().post(self._resolve_url(), {'resolve': '1', 'game_1_1': 'home'})
+        self.assertEqual(self._status('home'), MatchEntry.Status.FINALIZED)
+        game = GameResult.objects.get(match=self.match, round_number=1, home_position=1)
+        self.assertEqual(game.winner, 'home')
+
+    def test_admin_accept_one_side_finalizes(self):
+        from scoring.models import GameResult, MatchEntry
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, {**self.AGREE, 'winner_1_1': 'away'})
+        self._admin().post(self._resolve_url(), {'accept': 'away'})
+        self.assertEqual(self._status('home'), MatchEntry.Status.FINALIZED)
+        game = GameResult.objects.get(match=self.match, round_number=1, home_position=1)
+        self.assertEqual(game.winner, 'away')
+
+    def test_no_show_finalizes_from_the_one_submitted_side(self):
+        from scoring.models import GameResult
+        self._submit(self.home_cap, self.AGREE)  # away never submits
+        client = self._admin()
+        response = client.get(self._resolve_url())
+        self.assertFalse(response.context['both_submitted'])
+        client.post(self._resolve_url(), {'accept': 'home'})
+        self.assertEqual(GameResult.objects.filter(match=self.match).count(), 4)
+
+    def test_captain_cannot_access_resolve(self):
+        client = Client()
+        client.force_login(self.home_cap)
+        response = client.get(self._resolve_url())
+        self.assertRedirects(response, '/score/', fetch_redirect_response=False)
+
+    def test_match_list_flags_conflict_for_admin(self):
+        self._submit(self.home_cap, self.AGREE)
+        self._submit(self.away_cap, {**self.AGREE, 'winner_1_1': 'away'})
+        response = self._admin().get('/score/')
+        self.assertContains(response, 'Conflict — resolve')

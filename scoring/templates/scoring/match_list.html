@@ -39,6 +39,9 @@
                             Week {{ match.week.number }} — {{ match.week.date }}
                             {% if match.location %} — {{ match.location }}{% endif %}
                         </div>
+                        {% if match.dual_status_label %}
+                            <div class="muted" style="margin:-4px 0 8px;font-weight:600;">{{ match.dual_status_label }}</div>
+                        {% endif %}
                         <a class="btn" href="{% url 'scoring:enter_score' match.id %}">Enter score</a>
                     </div>
                 {% endfor %}

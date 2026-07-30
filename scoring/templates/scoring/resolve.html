@@ -1,0 +1,90 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Resolve — EMC Scoring{% endblock %}
+{% block header %}Referee{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <div class="match-teams">{{ match.home_team.name }} vs {{ match.away_team.name }}</div>
+        <div class="muted">Week {{ match.week.number }} — {{ match.week.date }}</div>
+    </div>
+
+    {% if finalized %}
+        <div class="card">
+            <h2>Finalized</h2>
+            <p class="muted">Both teams' entries have been reconciled and the match is scored.</p>
+        </div>
+    {% elif not both_submitted %}
+        <div class="card">
+            <h2>Waiting on the captains</h2>
+            <p class="muted" style="margin-bottom:10px;">
+                {% if home and home.status != 'draft' %}Home submitted.{% else %}Home not submitted.{% endif %}
+                {% if away and away.status != 'draft' %}Away submitted.{% else %}Away not submitted.{% endif %}
+            </p>
+            <p class="muted" style="margin-bottom:12px;">
+                If a team can't submit (no-show), you can finalize from the side that did.
+            </p>
+            <form method="post">
+                {% csrf_token %}
+                {% if home and home.status != 'draft' %}
+                    <button class="btn" name="accept" value="home">Finalize from {{ match.home_team.name }}</button>
+                    <div style="height:10px;"></div>
+                {% endif %}
+                {% if away and away.status != 'draft' %}
+                    <button class="btn" name="accept" value="away">Finalize from {{ match.away_team.name }}</button>
+                    <div style="height:10px;"></div>
+                {% endif %}
+            </form>
+        </div>
+    {% elif conflicts %}
+        <div class="card">
+            <h2>Conflicts to resolve</h2>
+            <p class="muted" style="margin-bottom:10px;">
+                The captains couldn't agree. Pick the correct value for each item, then finalize —
+                or accept one team's sheet wholesale.
+            </p>
+            <form method="post">
+                {% csrf_token %}
+                {% for item in disputed_lineup %}
+                    <div style="padding:10px 0;border-top:1px solid #e2e8f0;">
+                        <div style="font-weight:600;">{{ item.team.name }} — position {{ item.label }}</div>
+                        <div class="winner-choice">
+                            <label><input type="radio" name="lineup_{{ item.team.id }}_{{ item.position }}" value="home" checked>
+                                {% if item.home_player %}{{ item.home_player.name }}{% else %}(none){% endif %}</label>
+                            <label><input type="radio" name="lineup_{{ item.team.id }}_{{ item.position }}" value="away">
+                                {% if item.away_player %}{{ item.away_player.name }}{% else %}(none){% endif %}</label>
+                        </div>
+                    </div>
+                {% endfor %}
+                {% for item in disputed_games %}
+                    <div style="padding:10px 0;border-top:1px solid #e2e8f0;">
+                        <div style="font-weight:600;">Round {{ item.round }}, Game {{ item.position }}</div>
+                        <div class="winner-choice">
+                            <label><input type="radio" name="game_{{ item.round }}_{{ item.position }}" value="home" checked>
+                                {{ match.home_team.name }}:
+                                {% if item.home %}{{ item.home.get_winner_display }} won{% if item.home.runout %}, run out{% endif %}{% if item.home.eight_on_break %}, 8-break{% endif %}{% else %}not recorded{% endif %}</label>
+                            <label><input type="radio" name="game_{{ item.round }}_{{ item.position }}" value="away">
+                                {{ match.away_team.name }}:
+                                {% if item.away %}{{ item.away.get_winner_display }} won{% if item.away.runout %}, run out{% endif %}{% if item.away.eight_on_break %}, 8-break{% endif %}{% else %}not recorded{% endif %}</label>
+                        </div>
+                    </div>
+                {% endfor %}
+
+                <div style="height:14px;"></div>
+                <button class="btn" name="resolve" value="1">Finalize with these picks</button>
+                <div style="height:16px;border-top:1px solid #e2e8f0;margin-top:14px;"></div>
+                <p class="muted" style="margin-bottom:8px;">Or accept one team's whole sheet:</p>
+                <button class="btn btn-secondary" name="accept" value="home">Use {{ match.home_team.name }}'s sheet</button>
+                <div style="height:10px;"></div>
+                <button class="btn btn-secondary" name="accept" value="away">Use {{ match.away_team.name }}'s sheet</button>
+            </form>
+        </div>
+    {% else %}
+        <div class="card">
+            <h2>Both agree</h2>
+            <p class="muted">Nothing to resolve — this match should already be finalized.</p>
+        </div>
+    {% endif %}
+
+    <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
+{% endblock %}
