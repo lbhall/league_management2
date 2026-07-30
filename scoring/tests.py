@@ -1902,3 +1902,85 @@ class CaptainFinalizedBlockTests(ScoringBase):
         self.client.force_login(user)
         response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
         self.assertEqual(response.status_code, 200)
+
+
+class DualLineupPrefillTests(TestCase):
+    """In dual-entry, a captain who opens the lineup after the other captain
+    has set theirs sees it pre-filled (their own entry still wins once set)."""
+
+    def setUp(self):
+        self.league = make_league(
+            name='Prefill League', team_size=2, dual_entry_scoring=True,
+        )
+        venue = make_venue(self.league)
+        self.home = Team.objects.create(league=self.league, venue=venue, name='Home')
+        self.away = Team.objects.create(league=self.league, venue=venue, name='Away')
+        self.home_players = [
+            Player.objects.create(league=self.league, team=self.home, name=f'H{i}')
+            for i in (1, 2)
+        ]
+        self.away_players = [
+            Player.objects.create(league=self.league, team=self.away, name=f'A{i}')
+            for i in (1, 2)
+        ]
+        season = Season.objects.create(
+            league=self.league, name='S', status=Season.Status.ACTIVE,
+        )
+        week = Week.objects.create(season=season, date=timezone.localdate(), number=1)
+        self.match = Match.objects.create(
+            week=week, home_team=self.home, away_team=self.away,
+        )
+        self.home_user = User.objects.create_user('h@x.com', 'h@x.com', 'pw12345!')
+        ScoringProfile.objects.create(
+            user=self.home_user, league=self.league, player=self.home_players[0],
+            role=ScoringProfile.Role.CAPTAIN, is_approved=True,
+        )
+        self.away_user = User.objects.create_user('a@x.com', 'a@x.com', 'pw12345!')
+        ScoringProfile.objects.create(
+            user=self.away_user, league=self.league, player=self.away_players[0],
+            role=ScoringProfile.Role.CAPTAIN, is_approved=True,
+        )
+        self.client = Client()
+
+    def _post_lineup(self, h1, h2, a1, a2):
+        return self.client.post(f'/score/match/{self.match.pk}/lineup/', {
+            f'lineup_{self.home.id}_1': h1.id, f'lineup_{self.home.id}_2': h2.id,
+            f'lineup_{self.away.id}_1': a1.id, f'lineup_{self.away.id}_2': a2.id,
+        })
+
+    def _selected(self, response):
+        selected = {}
+        for block in response.context['team_blocks']:
+            for slot in block['slots']:
+                selected[(block['team'].id, slot['position'])] = slot['selected']
+        return selected
+
+    def test_second_captain_sees_first_captains_lineup(self):
+        self.client.force_login(self.home_user)
+        self._post_lineup(
+            self.home_players[0], self.home_players[1],
+            self.away_players[0], self.away_players[1],
+        )
+        self.client.force_login(self.away_user)
+        response = self.client.get(f'/score/match/{self.match.pk}/lineup/')
+        self.assertTrue(response.context['prefilled_from_other'])
+        selected = self._selected(response)
+        self.assertEqual(selected[(self.home.id, 1)], self.home_players[0].id)
+        self.assertEqual(selected[(self.away.id, 1)], self.away_players[0].id)
+
+    def test_own_lineup_takes_precedence_over_prefill(self):
+        self.client.force_login(self.home_user)
+        self._post_lineup(
+            self.home_players[0], self.home_players[1],
+            self.away_players[0], self.away_players[1],
+        )
+        # Away sets their own (positions swapped), then reloads.
+        self.client.force_login(self.away_user)
+        self._post_lineup(
+            self.home_players[1], self.home_players[0],
+            self.away_players[1], self.away_players[0],
+        )
+        response = self.client.get(f'/score/match/{self.match.pk}/lineup/')
+        self.assertFalse(response.context['prefilled_from_other'])
+        selected = self._selected(response)
+        self.assertEqual(selected[(self.away.id, 1)], self.away_players[1].id)
