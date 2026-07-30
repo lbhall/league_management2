@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -332,6 +333,7 @@ def match_list(request):
         'recent_scored': recent_scored,
         'admin_leagues': admin_leagues,
         'match_search': match_search,
+        'score_upcoming': settings.SCORE_UPCOMING,
     })
 
 

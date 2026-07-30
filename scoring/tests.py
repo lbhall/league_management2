@@ -1,6 +1,6 @@
 
 from django.contrib.auth.models import User
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from core.models import League, Player, Team, Venue
@@ -1785,3 +1785,34 @@ class DualEntryAdminResolveTests(DualEntryReconcileTests):
         self._submit(self.away_cap, {**self.AGREE, 'winner_1_1': 'away'})
         response = self._admin().get('/score/')
         self.assertContains(response, 'Conflict — resolve')
+
+
+class ScoreUpcomingTests(ScoringBase):
+    """The beta-only SCORE_UPCOMING setting exposes an Enter-score button on
+    upcoming (future-dated) matches."""
+
+    def setUp(self):
+        super().setUp()
+        from datetime import timedelta
+        future_week = Week.objects.create(
+            season=self.season,
+            date=timezone.localdate() + timedelta(days=7),
+            number=2,
+        )
+        self.future_match = Match.objects.create(
+            week=future_week, home_team=self.home_team, away_team=self.away_team,
+        )
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+
+    @override_settings(SCORE_UPCOMING=True)
+    def test_upcoming_shows_enter_button_when_enabled(self):
+        response = self.client.get('/score/')
+        self.assertTrue(response.context['score_upcoming'])
+        self.assertContains(response, 'Enter score (preview)')
+
+    @override_settings(SCORE_UPCOMING=False)
+    def test_upcoming_has_no_enter_button_by_default(self):
+        response = self.client.get('/score/')
+        self.assertFalse(response.context['score_upcoming'])
+        self.assertNotContains(response, 'Enter score (preview)')

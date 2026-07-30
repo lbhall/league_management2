@@ -54,6 +54,17 @@ echo 'bhall ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart gunicorn.beta' \
 - **Auto (optional):** once beta is confirmed, add `push: branches: [main]` to
   `.github/workflows/deploy-beta.yml` so every merge to main also deploys beta.
 
+## Beta-only behaviors
+
+The beta systemd unit sets extra env vars that stay off in production:
+
+- `SCORE_UPCOMING=true` — lets captains/admins enter scores for **upcoming**
+  (future-dated) matches, so features can be exercised before match day.
+
+To toggle one of these, edit the `Environment=` line in
+`/etc/systemd/system/gunicorn.beta.service`, then
+`sudo systemctl daemon-reload && sudo systemctl restart gunicorn.beta`.
+
 ## Notes
 
 - Collectstatic/migrate in `deploy.beta.sh` export `DJANGO_DB_PATH` so they only
