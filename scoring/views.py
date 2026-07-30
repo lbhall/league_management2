@@ -1045,6 +1045,16 @@ def _lineup_dual(request, match, profile):
     existing = {
         (row.team_id, row.position): row.player_id for row in entry.lineup.all()
     }
+    # If this captain hasn't set a lineup yet but the other captain already has,
+    # pre-fill from theirs so the second captain isn't retyping the same lineup
+    # (they can still adjust; saving writes to this captain's own entry).
+    prefilled_from_other = False
+    if not existing:
+        other = MatchEntry.objects.filter(match=match).exclude(side=entry.side).first()
+        other_rows = list(other.lineup.all()) if other else []
+        if other_rows:
+            existing = {(row.team_id, row.position): row.player_id for row in other_rows}
+            prefilled_from_other = True
 
     teams = [match.home_team, match.away_team]
     if profile.team and profile.team.id == match.away_team_id:
@@ -1126,6 +1136,7 @@ def _lineup_dual(request, match, profile):
         'positions': positions,
         'dual_entry': True,
         'entry_status': entry.status,
+        'prefilled_from_other': prefilled_from_other,
     })
 
 
