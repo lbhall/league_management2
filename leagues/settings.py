@@ -27,7 +27,7 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', _default_hosts).split(',')
 
 # When on, the scoring app lets you enter scores for upcoming (future-dated)
 # matches too. Enabled on the beta vhost for testing; off in production.
-SCORE_UPCOMING = os.environ.get('SCORE_UPCOMING', 'false').lower() == 'true'
+SCORE_UPCOMING = os.environ.get('SCORE_UPCOMING', '').lower() in ('1', 'true', 'yes', 'on')
 
 
 # Application definition
