@@ -13,6 +13,7 @@ urlpatterns = [
     path('match/<int:match_id>/', views.enter_score, name='enter_score'),
     path('match/<int:match_id>/lineup/', views.lineup, name='lineup'),
     path('match/<int:match_id>/games/', views.games, name='games'),
+    path('match/<int:match_id>/resolve/', views.resolve, name='resolve'),
     path('players/new/', views.add_player, name='add_player'),
     path('manifest.json', views.manifest, name='manifest'),
     path('sw.js', views.service_worker, name='service_worker'),
