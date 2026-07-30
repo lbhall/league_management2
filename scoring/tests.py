@@ -1848,3 +1848,57 @@ class ScoredSectionVisibilityTests(ScoringBase):
         self.client.force_login(user)
         response = self.client.get('/score/')
         self.assertContains(response, '<h2>Scored</h2>')
+
+
+class CaptainFinalizedBlockTests(ScoringBase):
+    """Captains can't reopen an OLD finalized match by direct URL — only admins
+    can change a scored match from a past week. A same-day finalized match is
+    still editable (so the clear-winner fix flow keeps working)."""
+
+    def _finalize(self):
+        result = MatchResult.objects.create(match=self.match)
+        PlayerMatchResult.objects.create(
+            match_result=result, player=self.home_players[0],
+            represented_team=self.home_team, wins=3, losses=2,
+        )
+        PlayerMatchResult.objects.create(
+            match_result=result, player=self.away_players[0],
+            represented_team=self.away_team, wins=2, losses=3,
+        )
+
+    def _set_week_date(self, date):
+        self.week.date = date
+        self.week.save(update_fields=['date'])
+
+    def test_captain_blocked_from_old_finalized_match(self):
+        from datetime import timedelta
+        self._set_week_date(timezone.localdate() - timedelta(days=7))
+        self._finalize()
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        for suffix in ('', 'lineup/', 'games/'):
+            response = self.client.get(f'/score/match/{self.match.pk}/{suffix}')
+            self.assertRedirects(
+                response, '/score/', fetch_redirect_response=False,
+            )
+
+    def test_captain_can_still_fix_a_same_day_finalized_match(self):
+        self._set_week_date(timezone.localdate())
+        self._finalize()
+        user, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(user)
+        # Not blocked — redirected on to the game flow, not back to the list.
+        response = self.client.get(f'/score/match/{self.match.pk}/')
+        self.assertRedirects(
+            response, f'/score/match/{self.match.pk}/games/',
+            fetch_redirect_response=False,
+        )
+
+    def test_admin_can_open_old_finalized_match(self):
+        from datetime import timedelta
+        self._set_week_date(timezone.localdate() - timedelta(days=7))
+        self._finalize()
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+        response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
+        self.assertEqual(response.status_code, 200)
