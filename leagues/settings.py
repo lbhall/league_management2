@@ -79,13 +79,14 @@ WSGI_APPLICATION = 'leagues.wsgi.application'
 
 PRODUCTION_DB_PATH = Path('/var/www/emcfunleague.com/source/db.sqlite3')
 
-# DJANGO_DB_PATH lets a sibling vhost (e.g. beta.emcfunleague.com on the same
-# box) use its own database instead of inheriting the production one. Without
-# it, production auto-detects its committed-in-place DB; dev falls back locally.
+# Each checkout gets its own database. Only the production checkout itself uses
+# the production DB; every other checkout on the box (beta vhost, dev) uses its
+# own local db.sqlite3 — so beta can never read or migrate production's data.
+# DJANGO_DB_PATH can still override the path explicitly if ever needed.
 _db_path_env = os.environ.get('DJANGO_DB_PATH')
 if _db_path_env:
     _db_name = Path(_db_path_env)
-elif PRODUCTION_DB_PATH.exists():
+elif BASE_DIR == PRODUCTION_DB_PATH.parent and PRODUCTION_DB_PATH.exists():
     _db_name = PRODUCTION_DB_PATH
 else:
     _db_name = BASE_DIR / 'db.sqlite3'

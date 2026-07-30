@@ -4,9 +4,12 @@ A separate vhost on the same server running the **same code (main)** but with it
 **own database**, so features gated by per-league flags (e.g. `dual_entry_scoring`)
 can be enabled and tested without touching production.
 
-Isolation is provided by settings: `DJANGO_DB_PATH` overrides the DB location, and
-`ALLOWED_HOSTS` scopes the host. The beta systemd unit and `deploy.beta.sh` set
-these, so beta never reads or migrates the production database.
+**The beta database is always separate.** Settings only use the production DB for
+the production checkout itself (`/var/www/emcfunleague.com/source`); every other
+checkout — including this beta vhost — uses its own `source/db.sqlite3`. So beta
+can't read or migrate production even if a `manage.py` command is run without any
+special env. The beta systemd unit and `deploy.beta.sh` also set `DJANGO_DB_PATH`
+explicitly as belt-and-suspenders.
 
 ## One-time server provisioning (run once, as the deploy user)
 
@@ -19,14 +22,14 @@ git clone git@github.com:lbhall/league_management2.git source
 python3 -m venv venv
 venv/bin/pip install -r source/requirements.txt
 
-# 2. Seed the beta database. Either start fresh:
-DJANGO_DB_PATH=/var/www/beta.emcfunleague.com/source/db.sqlite3 \
-  source/venv/bin/python source/manage.py migrate
-#    ...or copy production and enable dual-entry on the beta copy:
+# 2. Seed the beta database — recommended: copy production (real teams/players/
+#    schedule) into beta's OWN separate file, then apply any new migrations and
+#    enable dual-entry on the beta copy. This never affects production.
 cp /var/www/emcfunleague.com/source/db.sqlite3 source/db.sqlite3
-DJANGO_DB_PATH=/var/www/beta.emcfunleague.com/source/db.sqlite3 \
-  source/venv/bin/python source/manage.py shell -c \
+source/venv/bin/python source/manage.py migrate
+source/venv/bin/python source/manage.py shell -c \
   "from core.models import League; League.objects.filter(name='EMC Fun Pool League').update(dual_entry_scoring=True)"
+#    (Or start empty instead of copying: just run `manage.py migrate`.)
 
 # 3. systemd unit (edit SECRET_KEY first)
 sudo cp source/deploy/beta/gunicorn.beta.service /etc/systemd/system/gunicorn.beta.service
