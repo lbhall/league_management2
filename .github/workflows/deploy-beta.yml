@@ -1,0 +1,23 @@
+name: Deploy beta
+
+# Manual for now (run from the Actions tab). Once beta.emcfunleague.com is
+# provisioned and confirmed, add `push: branches: [main]` here to auto-deploy
+# beta on every merge.
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-beta:
+    name: Deploy to beta
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p 56 emcfunleague.com >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -p 56 bhall@emcfunleague.com \
+            'bash /var/www/beta.emcfunleague.com/source/deploy.beta.sh'

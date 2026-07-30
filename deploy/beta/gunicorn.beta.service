@@ -1,0 +1,23 @@
+# /etc/systemd/system/gunicorn.beta.service
+# Template — adjust User/Group and the --bind to match your existing
+# `gunicorn` (production) unit if it differs (socket vs. port).
+[Unit]
+Description=gunicorn daemon - EMC Beta (beta.emcfunleague.com)
+After=network.target
+
+[Service]
+User=bhall
+Group=www-data
+WorkingDirectory=/var/www/beta.emcfunleague.com/source
+# Beta-only environment. DJANGO_DB_PATH keeps beta off the production DB.
+Environment="DEBUG=false"
+Environment="DJANGO_DB_PATH=/var/www/beta.emcfunleague.com/source/db.sqlite3"
+Environment="ALLOWED_HOSTS=beta.emcfunleague.com"
+Environment="SECRET_KEY=REPLACE_WITH_A_LONG_RANDOM_STRING"
+ExecStart=/var/www/beta.emcfunleague.com/venv/bin/gunicorn \
+          --workers 3 \
+          --bind unix:/run/gunicorn.beta.sock \
+          leagues.wsgi:application
+
+[Install]
+WantedBy=multi-user.target

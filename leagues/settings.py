@@ -79,10 +79,21 @@ WSGI_APPLICATION = 'leagues.wsgi.application'
 
 PRODUCTION_DB_PATH = Path('/var/www/emcfunleague.com/source/db.sqlite3')
 
+# DJANGO_DB_PATH lets a sibling vhost (e.g. beta.emcfunleague.com on the same
+# box) use its own database instead of inheriting the production one. Without
+# it, production auto-detects its committed-in-place DB; dev falls back locally.
+_db_path_env = os.environ.get('DJANGO_DB_PATH')
+if _db_path_env:
+    _db_name = Path(_db_path_env)
+elif PRODUCTION_DB_PATH.exists():
+    _db_name = PRODUCTION_DB_PATH
+else:
+    _db_name = BASE_DIR / 'db.sqlite3'
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': PRODUCTION_DB_PATH if PRODUCTION_DB_PATH.exists() else BASE_DIR / 'db.sqlite3',
+        'NAME': _db_name,
     }
 }
 
@@ -156,9 +167,8 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 0  # 1 hour — increase to 31536000 once confirmed working
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    # Trust https for every configured host (beta included, via ALLOWED_HOSTS).
     CSRF_TRUSTED_ORIGINS = [
-        'https://emcfunleague.com',
-        'https://www.emcfunleague.com',
-        'https://coed.emcfunleague.com',
-        'https://bogies.emcfunleague.com',
+        f'https://{host}' for host in ALLOWED_HOSTS
+        if host not in ('localhost', '127.0.0.1')
     ]
