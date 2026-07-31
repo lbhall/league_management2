@@ -1,14 +1,14 @@
-name: Deploy beta
+name: Deploy production
 
-# Manual for now (run from the Actions tab). Once beta.emcfunleague.com is
-# provisioned and confirmed, add `push: branches: [main]` here to auto-deploy
-# beta on every merge.
+# Production is a manual promotion. Every merge to main auto-deploys to beta
+# (see ci.yml); once the change is verified on beta.emcfunleague.com, run this
+# workflow from the Actions tab to release the current main to production.
 on:
   workflow_dispatch:
 
 jobs:
-  deploy-beta:
-    name: Deploy to beta
+  deploy-production:
+    name: Deploy to production
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
@@ -20,4 +20,4 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p 56 emcfunleague.com >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/deploy_key -p 56 bhall@emcfunleague.com \
-            'bash /var/www/beta.emcfunleague.com/source/deploy.beta.sh'
+            'bash /var/www/emcfunleague.com/source/deploy.sh'

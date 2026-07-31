@@ -70,8 +70,8 @@ jobs:
       - name: Run browser smoke tests
         run: python manage.py test scoring.tests_browser --no-input
 
-  deploy:
-    name: Deploy to production
+  deploy-beta:
+    name: Deploy to beta
     runs-on: ubuntu-latest
     needs: [lint, test, browser]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -85,4 +85,4 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p 56 emcfunleague.com >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/deploy_key -p 56 bhall@emcfunleague.com \
-            'bash /var/www/emcfunleague.com/source/deploy.sh'
+            'bash /var/www/beta.emcfunleague.com/source/deploy.beta.sh'
