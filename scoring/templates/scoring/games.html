@@ -34,8 +34,23 @@
                     </ul>
                 {% elif dual_state == 'waiting' %}
                     <strong>Submitted</strong> — waiting for the other team. Editing reopens your entry.
+                    {% if entry_conflicts %}
+                        <div style="margin-top:6px;">These games differ from the other team so far:
+                            <ul style="margin:6px 0 0 18px;">
+                                {% for item in entry_conflicts %}<li>{{ item }}</li>{% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
                 {% else %}
+                    {% if prefilled_games %}<strong>Imported existing scores</strong> — review, adjust if needed, then save/submit.<br>{% endif %}
                     <strong>Draft</strong> — not submitted yet. Save as you go, then submit when your sheet is complete.
+                    {% if entry_conflicts %}
+                        <div style="margin-top:6px;">⚠️ These games differ from the other team so far:
+                            <ul style="margin:6px 0 0 18px;">
+                                {% for item in entry_conflicts %}<li>{{ item }}</li>{% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
                 {% endif %}
             </div>
         {% endif %}
