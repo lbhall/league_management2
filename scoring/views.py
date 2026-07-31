@@ -868,9 +868,12 @@ def _reopen_if_submitted(entry):
         entry.save(update_fields=['status', 'submitted_at', 'updated_at'])
 
 
-def _entry_conflicts(match, home_entry, away_entry):
+def _entry_conflicts(match, home_entry, away_entry, both_only=False):
     """Exactly which lineup spots / games / stats differ between the two
-    submitted entries — labels only, no values (captains re-check, not copy)."""
+    entries — labels only, no values (captains re-check, not copy). With
+    both_only, only flag genuine disagreements where BOTH sides have recorded
+    the item (used for the live "as we go" view, so a half-finished sheet
+    doesn't look like a pile of conflicts)."""
     team_size = match.week.season.league.team_size
     items = []
 
@@ -880,7 +883,11 @@ def _entry_conflicts(match, home_entry, away_entry):
         is_home = team.id == match.home_team_id
         for pos in range(1, team_size + 1):
             key = (team.id, pos)
-            if home_lineup.get(key) != away_lineup.get(key):
+            hv = home_lineup.get(key)
+            av = away_lineup.get(key)
+            if both_only and (hv is None or av is None):
+                continue
+            if hv != av:
                 label = str(pos) if is_home else chr(64 + pos)
                 items.append(f'{team.name} lineup — position {label}')
 
@@ -890,6 +897,8 @@ def _entry_conflicts(match, home_entry, away_entry):
         for pos in range(1, team_size + 1):
             g1 = home_games.get((rnd, pos))
             g2 = away_games.get((rnd, pos))
+            if both_only and (g1 is None or g2 is None):
+                continue
             v1 = (g1.winner, g1.runout, g1.eight_on_break) if g1 else None
             v2 = (g2.winner, g2.runout, g2.eight_on_break) if g2 else None
             if v1 == v2:
@@ -1224,6 +1233,21 @@ def _games_dual(request, match, profile):
         messages.success(request, 'Saved. Keep going!')
         return redirect('scoring:games', match.id)
 
+    # Import: when this captain hasn't recorded any games yet, pre-fill the
+    # display from existing scores — the other captain's entry if present,
+    # otherwise any scores already recorded for the match — so they start from
+    # what's known rather than a blank sheet (saving writes to their own entry).
+    imported = {}
+    prefilled_games = False
+    if not existing:
+        other0 = MatchEntry.objects.filter(match=match).exclude(side=entry.side).first()
+        if other0 and other0.games.exists():
+            source = other0.games.all()
+        else:
+            source = GameResult.objects.filter(match=match)
+        imported = {(g.round_number, g.home_position): g for g in source}
+        prefilled_games = bool(imported)
+
     rounds = []
     games_entered = 0
     home_score = 0
@@ -1232,7 +1256,7 @@ def _games_dual(request, match, profile):
         game_rows = []
         for pos in range(1, team_size + 1):
             away_pos = GameResult.away_position_for(pos, rnd, team_size)
-            game = existing.get((rnd, pos))
+            game = existing.get((rnd, pos)) or imported.get((rnd, pos))
             if game:
                 games_entered += 1
                 if game.winner == GameResult.Winner.HOME:
@@ -1256,14 +1280,19 @@ def _games_dual(request, match, profile):
         rounds.append({'number': rnd, 'games': game_rows})
 
     other = MatchEntry.objects.filter(match=match).exclude(side=entry.side).first()
-    conflicts = []
+    # Live "as we go" check: which items already differ from the other team,
+    # counting only games both sides have recorded — so divergence surfaces
+    # while entering, not just at submit.
+    live_conflicts = []
+    if other:
+        home_e = entry if entry.side == MatchEntry.Side.HOME else other
+        away_e = entry if entry.side == MatchEntry.Side.AWAY else other
+        live_conflicts = _entry_conflicts(match, home_e, away_e, both_only=True)
+
     if entry.status == MatchEntry.Status.FINALIZED:
         dual_state = 'finalized'
     elif entry.status == MatchEntry.Status.SUBMITTED:
-        if other and other.status == MatchEntry.Status.SUBMITTED:
-            home_e = entry if entry.side == MatchEntry.Side.HOME else other
-            away_e = entry if entry.side == MatchEntry.Side.AWAY else other
-            conflicts = _entry_conflicts(match, home_e, away_e)
+        if other and other.status == MatchEntry.Status.SUBMITTED and live_conflicts:
             dual_state = 'conflict'
         else:
             dual_state = 'waiting'
@@ -1283,7 +1312,8 @@ def _games_dual(request, match, profile):
         'show_breaks': show_breaks,
         'dual_entry': True,
         'dual_state': dual_state,
-        'entry_conflicts': conflicts,
+        'entry_conflicts': live_conflicts,
+        'prefilled_games': prefilled_games,
     })
 
 

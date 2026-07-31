@@ -1984,3 +1984,62 @@ class DualLineupPrefillTests(TestCase):
         self.assertFalse(response.context['prefilled_from_other'])
         selected = self._selected(response)
         self.assertEqual(selected[(self.away.id, 1)], self.away_players[1].id)
+
+
+class DualGamesImportTests(DualLineupPrefillTests):
+    """Games screen imports existing scores when the captain's own sheet is
+    empty, and flags divergence from the other team live (before submit)."""
+
+    ALL_GAMES = {
+        'winner_1_1': 'home', 'winner_1_2': 'home',
+        'winner_2_1': 'away', 'winner_2_2': 'away',
+    }
+
+    def _games_url(self):
+        return f'/score/match/{self.match.pk}/games/'
+
+    def _full_lineup(self):
+        self._post_lineup(
+            self.home_players[0], self.home_players[1],
+            self.away_players[0], self.away_players[1],
+        )
+
+    def test_games_prefilled_from_other_captain(self):
+        self.client.force_login(self.home_user)
+        self._full_lineup()
+        self.client.post(self._games_url(), dict(self.ALL_GAMES))
+
+        self.client.force_login(self.away_user)
+        self._full_lineup()
+        response = self.client.get(self._games_url())
+        self.assertTrue(response.context['prefilled_games'])
+        self.assertEqual(response.context['rounds'][0]['games'][0]['winner'], 'home')
+
+    def test_games_prefilled_from_existing_shared_scores(self):
+        from scoring.models import GameResult
+        for rnd, pos, winner in [
+            (1, 1, 'home'), (1, 2, 'home'), (2, 1, 'away'), (2, 2, 'away'),
+        ]:
+            GameResult.objects.create(
+                match=self.match, round_number=rnd, home_position=pos, winner=winner,
+            )
+        self.client.force_login(self.home_user)
+        self._full_lineup()
+        response = self.client.get(self._games_url())
+        self.assertTrue(response.context['prefilled_games'])
+        self.assertEqual(response.context['rounds'][0]['games'][0]['winner'], 'home')
+
+    def test_divergence_flagged_live_before_submit(self):
+        self.client.force_login(self.home_user)
+        self._full_lineup()
+        self.client.post(self._games_url(), dict(self.ALL_GAMES))  # game 1_1 = home
+
+        self.client.force_login(self.away_user)
+        self._full_lineup()
+        self.client.post(self._games_url(), {**self.ALL_GAMES, 'winner_1_1': 'away'})
+        response = self.client.get(self._games_url())
+
+        self.assertEqual(response.context['dual_state'], 'draft')
+        self.assertTrue(
+            any('Round 1, Game 1' in c for c in response.context['entry_conflicts'])
+        )
