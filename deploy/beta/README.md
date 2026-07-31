@@ -49,10 +49,16 @@ echo 'bhall ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart gunicorn.beta' \
 
 ## Deploying
 
-- **Manually:** run the **Deploy beta** workflow from the GitHub Actions tab
-  (`workflow_dispatch`), or on the server: `bash /var/www/beta.emcfunleague.com/source/deploy.beta.sh`.
-- **Auto (optional):** once beta is confirmed, add `push: branches: [main]` to
-  `.github/workflows/deploy-beta.yml` so every merge to main also deploys beta.
+Beta is the **first** deploy target, production is a manual promotion:
+
+- **Beta — automatic:** every merge to `main` runs the CI pipeline
+  (`ci.yml`), and its final `Deploy to beta` job runs
+  `deploy.beta.sh` over SSH. (You can also run it by hand on the server:
+  `bash /var/www/beta.emcfunleague.com/source/deploy.beta.sh`.)
+- **Production — manual:** after verifying the change on
+  beta.emcfunleague.com, run the **Deploy production** workflow from the
+  GitHub Actions tab (`workflow_dispatch`), which runs the prod `deploy.sh`.
+  Production no longer auto-deploys on merge.
 
 ## Beta-only behaviors
 
