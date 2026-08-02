@@ -324,6 +324,13 @@ def match_list(request):
             'searched': bool(p1 and p2),
         }
 
+    # Scoring upcoming matches: the global beta setting enables it for everyone;
+    # otherwise a league can let its admins score upcoming matches.
+    score_upcoming = settings.SCORE_UPCOMING or (
+        profile.role == ScoringProfile.Role.ADMIN
+        and profile.league.allow_admin_score_upcoming
+    )
+
     return render(request, 'scoring/match_list.html', {
         'profile': profile,
         'season': season,
@@ -333,7 +340,7 @@ def match_list(request):
         'recent_scored': recent_scored,
         'admin_leagues': admin_leagues,
         'match_search': match_search,
-        'score_upcoming': settings.SCORE_UPCOMING,
+        'score_upcoming': score_upcoming,
     })
 
 

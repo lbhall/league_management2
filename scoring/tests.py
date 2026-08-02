@@ -2043,3 +2043,73 @@ class DualGamesImportTests(DualLineupPrefillTests):
         self.assertTrue(
             any('Round 1, Game 1' in c for c in response.context['entry_conflicts'])
         )
+
+
+class AdminUpcomingScoringTests(TestCase):
+    """A league can let its admins (only) score upcoming matches — used for the
+    Bogies one-pocket league."""
+
+    def setUp(self):
+        from datetime import timedelta
+        self.league = make_league(
+            name='Bogies One Pocket League',
+            results_type=League.ResultsType.ONE_POCKET,
+            team_size=1,
+            allow_admin_score_upcoming=True,
+        )
+        venue = make_venue(self.league)
+        self.home = Team.objects.create(
+            league=self.league, venue=venue, name='Alice', team_rank=3,
+        )
+        self.away = Team.objects.create(
+            league=self.league, venue=venue, name='Bob', team_rank=3,
+        )
+        season = Season.objects.create(
+            league=self.league, name='S', status=Season.Status.ACTIVE,
+        )
+        week = Week.objects.create(
+            season=season, date=timezone.localdate() + timedelta(days=7), number=1,
+        )
+        self.match = Match.objects.create(
+            week=week, home_team=self.home, away_team=self.away,
+        )
+        self.client = Client()
+
+    def _login_admin(self):
+        user = User.objects.create_user(
+            'adm@example.com', 'adm@example.com', 'pw12345!',
+            is_staff=True, is_superuser=True,
+        )
+        ScoringProfile.objects.create(
+            user=user, league=self.league,
+            role=ScoringProfile.Role.ADMIN, is_approved=True,
+        )
+        self.client.force_login(user)
+
+    def test_admin_sees_upcoming_scoring_when_enabled(self):
+        self._login_admin()
+        response = self.client.get('/score/')
+        self.assertTrue(response.context['score_upcoming'])
+        self.assertContains(response, 'Enter score (preview)')
+
+    def test_admin_does_not_see_it_when_flag_off(self):
+        self.league.allow_admin_score_upcoming = False
+        self.league.save(update_fields=['allow_admin_score_upcoming'])
+        self._login_admin()
+        response = self.client.get('/score/')
+        self.assertFalse(response.context['score_upcoming'])
+        self.assertNotContains(response, 'Enter score (preview)')
+
+    def test_captain_does_not_get_upcoming_scoring(self):
+        player = Player.objects.create(
+            league=self.league, team=self.home, name='Alice P',
+        )
+        user = User.objects.create_user('cap@example.com', 'cap@example.com', 'pw12345!')
+        ScoringProfile.objects.create(
+            user=user, league=self.league, player=player,
+            role=ScoringProfile.Role.CAPTAIN, is_approved=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get('/score/')
+        self.assertFalse(response.context['score_upcoming'])
+        self.assertNotContains(response, 'Enter score (preview)')

@@ -62,6 +62,13 @@ class League(models.Model):
             'differing games/stats for the captains to reconcile.'
         ),
     )
+    allow_admin_score_upcoming = models.BooleanField(
+        default=False,
+        help_text=(
+            'When on, admins can enter scores for upcoming (future-dated) '
+            'matches in the scoring app, not just matches on or before today.'
+        ),
+    )
 
     fee_per_player = models.DecimalField(
         max_digits=6,
