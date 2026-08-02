@@ -14,6 +14,7 @@ from results.models import MatchResult, PlayerMatchResult
 from scheduling.models import Match, Season
 
 from .forms import LoginForm, SignupForm
+from .notifications import notify_new_signup
 from .models import (
     GameResult,
     LineupSlot,
@@ -82,13 +83,14 @@ def signup(request):
                 email=email,
                 password=form.cleaned_data['password1'],
             )
-            ScoringProfile.objects.create(
+            profile = ScoringProfile.objects.create(
                 user=user,
                 league=player.league,
                 player=player,
                 role=ScoringProfile.Role.CAPTAIN,
             )
 
+        notify_new_signup(request, profile)
         login(request, user)
         return redirect('scoring:pending')
 
