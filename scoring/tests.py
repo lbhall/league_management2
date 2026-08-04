@@ -1786,6 +1786,33 @@ class DualEntryAdminResolveTests(DualEntryReconcileTests):
         response = self._admin().get('/score/')
         self.assertContains(response, 'Conflict — resolve')
 
+    def test_admin_can_open_totals_grid_directly(self):
+        # Even under dual-entry, an admin can enter/override the score directly.
+        response = self._admin().get(f'/score/match/{self.match.pk}/?totals=1')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('sections', response.context)
+
+    def test_admin_totals_entry_saves_a_result(self):
+        client = self._admin()
+        data = {}
+        for player, wins in [(self.hp[0], 2), (self.hp[1], 2), (self.ap[0], 0), (self.ap[1], 0)]:
+            data[f'played_{player.id}'] = 'on'
+            data[f'wins_{player.id}'] = str(wins)
+            data[f'runouts_{player.id}'] = '0'
+            data[f'eights_{player.id}'] = '0'
+        client.post(f'/score/match/{self.match.pk}/', data)
+        self.assertTrue(MatchResult.objects.filter(match=self.match).exists())
+
+    def test_resolve_offers_admin_a_direct_entry_link(self):
+        response = self._admin().get(self._resolve_url())
+        self.assertContains(response, f'/score/match/{self.match.pk}/?totals=1')
+
+    def test_admin_default_still_routes_to_resolve(self):
+        response = self._admin().get(f'/score/match/{self.match.pk}/')
+        self.assertRedirects(
+            response, self._resolve_url(), fetch_redirect_response=False,
+        )
+
 
 class ScoreUpcomingTests(ScoringBase):
     """The beta-only SCORE_UPCOMING setting exposes an Enter-score button on

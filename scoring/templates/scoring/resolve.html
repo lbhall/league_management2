@@ -86,5 +86,15 @@
         </div>
     {% endif %}
 
+    {% if not finalized %}
+        <div class="card">
+            <h2>Enter it yourself</h2>
+            <p class="muted" style="margin-bottom:10px;">
+                Don't want to wait on the captains? Enter the score directly on the totals grid.
+            </p>
+            <a class="btn" href="{% url 'scoring:enter_score' match.id %}?totals=1">Enter score</a>
+        </div>
+    {% endif %}
+
     <a class="btn btn-secondary" href="{% url 'scoring:match_list' %}">Back</a>
 {% endblock %}
