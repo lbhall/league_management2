@@ -356,10 +356,14 @@ def enter_score(request, match_id):
 
     league = match.week.season.league
 
-    # Dual-entry: captains capture their own entries; admins referee.
+    # Dual-entry: captains capture their own entries; admins referee by default,
+    # but can still enter or override the score directly via the totals grid
+    # (?totals, or a totals POST) — e.g. when the captains aren't using the app.
     if _dual_admin(league, profile):
-        return redirect('scoring:resolve', match.id)
-    if _dual_capture_active(league, profile):
+        wants_direct = request.method == 'POST' or request.GET.get('totals')
+        if not wants_direct:
+            return redirect('scoring:resolve', match.id)
+    elif _dual_capture_active(league, profile):
         return redirect('scoring:games', match.id)
 
     # One pocket is a single race — just the two final scores.
