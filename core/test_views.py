@@ -421,3 +421,37 @@ class DartsViewsTests(ViewTestCase):
         self.assertContains(response, '3-Bed')
         self.assertContains(response, '>WH<')
         self.assertContains(response, '3-Black')
+
+
+class TeamPlayerStatsRosterTests(ViewTestCase):
+    """The team page should always list the roster, zero-filled when a player
+    has no results yet — including between seasons (no active season at all)."""
+
+    def setUp(self):
+        super().setUp()
+        self.league = make_league(name='Roster League', results_type=League.ResultsType.EIGHT_BALL, team_size=3)
+        self.venue = make_venue(self.league)
+        self.team = make_team(self.league, self.venue, 'Roster Team')
+        self.player = Player.objects.create(league=self.league, name='Zoe NoResults', team=self.team, male=False)
+
+    def test_players_listed_with_zeros_when_no_active_season(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('team_detail', args=[self.team.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Zoe NoResults')
+        stats = response.context['team_player_stats']
+        self.assertEqual(len(stats), 1)
+        self.assertEqual(stats[0]['wins'], 0)
+        self.assertEqual(stats[0]['losses'], 0)
+        self.assertEqual(stats[0]['runs'], 0)
+        self.assertEqual(stats[0]['percentage'], 0.0)
+
+    def test_players_listed_with_zeros_when_season_has_no_results(self):
+        Season.objects.create(league=self.league, name='Fresh Season', status=Season.Status.ACTIVE)
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('team_detail', args=[self.team.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Zoe NoResults')
+        stats = response.context['team_player_stats']
+        self.assertEqual(len(stats), 1)
+        self.assertEqual(stats[0]['wins'], 0)

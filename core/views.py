@@ -1499,9 +1499,6 @@ def archived_player_history(request, archived_season_id, player_name):
     return JsonResponse({'html': html})
 
 def build_team_player_stats(active_season, team, through_week=None):
-    if not active_season:
-        return []
-
     is_darts = team.league.results_type == League.ResultsType.DARTS
 
     player_map = {
@@ -1526,18 +1523,22 @@ def build_team_player_stats(active_season, team, through_week=None):
         for player in team.players.all()
     }
 
-    results = (
-        PlayerMatchResult.objects.filter(
-            match_result__match__week__season=active_season,
-            represented_team=team,
+    if active_season is None:
+        # Between seasons (e.g. just archived): show the roster, zero-filled.
+        results = PlayerMatchResult.objects.none()
+    else:
+        results = (
+            PlayerMatchResult.objects.filter(
+                match_result__match__week__season=active_season,
+                represented_team=team,
+            )
+            .select_related(
+                'player',
+                'represented_team',
+                'match_result__match__week',
+            )
+            .order_by('player__name', 'match_result__match__week__date', 'match_result__match__sort_order', 'id')
         )
-        .select_related(
-            'player',
-            'represented_team',
-            'match_result__match__week',
-        )
-        .order_by('player__name', 'match_result__match__week__date', 'match_result__match__sort_order', 'id')
-    )
 
     if through_week is not None:
         results = results.filter(
