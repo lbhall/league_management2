@@ -306,23 +306,30 @@ def create_mirrored_season_schedule(season):
     if not existing_weeks:
         return []
 
+    # Snapshot before creating anything: mirrors may be placed into later
+    # existing weeks, and must not be picked up and mirrored again.
+    matches_to_mirror = [
+        match
+        for original_week in existing_weeks
+        for match in original_week.matches.order_by('sort_order', 'id')
+    ]
+
     created_weeks = []
 
-    for original_week in existing_weeks:
-        for match in original_week.matches.order_by('sort_order', 'id'):
-            target_week = _find_week_for_match(existing_weeks+created_weeks, match.away_team, match.home_team)
+    for match in matches_to_mirror:
+        target_week = _find_week_for_match(existing_weeks+created_weeks, match.away_team, match.home_team)
 
-            if target_week is None:
-                target_week = create_new_playable_week_at_end(season)
-                created_weeks.append(target_week)
+        if target_week is None:
+            target_week = create_new_playable_week_at_end(season)
+            created_weeks.append(target_week)
 
-            Match.objects.create(
-                week=target_week,
-                home_team=match.away_team,
-                away_team=match.home_team,
-                location=match.away_team.venue.name,
-                sort_order=match.sort_order,
-            )
+        Match.objects.create(
+            week=target_week,
+            home_team=match.away_team,
+            away_team=match.home_team,
+            location=match.away_team.venue.name,
+            sort_order=match.sort_order,
+        )
 
     return created_weeks
 
