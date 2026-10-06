@@ -301,6 +301,43 @@ def recreate_season_schedule(season, start_date, random_seed=None):
     return created_weeks
 
 
+def compress_season_matches(season):
+    """Pack every match into the earliest playable week that can take it
+    (no team playing twice, venue capacity respected at the match's effective
+    venue), then delete playable weeks left empty at the end of the season.
+
+    Returns (moved_count, deleted_week_count).
+    """
+    weeks = list(season.weeks.filter(number__isnull=False).order_by('date'))
+    moved = 0
+
+    for index, target_week in enumerate(weeks):
+        for later_week in weeks[index + 1:]:
+            matches = later_week.matches.select_related(
+                'home_team__venue', 'away_team__venue',
+            ).order_by('sort_order', 'id')
+            for match in list(matches):
+                if _week_has_team(target_week, match.home_team_id):
+                    continue
+                if _week_has_team(target_week, match.away_team_id):
+                    continue
+                venue = _match_effective_venue(match)
+                if _week_match_count_at_effective_venue(target_week, venue.id) >= venue.max_home_teams:
+                    continue
+                match.week = target_week
+                match.save(update_fields=['week'])
+                moved += 1
+
+    deleted = 0
+    for week in reversed(weeks):
+        if week.matches.exists():
+            break
+        week.delete()
+        deleted += 1
+
+    return moved, deleted
+
+
 def create_mirrored_season_schedule(season):
     existing_weeks = list(season.weeks.order_by('date', 'number'))
     if not existing_weeks:
@@ -331,7 +368,13 @@ def create_mirrored_season_schedule(season):
             sort_order=match.sort_order,
         )
 
-    return created_weeks
+    # Final pass: the greedy placement above (and the original half's layout)
+    # can leave gaps — pull matches earlier where possible and drop weeks
+    # that end up empty.
+    compress_season_matches(season)
+
+    surviving_ids = set(season.weeks.values_list('id', flat=True))
+    return [week for week in created_weeks if week.id in surviving_ids]
 
 
 def get_valid_destination_weeks(season, match):
