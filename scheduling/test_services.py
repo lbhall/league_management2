@@ -1,5 +1,6 @@
-from datetime import date
+from datetime import date, timedelta
 
+from django.db.models import Q
 from django.test import TestCase
 
 from core.models import League, Player, Team, Venue
@@ -625,4 +626,112 @@ class MirrorCompressionIntegrationTests(TestCase):
 
         # the mirror needs a new week (team conflict in week 1), which survives compression
         self.assertEqual(len(created), 1)
+        self.assertEqual(season.weeks.count(), 2)
+
+
+class PackSeasonScheduleTests(TestCase):
+    """pack_season_schedule: optimal repacking of a working season."""
+
+    def _build_emc_like_double_round_robin(self):
+        """9 teams, two venues capped at 2/night (5 teams at one venue):
+        the real EMC shape. Full double round robin spread naively, one
+        match per week, 72 weeks."""
+        league = make_league(name='Pack League')
+        hd = make_venue(league, name='Half Dollar', max_home_teams=2)
+        cc = make_venue(league, name='Cue Club', max_home_teams=2)
+        teams = [make_team(league, hd if i < 5 else cc, f'Team {i}') for i in range(9)]
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
+        day = date(2026, 1, 5)
+        number = 1
+        for i, home in enumerate(teams):
+            for away in teams[i + 1:]:
+                for h, a in ((home, away), (away, home)):
+                    week = Week.objects.create(season=season, date=day, number=number)
+                    Match.objects.create(week=week, home_team=h, away_team=a, location=h.venue.name)
+                    day += timedelta(weeks=1)
+                    number += 1
+        return league, season, teams
+
+    def test_packs_to_the_venue_floor_with_balanced_weeks(self):
+        league, season, teams = self._build_emc_like_double_round_robin()
+
+        result = services.pack_season_schedule(season, random_seed=1)
+
+        weeks = list(season.weeks.filter(number__isnull=False).order_by('date'))
+        self.assertEqual(len(weeks), 20)  # 5 teams x 8 home games / 2 per night
+        sizes = sorted((w.matches.count() for w in weeks), reverse=True)
+        self.assertEqual(sizes, [4] * 12 + [3] * 8)
+        self.assertTrue(result['optimal'])
+        # constraints: team once a week, <=2 matches per venue per week
+        for week in weeks:
+            seen = set()
+            per_venue = {}
+            for match in week.matches.select_related('home_team__venue'):
+                self.assertNotIn(match.home_team_id, seen)
+                self.assertNotIn(match.away_team_id, seen)
+                seen |= {match.home_team_id, match.away_team_id}
+                venue = services._match_effective_venue(match)
+                per_venue[venue.id] = per_venue.get(venue.id, 0) + 1
+            for venue_id, count in per_venue.items():
+                self.assertLessEqual(count, 2)
+
+    def test_no_back_to_back_byes_after_polish(self):
+        league, season, teams = self._build_emc_like_double_round_robin()
+        services.pack_season_schedule(season, random_seed=1)
+
+        weeks = list(season.weeks.filter(number__isnull=False).order_by('date'))
+        for team in teams:
+            bye_indexes = [
+                i for i, week in enumerate(weeks)
+                if not week.matches.filter(Q(home_team=team) | Q(away_team=team)).exists()
+            ]
+            for x, y in zip(bye_indexes, bye_indexes[1:]):
+                self.assertNotEqual(y - x, 1, f'{team} idle twice in a row at weeks {x+1},{y+1}')
+
+    def test_falls_back_to_greedy_when_search_budget_exhausted(self):
+        league = make_league(name='Fallback League')
+        venue = make_venue(league, max_home_teams=4)
+        team_a, team_b, team_c, team_d = make_teams(league, venue, 4)
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        week2 = Week.objects.create(season=season, date=date(2026, 1, 12), number=2)
+        Match.objects.create(week=week1, home_team=team_a, away_team=team_b, location=venue.name)
+        late = Match.objects.create(week=week2, home_team=team_c, away_team=team_d, location=venue.name)
+
+        result = services.pack_season_schedule(season, random_seed=1, attempts=0)
+
+        self.assertFalse(result['optimal'])
+        late.refresh_from_db()
+        self.assertEqual(late.week_id, week1.id)  # greedy fallback still compressed
+        self.assertEqual(season.weeks.count(), 1)
+
+    def test_refuses_to_move_matches_once_results_exist(self):
+        league = make_league(name='Played League')
+        venue = make_venue(league, max_home_teams=4)
+        team_a, team_b, team_c, team_d = make_teams(league, venue, 4)
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.ACTIVE)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        week2 = Week.objects.create(season=season, date=date(2026, 1, 12), number=2)
+        played = Match.objects.create(week=week1, home_team=team_a, away_team=team_b, location=venue.name)
+        MatchResult.objects.create(match=played, home_team_score=5, away_team_score=3)
+        movable = Match.objects.create(week=week2, home_team=team_c, away_team=team_d, location=venue.name)
+
+        result = services.pack_season_schedule(season, random_seed=1)
+
+        self.assertEqual(result, {'optimal': False, 'moved': 0, 'deleted_weeks': 0, 'week_count': 2})
+        movable.refresh_from_db()
+        self.assertEqual(movable.week_id, week2.id)
+
+    def test_greedy_compress_also_refuses_once_results_exist(self):
+        league = make_league(name='Played League 2')
+        venue = make_venue(league, max_home_teams=4)
+        team_a, team_b, team_c, team_d = make_teams(league, venue, 4)
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.ACTIVE)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        week2 = Week.objects.create(season=season, date=date(2026, 1, 12), number=2)
+        played = Match.objects.create(week=week1, home_team=team_a, away_team=team_b, location=venue.name)
+        MatchResult.objects.create(match=played, home_team_score=5, away_team_score=3)
+        Match.objects.create(week=week2, home_team=team_c, away_team=team_d, location=venue.name)
+
+        self.assertEqual(services.compress_season_matches(season), (0, 0))
         self.assertEqual(season.weeks.count(), 2)

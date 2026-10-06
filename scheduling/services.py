@@ -301,13 +301,21 @@ def recreate_season_schedule(season, start_date, random_seed=None):
     return created_weeks
 
 
+def _season_has_results(season):
+    return MatchResult.objects.filter(match__week__season=season).exists()
+
+
 def compress_season_matches(season):
     """Pack every match into the earliest playable week that can take it
     (no team playing twice, venue capacity respected at the match's effective
     venue), then delete playable weeks left empty at the end of the season.
 
-    Returns (moved_count, deleted_week_count).
+    Returns (moved_count, deleted_week_count). Refuses to touch a season that
+    already has results recorded.
     """
+    if _season_has_results(season):
+        return 0, 0
+
     weeks = list(season.weeks.filter(number__isnull=False).order_by('date'))
     moved = 0
 
@@ -336,6 +344,152 @@ def compress_season_matches(season):
         deleted += 1
 
     return moved, deleted
+
+
+def _balanced_week_sizes(total, week_count):
+    base, extra = divmod(total, week_count)
+    return [base + 1] * extra + [base] * (week_count - extra)
+
+
+def _try_pack(matches, venue_caps, sizes, rng):
+    """One randomized first-fit attempt: place every match into a week slot
+    respecting per-week size quotas, team uniqueness, and venue caps.
+    Returns a list of per-week match lists, or None."""
+    order = matches[:]
+    rng.shuffle(order)
+    weeks = [{'teams': set(), 'venues': {}, 'size': size, 'matches': []} for size in sizes]
+    for match, venue in order:
+        placed = False
+        for week in weeks:
+            if len(week['matches']) >= week['size']:
+                continue
+            if match.home_team_id in week['teams'] or match.away_team_id in week['teams']:
+                continue
+            if week['venues'].get(venue.id, 0) >= venue_caps[venue.id]:
+                continue
+            week['teams'] |= {match.home_team_id, match.away_team_id}
+            week['venues'][venue.id] = week['venues'].get(venue.id, 0) + 1
+            week['matches'].append(match)
+            placed = True
+            break
+        if not placed:
+            return None
+    return weeks
+
+
+def _polish_week_order(weeks, team_ids):
+    """Reorder week contents (dates stay fixed) to spread byes and 3-match
+    weeks: no team idle two weeks running where avoidable, full weeks at the
+    season's start and end."""
+    def penalty(ordering):
+        pen = 0
+        for team_id in team_ids:
+            previous_bye = False
+            for week in ordering:
+                bye = team_id not in week['teams']
+                if bye and previous_bye:
+                    pen += 20
+                previous_bye = bye
+        sizes = [len(week['matches']) for week in ordering]
+        largest = max(sizes)
+        pen += 5 * (sizes[0] != largest)
+        pen += 5 * (sizes[-1] != largest)
+        for x, y in zip(sizes, sizes[1:]):
+            if x < largest and y < largest:
+                pen += 3
+        return pen
+
+    best, best_pen = weeks, penalty(weeks)
+    improved = True
+    while improved:
+        improved = False
+        for i in range(len(best)):
+            for j in range(i + 1, len(best)):
+                candidate = best[:]
+                candidate[i], candidate[j] = candidate[j], candidate[i]
+                p = penalty(candidate)
+                if p < best_pen:
+                    best, best_pen = candidate, p
+                    improved = True
+    return best
+
+
+def pack_season_schedule(season, random_seed=None, attempts=5000):
+    """Repack a season's matches into the fewest possible weeks.
+
+    Computes the floor implied by venue capacities, team game counts, and
+    weekly match limits, then searches for a balanced packing (randomized
+    first-fit) and polishes the week order for bye spacing. Falls back to the
+    greedy compress pass when no packing is found within the attempt budget.
+    Matchups, home/away, and locations are never changed — only which week a
+    match is played in. Refuses to touch a season with recorded results.
+
+    Returns {'optimal': bool, 'moved': int, 'deleted_weeks': int, 'week_count': int}.
+    """
+    playable_weeks = list(season.weeks.filter(number__isnull=False).order_by('date'))
+    matches = [
+        (match, _match_effective_venue(match))
+        for week in playable_weeks
+        for match in week.matches.select_related('home_team__venue', 'away_team').order_by('sort_order', 'id')
+    ]
+
+    if _season_has_results(season):
+        return {'optimal': False, 'moved': 0, 'deleted_weeks': 0, 'week_count': len(playable_weeks)}
+    if not matches:
+        return {'optimal': False, 'moved': 0, 'deleted_weeks': 0, 'week_count': len(playable_weeks)}
+
+    venue_caps = {venue.id: venue.max_home_teams for _, venue in matches}
+    hosted = {}
+    games = {}
+    for match, venue in matches:
+        hosted[venue.id] = hosted.get(venue.id, 0) + 1
+        for team_id in (match.home_team_id, match.away_team_id):
+            games[team_id] = games.get(team_id, 0) + 1
+
+    total = len(matches)
+    max_per_week = min(len(games) // 2, sum(venue_caps.values()))
+    floor = max(
+        max(games.values()),
+        -(-total // max_per_week),
+        max(-(-hosted[vid] // venue_caps[vid]) for vid in hosted),
+    )
+
+    rng = random.Random(random_seed)
+    packing = None
+    week_count = floor
+    while packing is None and week_count <= len(playable_weeks):
+        sizes = _balanced_week_sizes(total, week_count)
+        for _ in range(attempts):
+            packing = _try_pack(matches, venue_caps, sizes, rng)
+            if packing:
+                break
+        if packing is None:
+            week_count += 1
+
+    if packing is None:
+        moved, deleted = compress_season_matches(season)
+        return {
+            'optimal': False, 'moved': moved, 'deleted_weeks': deleted,
+            'week_count': season.weeks.filter(number__isnull=False).count(),
+        }
+
+    packing = _polish_week_order(packing, set(games))
+
+    moved = 0
+    with transaction.atomic():
+        for week, slot in zip(playable_weeks, packing):
+            for sort_order, match in enumerate(slot['matches'], start=1):
+                if match.week_id != week.id or match.sort_order != sort_order:
+                    moved += match.week_id != week.id
+                    match.week = week
+                    match.sort_order = sort_order
+                    match.save(update_fields=['week', 'sort_order'])
+        deleted = 0
+        for week in playable_weeks[week_count:]:
+            week.delete()
+            deleted += 1
+
+    return {'optimal': True, 'moved': moved, 'deleted_weeks': deleted, 'week_count': week_count}
 
 
 def create_mirrored_season_schedule(season):
@@ -369,9 +523,9 @@ def create_mirrored_season_schedule(season):
         )
 
     # Final pass: the greedy placement above (and the original half's layout)
-    # can leave gaps — pull matches earlier where possible and drop weeks
-    # that end up empty.
-    compress_season_matches(season)
+    # can leave gaps — repack to the fewest possible weeks (falls back to the
+    # greedy compressor internally if no optimal packing is found).
+    pack_season_schedule(season)
 
     surviving_ids = set(season.weeks.values_list('id', flat=True))
     return [week for week in created_weeks if week.id in surviving_ids]
