@@ -4,6 +4,13 @@
 {% block extrastyle %}
     {{ block.super }}
     <style>
+        /* The stock admin enforces min-width: 980px on #container, which cuts
+           off the right side of this wide page on smaller windows and at high
+           browser zoom. This page is responsive, so remove the floor. */
+        #container {
+            min-width: 0;
+        }
+
         #content {
             width: 100%;
         }
@@ -67,6 +74,9 @@
 
         .schedule-week-body {
             padding: 16px;
+            /* Never clip: if the match table is wider than the window, the
+               card scrolls sideways on its own. */
+            overflow-x: auto;
         }
 
         .schedule-match-table {
@@ -95,7 +105,12 @@
         }
 
         .schedule-location-input {
-            min-width: 220px;
+            width: 140px;
+            min-width: 0;
+        }
+
+        .schedule-match-table select {
+            max-width: 220px;
         }
 
         .schedule-empty {
@@ -162,12 +177,26 @@
             margin: 0;
         }
 
+        /* The stock admin floats the object-tools up beside the heading,
+           which overlaps the breadcrumbs once the buttons no longer fit on
+           one line. Lay them out as a wrapping row instead. */
         .object-tools {
-            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            float: none;
+            position: static;
+            margin: 0 0 20px;
+        }
+
+        .object-tools li {
+            margin-left: 0;
         }
 
         .schedule-filter-bar {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 10px;
             margin-bottom: 20px;
@@ -423,7 +452,7 @@
                                                     <select name="target_week" required>
                                                         {% for destination_week in match.valid_destination_weeks %}
                                                             <option value="{{ destination_week.pk }}">
-                                                                {{ destination_week }}
+                                                                Week {{ destination_week.number }} ({{ destination_week.date }})
                                                             </option>
                                                         {% endfor %}
                                                         <option value="new">Add to new week at end of season</option>
