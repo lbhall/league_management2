@@ -109,6 +109,23 @@ class ManageScheduleViewTests(SeasonAdminTestCase):
         self.assertContains(response, 'Sitting Out')
         self.assertContains(response, self.home.name)
 
+    def test_move_dropdown_uses_short_week_labels(self):
+        """The Move select's options must not repeat the league/season prefix
+        (Week.__str__), which made the table wider than the window."""
+        league = make_league(name='Eight Ball Admin League', results_type=League.ResultsType.EIGHT_BALL)
+        venue = make_venue(league, max_home_teams=4)
+        home = make_team(league, venue, 'H Team')
+        away = make_team(league, venue, 'A Team')
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        Week.objects.create(season=season, date=date(2026, 1, 12), number=2)
+        Match.objects.create(week=week1, home_team=home, away_team=away, location=venue.name)
+
+        response = self.client.get(reverse('admin:scheduling_season_manage_schedule', args=[season.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Week 2 (Jan. 12, 2026)')
+        self.assertNotContains(response, '(Working) - Week')
+
 
 class WeekReorderingViewTests(SeasonAdminTestCase):
     def setUp(self):
