@@ -493,3 +493,136 @@ class CreateNewPlayableWeekAtEndTests(TestCase):
 
         self.assertEqual(new_week.date, date(2026, 1, 15))
         self.assertEqual(new_week.number, 2)
+
+
+class CompressSeasonMatchesTests(TestCase):
+    def setUp(self):
+        self.league = make_league()
+        self.venue = make_venue(self.league, max_home_teams=4)
+        self.team_a, self.team_b, self.team_c, self.team_d = make_teams(self.league, self.venue, 4)
+        self.season = Season.objects.create(league=self.league, name='S1', status=Season.Status.WORKING)
+
+    def week(self, day, number):
+        return Week.objects.create(season=self.season, date=day, number=number)
+
+    def match(self, week, home, away, location=None):
+        return Match.objects.create(
+            week=week, home_team=home, away_team=away,
+            location=location or home.venue.name)
+
+    def test_moves_match_to_earliest_week_and_drops_emptied_trailing_week(self):
+        week1 = self.week(date(2026, 1, 5), 1)
+        week2 = self.week(date(2026, 1, 12), 2)
+        self.match(week1, self.team_a, self.team_b)
+        late = self.match(week2, self.team_c, self.team_d)
+
+        moved, deleted = services.compress_season_matches(self.season)
+
+        self.assertEqual(moved, 1)
+        self.assertEqual(deleted, 1)
+        late.refresh_from_db()
+        self.assertEqual(late.week_id, week1.id)
+        self.assertEqual(self.season.weeks.count(), 1)
+
+    def test_respects_team_conflicts(self):
+        week1 = self.week(date(2026, 1, 5), 1)
+        week2 = self.week(date(2026, 1, 12), 2)
+        self.match(week1, self.team_a, self.team_b)
+        conflicted = self.match(week2, self.team_a, self.team_c)
+
+        moved, deleted = services.compress_season_matches(self.season)
+
+        self.assertEqual((moved, deleted), (0, 0))
+        conflicted.refresh_from_db()
+        self.assertEqual(conflicted.week_id, week2.id)
+
+    def test_respects_venue_capacity(self):
+        tight_venue = make_venue(self.league, name='Tight', max_home_teams=1)
+        home1 = make_team(self.league, tight_venue, 'Tight 1')
+        home2 = make_team(self.league, tight_venue, 'Tight 2')
+        week1 = self.week(date(2026, 1, 5), 1)
+        week2 = self.week(date(2026, 1, 12), 2)
+        self.match(week1, home1, self.team_a)
+        capped = self.match(week2, home2, self.team_b)
+
+        moved, deleted = services.compress_season_matches(self.season)
+
+        self.assertEqual((moved, deleted), (0, 0))
+        capped.refresh_from_db()
+        self.assertEqual(capped.week_id, week2.id)
+
+    def test_capacity_uses_location_override_not_home_venue(self):
+        # The moving match nominally belongs to self.venue but is played at
+        # Overflow Hall (location override), which is empty in week 1, so
+        # capacity is judged there and the move is allowed.
+        make_venue(self.league, name='Overflow Hall', max_home_teams=1)
+        week1 = self.week(date(2026, 1, 5), 1)
+        week2 = self.week(date(2026, 1, 12), 2)
+        self.match(week1, self.team_a, self.team_b)
+        relocated = self.match(week2, self.team_c, self.team_d, location='Overflow Hall')
+
+        moved, deleted = services.compress_season_matches(self.season)
+
+        self.assertEqual(moved, 1)
+        relocated.refresh_from_db()
+        self.assertEqual(relocated.week_id, week1.id)
+
+    def test_middle_empty_week_is_kept_only_trailing_deleted(self):
+        week1 = self.week(date(2026, 1, 5), 1)
+        week2 = self.week(date(2026, 1, 12), 2)   # empty, mid-season
+        week3 = self.week(date(2026, 1, 19), 3)
+        self.match(week1, self.team_a, self.team_b)
+        self.match(week3, self.team_a, self.team_c)  # conflict: cannot move to week1
+
+        moved, deleted = services.compress_season_matches(self.season)
+
+        self.assertEqual(moved, 1)   # moves from week3 to the empty week2
+        self.assertEqual(deleted, 1)  # week3 emptied and trailing
+        self.assertEqual(
+            list(self.season.weeks.order_by('date').values_list('id', flat=True)),
+            [week1.id, week2.id])
+
+    def test_holiday_weeks_are_ignored(self):
+        week1 = self.week(date(2026, 1, 5), 1)
+        Week.objects.create(season=self.season, date=date(2026, 1, 12), number=None, notes='Holiday')
+        week3 = self.week(date(2026, 1, 19), 2)
+        self.match(week1, self.team_a, self.team_b)
+        self.match(week3, self.team_c, self.team_d)
+
+        moved, deleted = services.compress_season_matches(self.season)
+
+        self.assertEqual(moved, 1)
+        self.assertEqual(deleted, 1)
+        self.assertTrue(self.season.weeks.filter(number__isnull=True).exists())
+
+
+class MirrorCompressionIntegrationTests(TestCase):
+    def test_mirror_compresses_and_drops_leftover_empty_weeks(self):
+        league = make_league()
+        venue = make_venue(league, max_home_teams=4)
+        team_a, team_b = make_teams(league, venue, 2)
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        Week.objects.create(season=season, date=date(2026, 1, 12), number=2)  # spare
+        Week.objects.create(season=season, date=date(2026, 1, 19), number=3)  # spare
+        Match.objects.create(week=week1, home_team=team_a, away_team=team_b, location=venue.name)
+
+        services.create_mirrored_season_schedule(season)
+
+        # mirror lands in week 2; week 3 is empty and should be dropped
+        self.assertEqual(season.weeks.count(), 2)
+        self.assertEqual(Match.objects.filter(week__season=season).count(), 2)
+
+    def test_mirror_returns_only_surviving_created_weeks(self):
+        league = make_league()
+        venue = make_venue(league, max_home_teams=4)
+        team_a, team_b = make_teams(league, venue, 2)
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        Match.objects.create(week=week1, home_team=team_a, away_team=team_b, location=venue.name)
+
+        created = services.create_mirrored_season_schedule(season)
+
+        # the mirror needs a new week (team conflict in week 1), which survives compression
+        self.assertEqual(len(created), 1)
+        self.assertEqual(season.weeks.count(), 2)
