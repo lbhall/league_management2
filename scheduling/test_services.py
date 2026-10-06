@@ -212,6 +212,26 @@ class CreateMirroredSeasonScheduleTests(TestCase):
         season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
         self.assertEqual(services.create_mirrored_season_schedule(season), [])
 
+    def test_mirror_placed_into_later_existing_week_is_not_mirrored_again(self):
+        """Regression: a mirrored match may legitimately land in a later
+        *existing* week with spare capacity. The loop must not pick that new
+        match up when it reaches that week and mirror it a second time,
+        duplicating the original fixture."""
+        league = make_league()
+        venue = make_venue(league, max_home_teams=4)
+        team_a, team_b = make_teams(league, venue, 2)
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        Week.objects.create(season=season, date=date(2026, 1, 12), number=2)  # empty, has capacity
+        Match.objects.create(week=week1, home_team=team_a, away_team=team_b, location=venue.name)
+
+        services.create_mirrored_season_schedule(season)
+
+        matches = Match.objects.filter(week__season=season)
+        self.assertEqual(matches.count(), 2)
+        self.assertEqual(matches.filter(home_team=team_a, away_team=team_b).count(), 1)
+        self.assertEqual(matches.filter(home_team=team_b, away_team=team_a).count(), 1)
+
 
 class GetValidDestinationWeeksTests(TestCase):
     def test_excludes_full_venue_weeks_and_holidays(self):
