@@ -2140,3 +2140,62 @@ class AdminUpcomingScoringTests(TestCase):
         response = self.client.get('/score/')
         self.assertFalse(response.context['score_upcoming'])
         self.assertNotContains(response, 'Enter score (preview)')
+
+
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    SITE_BASE_URL='https://emcfunleague.com',
+)
+class NotificationTests(ScoringBase):
+    def _signup(self, player):
+        return self.client.post('/score/signup/', {
+            'email': f'{player.name.replace(" ", "").lower()}@example.com',
+            'password1': 'Str0ngPass!x', 'password2': 'Str0ngPass!x',
+            'player': player.pk,
+        })
+
+    @override_settings(LEAGUE_NOTIFY_EMAIL='ops@example.com')
+    def test_signup_alerts_operator(self):
+        from django.core import mail
+        self._signup(self.home_players[2])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['ops@example.com'])
+        self.assertIn(self.home_players[2].name, mail.outbox[0].subject)
+
+    @override_settings(LEAGUE_NOTIFY_EMAIL='')
+    def test_signup_sends_no_alert_when_unconfigured(self):
+        from django.core import mail
+        self._signup(self.home_players[2])
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_reminder_emails_captain_with_unscored_match(self):
+        from django.core import mail
+        from scoring.notifications import send_score_reminders
+        user, _ = self.make_captain(self.home_players[0])
+        sent = send_score_reminders()
+        self.assertEqual(sent, 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [user.email])
+
+    def test_reminder_skips_fully_scored_match(self):
+        from django.core import mail
+        from scoring.notifications import send_score_reminders
+        self.make_captain(self.home_players[0])
+        result = MatchResult.objects.create(match=self.match)
+        PlayerMatchResult.objects.create(
+            match_result=result, player=self.home_players[0],
+            represented_team=self.home_team, wins=3, losses=2,
+        )
+        PlayerMatchResult.objects.create(
+            match_result=result, player=self.away_players[0],
+            represented_team=self.away_team, wins=2, losses=3,
+        )
+        self.assertEqual(send_score_reminders(), 0)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_reminder_command_runs(self):
+        from django.core import mail
+        from django.core.management import call_command
+        self.make_captain(self.home_players[0])
+        call_command('send_score_reminders')
+        self.assertEqual(len(mail.outbox), 1)

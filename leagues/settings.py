@@ -177,3 +177,24 @@ if not DEBUG:
         f'https://{host}' for host in ALLOWED_HOSTS
         if host not in ('localhost', '127.0.0.1')
     ]
+
+
+# Email / notifications. Backend defaults to console (emails print to the log)
+# so nothing is actually sent until SMTP is configured via env. Point
+# EMAIL_BACKEND at django.core.mail.backends.smtp.EmailBackend and set the
+# EMAIL_* vars (local Postfix, or a relay like SendGrid/Brevo/SES) to go live.
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend',
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'false').lower() in ('1', 'true', 'yes', 'on')
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DEFAULT_FROM_EMAIL', 'EMC Leagues <noreply@emcfunleague.com>',
+)
+# Where new-captain signup alerts go (the operator). No value -> no alert sent.
+LEAGUE_NOTIFY_EMAIL = os.environ.get('LEAGUE_NOTIFY_EMAIL', '')
+# Public base URL for links in emails (the scoring app lives at /score/).
+SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://emcfunleague.com')
