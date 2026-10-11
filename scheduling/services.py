@@ -725,6 +725,7 @@ def archive_season(season):
         ArchivedTeam.objects.create(
             archived_season=archived_season,
             team_name=team.name,
+            team=team,
             matches_won=stats.get('matches_won', 0),
             matches_lost=stats.get('matches_lost', 0),
             games_won=stats.get('games_won', 0),
@@ -741,6 +742,7 @@ def archive_season(season):
         ArchivedPlayer.objects.create(
             archived_season=archived_season,
             player_name=player.name,
+            player=player,
             team_name=player.team.name if player.team else '',
             games_won=stats.get('games_won', 0),
             games_lost=stats.get('games_lost', 0),
@@ -820,6 +822,7 @@ def _archive_one_pocket_matches(archived_season, weeks):
             ArchivedPlayerMatchResult.objects.create(
                 archived_match=archived_match,
                 player_name=home_player.name,
+                player=home_player,
                 team_name=match.home_team.name,
                 wins=home_score or 0,
                 losses=away_score or 0,
@@ -828,6 +831,7 @@ def _archive_one_pocket_matches(archived_season, weeks):
             ArchivedPlayerMatchResult.objects.create(
                 archived_match=archived_match,
                 player_name=away_player.name,
+                player=away_player,
                 team_name=match.away_team.name,
                 wins=away_score or 0,
                 losses=home_score or 0,
@@ -871,6 +875,7 @@ def _archive_eight_ball_matches(archived_season, weeks):
             ArchivedPlayerMatchResult.objects.create(
                 archived_match=archived_match,
                 player_name=pr.player.name,
+                player=pr.player,
                 team_name=pr.represented_team.name,
                 wins=pr.wins,
                 losses=pr.losses,
@@ -878,6 +883,73 @@ def _archive_eight_ball_matches(archived_season, weeks):
                 eight_on_the_breaks=pr.eight_on_the_breaks,
                 won_all_games=pr.won_all_games,
             )
+
+
+def link_archived_season_by_name(archived_season):
+    """Point unlinked archived rows at live teams/players with the same name.
+
+    Only exact (case-insensitive) matches that are unique within the league
+    are linked, so duplicate names are left for an admin to resolve by hand.
+    Returns (teams_linked, players_linked, results_linked).
+    """
+    league = archived_season.league
+
+    def unique_by_name(queryset):
+        by_name = {}
+        for obj in queryset:
+            key = obj.name.strip().lower()
+            by_name.setdefault(key, []).append(obj)
+        return {key: objs[0] for key, objs in by_name.items() if len(objs) == 1}
+
+    teams = unique_by_name(Team.objects.filter(league=league))
+    players = unique_by_name(Player.objects.filter(league=league))
+
+    teams_linked = 0
+    for row in archived_season.teams.filter(team__isnull=True):
+        team = teams.get(row.team_name.strip().lower())
+        if team:
+            row.team = team
+            row.save(update_fields=['team'])
+            teams_linked += 1
+
+    players_linked = 0
+    for row in archived_season.players.filter(player__isnull=True):
+        player = players.get(row.player_name.strip().lower())
+        if player:
+            row.player = player
+            row.save(update_fields=['player'])
+            players_linked += 1
+
+    results_linked = 0
+    for row in ArchivedPlayerMatchResult.objects.filter(
+        archived_match__archived_season=archived_season,
+        player__isnull=True,
+    ):
+        player = players.get(row.player_name.strip().lower())
+        if player:
+            row.player = player
+            row.save(update_fields=['player'])
+            results_linked += 1
+
+    return teams_linked, players_linked, results_linked
+
+
+def build_player_season_history(player):
+    """A player's archived season rows (newest first) plus career totals."""
+    rows = list(
+        player.archived_stats.select_related('archived_season')
+        .order_by('-archived_season__start_date', '-archived_season__archived_at', '-id')
+    )
+    totals = {
+        'games_won': sum(r.games_won for r in rows),
+        'games_lost': sum(r.games_lost for r in rows),
+        'run_outs': sum(r.run_outs for r in rows),
+        'eight_on_the_breaks': sum(r.eight_on_the_breaks for r in rows),
+        'sweeps': sum(r.sweeps for r in rows),
+    }
+    games = totals['games_won'] + totals['games_lost']
+    totals['percentage'] = (totals['games_won'] / games * 100) if games else 0.0
+    return rows, totals
 
 
 def build_team_archive_stats(season):

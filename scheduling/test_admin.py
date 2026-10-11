@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from core.models import League, LeagueAdminAccess, Team, Venue
 from scheduling.admin import get_user_league
-from scheduling.models import ArchivedMatch, ArchivedSeason, ArchivedTeam, Match, Season, Week
+from scheduling.models import ArchivedMatch, ArchivedPlayer, ArchivedSeason, ArchivedTeam, Match, Season, Week
 
 
 def make_league(**kwargs):
@@ -683,6 +683,21 @@ class ArchivedDataAdminTests(SeasonAdminTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Other Home')
         self.assertContains(response, '9/7')
+
+    def test_link_by_name_action(self):
+        from core.models import Player
+        # One-pocket teams auto-create a player of the same name.
+        player = Player.objects.get(league=self.league, name='Home')
+        ArchivedPlayer.objects.create(archived_season=self.archived, player_name='Home')
+
+        response = self.client.post(reverse('admin:scheduling_archivedseason_changelist'), {
+            'action': 'link_by_name',
+            '_selected_action': [self.archived.pk],
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Linked 1 team(s), 1 player(s)')
+        self.assertEqual(self.archived.teams.get(team_name='Home').team, self.home)
+        self.assertEqual(self.archived.players.get(player_name='Home').player, player)
 
     def test_archives_cannot_be_added_by_hand(self):
         response = self.client.get(reverse('admin:scheduling_archivedseason_add'))

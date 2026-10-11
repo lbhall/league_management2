@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
-from core.models import League, Team
+from core.models import League, Player, Team
 
 
 class Holiday(models.Model):
@@ -221,6 +221,15 @@ class ArchivedTeam(models.Model):
         related_name='teams',
     )
     team_name = models.CharField(max_length=255)
+    # The live team this row was built from, so stats follow the team across
+    # seasons. Null when the team was deleted or the archive was imported.
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        related_name='archived_stats',
+        null=True,
+        blank=True,
+    )
     matches_won = models.PositiveIntegerField(default=0)
     matches_lost = models.PositiveIntegerField(default=0)
     games_won = models.PositiveIntegerField(default=0)
@@ -246,6 +255,16 @@ class ArchivedPlayer(models.Model):
         related_name='players',
     )
     player_name = models.CharField(max_length=255)
+    # The live player this row was built from, keyed by id so career stats
+    # survive renames. Null when the player was deleted or the archive was
+    # imported from a legacy database.
+    player = models.ForeignKey(
+        Player,
+        on_delete=models.SET_NULL,
+        related_name='archived_stats',
+        null=True,
+        blank=True,
+    )
     team_name = models.CharField(max_length=255, blank=True)
     games_won = models.PositiveIntegerField(default=0)
     games_lost = models.PositiveIntegerField(default=0)
@@ -303,6 +322,13 @@ class ArchivedPlayerMatchResult(models.Model):
         related_name='player_results',
     )
     player_name = models.CharField(max_length=255)
+    player = models.ForeignKey(
+        Player,
+        on_delete=models.SET_NULL,
+        related_name='archived_match_results',
+        null=True,
+        blank=True,
+    )
     team_name = models.CharField(max_length=255)
     wins = models.PositiveIntegerField(default=0)
     losses = models.PositiveIntegerField(default=0)

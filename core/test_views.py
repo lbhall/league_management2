@@ -319,6 +319,28 @@ class EightBallViewsTests(ViewTestCase):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('player_scores_modal', args=[self.home_player.id]))
         self.assertEqual(response.status_code, 200)
+        self.assertNotIn('Past Seasons', response.json()['html'])
+
+    def test_player_scores_modal_shows_linked_past_seasons(self):
+        old = ArchivedSeason.objects.create(
+            league=self.league, name='2025 Spring', results_type=League.ResultsType.EIGHT_BALL, team_size=3,
+        )
+        ArchivedPlayer.objects.create(
+            archived_season=old, player=self.home_player, player_name='Alice (old name)',
+            team_name='Old Team', games_won=30, games_lost=10, run_outs=2, sweeps=3, eight_on_the_breaks=1,
+        )
+        # An unlinked row with the same name is not hers.
+        ArchivedPlayer.objects.create(archived_season=old, player_name='Alice', team_name='Impostors', games_won=99)
+
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('player_scores_modal', args=[self.home_player.id]))
+        html = response.json()['html']
+        self.assertIn('Past Seasons', html)
+        self.assertIn('2025 Spring', html)
+        self.assertIn('Old Team', html)
+        self.assertIn('Career (archived)', html)
+        self.assertIn('75.0%', html)
+        self.assertNotIn('Impostors', html)
 
     def test_archived_seasons_page_for_eight_ball(self):
         archived_season = ArchivedSeason.objects.create(
