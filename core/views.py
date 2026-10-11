@@ -109,12 +109,14 @@ def get_result_weeks(active_season):
     )
 
 
-def get_one_pocket_race_label(team_a, team_b):
-    rank_a = team_a.team_rank
-    rank_b = team_b.team_rank
+# A one-pocket match counts as finished once either side reaches this score.
+ONE_POCKET_COMPLETE_SCORE = 3
 
+
+def get_one_pocket_races(rank_a, rank_b):
+    """Return (race_a, race_b) for two skill ranks, or None if unknown."""
     if rank_a is None or rank_b is None:
-        return ''
+        return None
 
     higher_rank = max(rank_a, rank_b)
     lower_rank = min(rank_a, rank_b)
@@ -126,12 +128,19 @@ def get_one_pocket_race_label(team_a, team_b):
 
     race = race_lookup.get((higher_rank, lower_rank))
     if not race:
-        return ''
+        return None
 
     higher_race, lower_race = race
     race_a = higher_race if rank_a == higher_rank else lower_race
     race_b = higher_race if rank_b == higher_rank else lower_race
+    return race_a, race_b
 
+
+def get_one_pocket_race_label(team_a, team_b):
+    races = get_one_pocket_races(team_a.team_rank, team_b.team_rank)
+    if not races:
+        return ''
+    race_a, race_b = races
     return f'{race_a}/{race_b}'
 
 
@@ -1225,7 +1234,7 @@ def team_schedule_modal(request, team_id):
             if hasattr(match, 'result'):
                 home_score = match.result.home_team_score or 0
                 away_score = match.result.away_team_score or 0
-                is_complete = max(home_score, away_score) >= 3
+                is_complete = max(home_score, away_score) >= ONE_POCKET_COMPLETE_SCORE
 
                 if is_complete:
                     team_score = home_score if is_home else away_score
@@ -1316,6 +1325,41 @@ def one_pocket_full_schedule_modal(request):
     )
     return JsonResponse({'html': html})
 
+def league_supports_archives(league):
+    """Darts leagues don't use the archive pages; pool leagues do."""
+    return bool(league) and league.results_type != League.ResultsType.DARTS
+
+
+def get_archived_season_options(active_league, selected_id=None):
+    """Return (options, selected) for the active league's archives.
+
+    Archives are always scoped to the active league so one site can never
+    display another league's seasons.
+    """
+    archived_seasons_qs = active_league.archived_seasons.prefetch_related(
+        'teams',
+        'players',
+    ).order_by('-archived_at', '-id')
+
+    options = list(archived_seasons_qs)
+
+    selected = None
+    if selected_id:
+        selected = archived_seasons_qs.filter(pk=selected_id).first()
+    if selected is None and options:
+        selected = options[0]
+
+    return options, selected
+
+
+def archived_season_results_type(archived_season):
+    # Archives created before the snapshot fields existed fall back to the
+    # league's current type (the backfill migration sets it, but tests may not).
+    if archived_season.results_type:
+        return archived_season.results_type
+    return archived_season.league.results_type
+
+
 def build_archived_standings(archived_season):
     if archived_season is None:
         return [], []
@@ -1327,11 +1371,16 @@ def build_archived_standings(archived_season):
             'matches_lost': team.matches_lost,
             'games_won': team.games_won,
             'games_lost': team.games_lost,
+            'league_rank': team.league_rank,
+            'team_rank': team.team_rank,
+            'captain_name': team.captain_name,
+            'venue_name': team.venue_name,
         }
         for team in archived_season.teams.all()
     ]
     team_standings.sort(
         key=lambda row: (
+            row['league_rank'] if row['league_rank'] is not None else float('inf'),
             -row['matches_won'],
             row['matches_lost'],
             -row['games_won'],
@@ -1349,6 +1398,7 @@ def build_archived_standings(archived_season):
             'run_outs': player.run_outs,
             'eight_on_the_breaks': player.eight_on_the_breaks,
             'sweeps': player.sweeps,
+            'male': player.male,
         }
         for player in archived_season.players.all()
     ]
@@ -1359,77 +1409,75 @@ def build_archived_standings(archived_season):
     return team_standings, player_standings
 
 
+def build_archived_match_weeks(archived_season):
+    """Group an archived season's matches by date for display."""
+    if archived_season is None:
+        return []
+
+    weeks = []
+    current = None
+    for match in archived_season.matches.all().order_by('date', 'sort_order', 'id'):
+        if current is None or current['date'] != match.date:
+            current = {
+                'date': match.date,
+                'week_number': match.week_number,
+                'matches': [],
+            }
+            weeks.append(current)
+        current['matches'].append(match)
+    return weeks
+
+
 def archived_seasons(request):
     logging.info(f'Archived Seasons -> active league: {get_active_league(request)}, ip address: {get_client_ip(request)}, host:{request.headers["Host"]}, user-agent: {request.headers["User-Agent"]}, method: {request.method}, path: {request.path}')
     active_league = get_active_league(request)
 
-    is_pool_league = (
-        active_league
-        and (
-            active_league.results_type == League.ResultsType.EIGHT_BALL
-            or 'pool' in active_league.name.lower()
-        )
-    )
+    archives_supported = league_supports_archives(active_league)
     archived_season_options = []
     selected_archived_season = None
-    archived_team_standings = []
-    archived_player_standings = []
 
-    if is_pool_league:
-        archived_seasons_qs = active_league.archived_seasons.prefetch_related(
-            'teams',
-            'players',
-        ).order_by('-archived_at', '-id')
-
-        archived_season_options = list(archived_seasons_qs)
-
-        selected_archived_season_id = request.GET.get('season')
-        if selected_archived_season_id:
-            selected_archived_season = archived_seasons_qs.filter(
-                pk=selected_archived_season_id
-            ).first()
-
-        if selected_archived_season is None:
-            selected_archived_season = archived_season_options[0] if archived_season_options else None
+    if archives_supported:
+        archived_season_options, selected_archived_season = get_archived_season_options(
+            active_league,
+            request.GET.get('season'),
+        )
 
     archived_team_standings, archived_player_standings = build_archived_standings(
         selected_archived_season
+    )
+    archived_match_weeks = build_archived_match_weeks(selected_archived_season)
+
+    archive_results_type = (
+        archived_season_results_type(selected_archived_season)
+        if selected_archived_season
+        else (active_league.results_type if active_league else '')
     )
 
     return render(request, 'archived_seasons.html', {
         'active_league': active_league,
         'league_name': active_league.name if active_league else 'League Name',
-        'is_pool_league': is_pool_league,
+        'archives_supported': archives_supported,
         'archived_season_options': archived_season_options,
         'selected_archived_season': selected_archived_season,
+        'is_one_pocket_archive': archive_results_type == League.ResultsType.ONE_POCKET,
         'archived_team_standings': archived_team_standings,
         'archived_player_standings': archived_player_standings,
+        'archived_match_weeks': archived_match_weeks,
+        'has_archived_matches': bool(archived_match_weeks),
     })
 
 
 def archived_standings_modal(request):
     active_league = get_active_league(request)
-    if not active_league:
+    if not league_supports_archives(active_league):
         raise Http404('No active league found.')
 
-    archived_seasons_qs = active_league.archived_seasons.prefetch_related(
-        'teams',
-        'players',
-    ).order_by('-archived_at', '-id')
-
-    archived_season_options = list(archived_seasons_qs)
+    archived_season_options, selected_archived_season = get_archived_season_options(
+        active_league,
+        request.GET.get('season'),
+    )
     if not archived_season_options:
         raise Http404('No archived seasons available.')
-
-    selected_archived_season_id = request.GET.get('season')
-    selected_archived_season = None
-    if selected_archived_season_id:
-        selected_archived_season = archived_seasons_qs.filter(
-            pk=selected_archived_season_id
-        ).first()
-
-    if selected_archived_season is None:
-        selected_archived_season = archived_season_options[0]
 
     archived_team_standings, archived_player_standings = build_archived_standings(
         selected_archived_season
@@ -1441,6 +1489,9 @@ def archived_standings_modal(request):
             'active_league': active_league,
             'archived_season_options': archived_season_options,
             'selected_archived_season': selected_archived_season,
+            'is_one_pocket_archive': (
+                archived_season_results_type(selected_archived_season) == League.ResultsType.ONE_POCKET
+            ),
             'archived_team_standings': archived_team_standings,
             'archived_player_standings': archived_player_standings,
         },
@@ -1451,49 +1502,72 @@ def archived_standings_modal(request):
 
 
 def archived_player_history(request, archived_season_id, player_name):
-    archived_season = get_object_or_404(ArchivedSeason, pk=archived_season_id)
+    active_league = get_active_league(request)
+    if not league_supports_archives(active_league):
+        raise Http404('No active league found.')
+
+    # Scoped to the active league: a Bogies URL can never pull EMC rows.
+    archived_season = get_object_or_404(
+        ArchivedSeason,
+        pk=archived_season_id,
+        league=active_league,
+    )
+    is_one_pocket = archived_season_results_type(archived_season) == League.ResultsType.ONE_POCKET
 
     player_results = ArchivedPlayerMatchResult.objects.filter(
         archived_match__archived_season=archived_season,
         player_name=player_name
-    ).select_related('archived_match').order_by('archived_match__date')
+    ).select_related('archived_match').order_by('archived_match__date', 'archived_match__sort_order')
 
     history = []
     for pr in player_results:
         match = pr.archived_match
+        is_home = pr.team_name == match.home_team_name
 
-        # Get all players in this match to find opponents
-        all_results = list(match.player_results.all())
-        opponent_results = [r for r in all_results if r.player_name != player_name]
+        opponent_names = match.away_team_name if is_home else match.home_team_name
 
-        opponent_names = ", ".join([opr.player_name for opr in opponent_results])
-        if not opponent_names:
-            if pr.team_name == match.home_team_name:
-                opponent_names = match.away_team_name
-            else:
-                opponent_names = match.home_team_name
-
-        if pr.team_name == match.home_team_name:
+        if is_home:
             team_score = match.home_team_score
             opp_score = match.away_team_score
+            my_rank, opp_rank = match.home_team_rank, match.away_team_rank
+            my_race, opp_race = match.home_race, match.away_race
         else:
             team_score = match.away_team_score
             opp_score = match.home_team_score
+            my_rank, opp_rank = match.away_team_rank, match.home_team_rank
+            my_race, opp_race = match.away_race, match.home_race
+
+        if team_score is None or opp_score is None or not match.completed:
+            outcome = ''
+        elif team_score > opp_score:
+            outcome = 'W'
+        elif team_score < opp_score:
+            outcome = 'L'
+        else:
+            outcome = 'T'
 
         history.append({
             'date': match.date,
+            'week_number': match.week_number,
             'opponent': opponent_names,
             'team_score': team_score,
             'opp_score': opp_score,
+            'outcome': outcome,
             'wins': pr.wins,
             'losses': pr.losses,
             'runouts': pr.runouts,
             'eight_on_the_breaks': pr.eight_on_the_breaks,
+            'won_all_games': pr.won_all_games,
+            'my_rank': my_rank,
+            'opp_rank': opp_rank,
+            'race_label': f'{my_race}/{opp_race}' if my_race is not None and opp_race is not None else '',
         })
 
     html = render_to_string('archived_player_history_modal.html', {
         'player_name': player_name,
         'season_name': archived_season.name,
+        'is_one_pocket': is_one_pocket,
+        'team_size': archived_season.team_size or archived_season.league.team_size,
         'history': history,
     }, request=request)
     return JsonResponse({'html': html})

@@ -282,7 +282,8 @@ def match_list(request):
         recent_scored.reverse()
 
     # Player-vs-player match finder for one pocket admins: finds every match
-    # between the two players across all seasons, whichever order is entered.
+    # between the two players in the active season, whichever order is entered.
+    # Archived and working seasons are deliberately left out.
     match_search = None
     if (
         profile.role == ScoringProfile.Role.ADMIN
@@ -295,9 +296,9 @@ def match_list(request):
             p1 = p2 = None
 
         results = []
-        if p1 and p2:
+        if p1 and p2 and season is not None:
             found = (
-                Match.objects.filter(week__season__league=profile.league)
+                Match.objects.filter(week__season=season)
                 .filter(
                     Q(home_team_id=p1, away_team_id=p2)
                     | Q(home_team_id=p2, away_team_id=p1)
@@ -309,7 +310,6 @@ def match_list(request):
                 {
                     'match': m,
                     'result_label': _result_label(m),
-                    'season_name': m.week.season.name,
                 }
                 for m in found
             ]

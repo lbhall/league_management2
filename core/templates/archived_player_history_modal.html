@@ -14,19 +14,45 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>Opponent</th>
-                                    <th>Score</th>
-                                    <th>My Wins</th>
-                                    <th>My Losses</th>
+                                    {% if is_one_pocket %}
+                                        <th>Race</th>
+                                        <th>Score</th>
+                                        <th>Result</th>
+                                    {% else %}
+                                        <th>Team Score</th>
+                                        <th>Wins</th>
+                                        <th>Losses</th>
+                                        <th>Run Outs</th>
+                                        <th>8s</th>
+                                        <th>{{ team_size }}/0</th>
+                                    {% endif %}
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for row in history %}
                                     <tr>
                                         <td>{{ row.date }}</td>
-                                        <td>{{ row.opponent }}</td>
-                                        <td>{{ row.team_score|default:"0" }} - {{ row.opp_score|default:"0" }}</td>
-                                        <td>{{ row.wins }}</td>
-                                        <td>{{ row.losses }}</td>
+                                        <td>
+                                            {{ row.opponent }}{% if is_one_pocket and row.opp_rank %} ({{ row.opp_rank }}){% endif %}
+                                        </td>
+                                        {% if is_one_pocket %}
+                                            <td>{{ row.race_label|default:"-" }}</td>
+                                            <td>{{ row.team_score|default:"0" }} - {{ row.opp_score|default:"0" }}</td>
+                                            <td>{{ row.outcome|default:"-" }}</td>
+                                        {% else %}
+                                            <td>
+                                                {% if row.team_score is not None and row.opp_score is not None %}
+                                                    {{ row.team_score }} - {{ row.opp_score }}
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ row.wins }}</td>
+                                            <td>{{ row.losses }}</td>
+                                            <td>{{ row.runouts }}</td>
+                                            <td>{{ row.eight_on_the_breaks }}</td>
+                                            <td>{% if row.won_all_games %}&#10003;{% else %}-{% endif %}</td>
+                                        {% endif %}
                                     </tr>
                                 {% endfor %}
                             </tbody>

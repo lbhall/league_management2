@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from core.models import League, Player, Team
-from scheduling.models import Match
+from scheduling.models import Match, Season
 
 
 class ScoringProfile(models.Model):
@@ -66,6 +66,10 @@ class ScoringProfile(models.Model):
                 return access.league_id == match_league_id
             return self.league_id == match_league_id
         if match_league_id != self.league_id:
+            return False
+        # Archived seasons are read-only for captains; admins can still fix
+        # scores and rebuild the archive.
+        if match.week.season.status == Season.Status.ARCHIVED:
             return False
         team = self.team
         if team is None:

@@ -6,7 +6,7 @@
     <div class="mb-4">
         <h1 class="h2 mb-2">Archived Seasons</h1>
 
-        {% if is_pool_league and archived_season_options %}
+        {% if archives_supported and archived_season_options %}
             <form method="get" class="row g-2 align-items-end mb-4">
                 <div class="col-sm-6 col-md-4">
                     <label for="season" class="form-label">Archived Season</label>
@@ -25,111 +25,259 @@
         {% endif %}
     </div>
 
-    {% if not is_pool_league %}
+    {% if not archives_supported %}
         <p class="text-muted mb-0">
-            Archived standings are currently only available for pool leagues.
-            {% if active_league %}
-                Current league: {{ active_league.name }} / {{ active_league.results_type }}
-            {% endif %}
+            This league does not keep season archives.
         </p>
     {% elif selected_archived_season %}
-        <div class="row g-4">
-            <div class="col-lg-6">
-                <div class="card shadow-sm h-100">                    <div class="card-header">
-                        <strong>Archived Team Standings</strong>
-                    </div>
-                    <div class="card-body">
-                        {% if archived_team_standings %}
-                            <div class="table-responsive">
-                                <table class="table table-striped align-middle mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">Rank</th>
-                                            <th scope="col">{% if selected_archived_season.league.results_type == 'one_pocket' %}Player{% else %}Team{% endif %}</th>
-                                            <th scope="col">Matches Won</th>
-                                            <th scope="col">Matches Lost</th>
-                                            <th scope="col">Games Won</th>
-                                            <th scope="col">Games Lost</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for standing in archived_team_standings %}
+        {% if is_one_pocket_archive %}
+            {# One-pocket is singles: the "team" standings are the player standings. #}
+            <div class="row g-4">
+                <div class="col-lg-5">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header">
+                            <strong>Final Standings</strong>
+                        </div>
+                        <div class="card-body">
+                            {% if archived_team_standings %}
+                                <div class="table-responsive">
+                                    <table class="table table-striped align-middle mb-0">
+                                        <thead>
                                             <tr>
-                                                <td>{{ forloop.counter }}</td>
-                                                <td>{{ standing.team_name }}</td>
-                                                <td>{{ standing.matches_won }}</td>
-                                                <td>{{ standing.matches_lost }}</td>
-                                                <td>{{ standing.games_won }}</td>
-                                                <td>{{ standing.games_lost }}</td>
+                                                <th scope="col">Rank</th>
+                                                <th scope="col">Player</th>
+                                                <th scope="col">Skill</th>
+                                                <th scope="col">Matches (W-L)</th>
+                                                <th scope="col">Games (W-L)</th>
                                             </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% else %}
-                            <p class="text-muted mb-0">No archived team standings available.</p>
-                        {% endif %}
+                                        </thead>
+                                        <tbody>
+                                            {% for standing in archived_team_standings %}
+                                                <tr>
+                                                    <td>{{ forloop.counter }}</td>
+                                                    <td>
+                                                        {% if has_archived_matches %}
+                                                            <a
+                                                                href="#"
+                                                                data-archived-player-history-modal
+                                                                data-season-id="{{ selected_archived_season.id }}"
+                                                                data-player-name="{{ standing.team_name }}"
+                                                            >
+                                                                {{ standing.team_name }}
+                                                            </a>
+                                                        {% else %}
+                                                            {{ standing.team_name }}
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ standing.team_rank|default:"-" }}</td>
+                                                    <td>{{ standing.matches_won }}-{{ standing.matches_lost }}</td>
+                                                    <td>{{ standing.games_won }}-{{ standing.games_lost }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <p class="text-muted mb-0">No archived standings available.</p>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="col-lg-6">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header">
-                        <strong>Archived Player Standings</strong>
-                    </div>
-                    <div class="card-body">
-                        {% if archived_player_standings %}
-                            <div class="table-responsive">
-                                <table class="table table-striped align-middle mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">Rank</th>
-                                            <th scope="col">Player</th>
-                                            <th scope="col">Team</th>
-                                            <th scope="col">Games Won</th>
-                                            <th scope="col">Games Lost</th>
-                                            <th scope="col">Run Outs</th>
-                                            <th scope="col">8 on the Breaks</th>
-                                            <th scope="col">{{ selected_archived_season.league.team_size }}/0</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for standing in archived_player_standings %}
-                                            <tr>
-                                                <td>{{ forloop.counter }}</td>
-                                                <td>
-                                                    {% if selected_archived_season.league.results_type == 'one_pocket' %}
-                                                        <a
-                                                            href="#"
-                                                            data-archived-player-history-modal
-                                                            data-season-id="{{ selected_archived_season.id }}"
-                                                            data-player-name="{{ standing.player_name }}"
-                                                        >
-                                                            {{ standing.player_name }}
-                                                        </a>
-                                                    {% else %}
-                                                        {{ standing.player_name }}
-                                                    {% endif %}
-                                                </td>
-                                                <td>{{ standing.team_name|default:"-" }}</td>
-                                                <td>{{ standing.games_won }}</td>
-                                                <td>{{ standing.games_lost }}</td>
-                                                <td>{{ standing.run_outs }}</td>
-                                                <td>{{ standing.eight_on_the_breaks }}</td>
-                                                <td>{{ standing.sweeps }}</td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% else %}
-                            <p class="text-muted mb-0">No archived player standings available.</p>
-                        {% endif %}
+                <div class="col-lg-7">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header">
+                            <strong>Match Results</strong>
+                        </div>
+                        <div class="card-body">
+                            {% if archived_match_weeks %}
+                                {% for week in archived_match_weeks %}
+                                    <h3 class="h6 mt-3 mb-2">
+                                        {% if week.week_number %}Week {{ week.week_number }} &mdash; {% endif %}{{ week.date|date:"M. j, Y" }}
+                                    </h3>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Home</th>
+                                                    <th scope="col">Race</th>
+                                                    <th scope="col">Away</th>
+                                                    <th scope="col">Score</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for match in week.matches %}
+                                                    <tr>
+                                                        <td>{{ match.home_team_name }}{% if match.home_team_rank %} ({{ match.home_team_rank }}){% endif %}</td>
+                                                        <td>{{ match.race_label|default:"-" }}</td>
+                                                        <td>{{ match.away_team_name }}{% if match.away_team_rank %} ({{ match.away_team_rank }}){% endif %}</td>
+                                                        <td>
+                                                            {% if match.completed %}
+                                                                {{ match.home_team_score }}-{{ match.away_team_score }}
+                                                            {% elif match.home_team_score is not None %}
+                                                                {{ match.home_team_score }}-{{ match.away_team_score }} <span class="text-muted">(incomplete)</span>
+                                                            {% else %}
+                                                                <span class="text-muted">Not played</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-muted mb-0">No match results were archived for this season.</p>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        {% else %}
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header">
+                            <strong>Archived Team Standings</strong>
+                        </div>
+                        <div class="card-body">
+                            {% if archived_team_standings %}
+                                <div class="table-responsive">
+                                    <table class="table table-striped align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Rank</th>
+                                                <th scope="col">Team</th>
+                                                <th scope="col">Matches Won</th>
+                                                <th scope="col">Matches Lost</th>
+                                                <th scope="col">Games Won</th>
+                                                <th scope="col">Games Lost</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for standing in archived_team_standings %}
+                                                <tr>
+                                                    <td>{{ forloop.counter }}</td>
+                                                    <td>
+                                                        {{ standing.team_name }}
+                                                        {% if standing.captain_name %}
+                                                            <br><small class="text-muted">Captain: {{ standing.captain_name }}</small>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ standing.matches_won }}</td>
+                                                    <td>{{ standing.matches_lost }}</td>
+                                                    <td>{{ standing.games_won }}</td>
+                                                    <td>{{ standing.games_lost }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <p class="text-muted mb-0">No archived team standings available.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header">
+                            <strong>Archived Player Standings</strong>
+                        </div>
+                        <div class="card-body">
+                            {% if archived_player_standings %}
+                                <div class="table-responsive">
+                                    <table class="table table-striped align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Rank</th>
+                                                <th scope="col">Player</th>
+                                                <th scope="col">Team</th>
+                                                <th scope="col">Games Won</th>
+                                                <th scope="col">Games Lost</th>
+                                                <th scope="col">Run Outs</th>
+                                                <th scope="col">8 on the Breaks</th>
+                                                <th scope="col">{{ selected_archived_season.team_size|default:active_league.team_size }}/0</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for standing in archived_player_standings %}
+                                                <tr>
+                                                    <td>{{ forloop.counter }}</td>
+                                                    <td>
+                                                        {% if has_archived_matches %}
+                                                            <a
+                                                                href="#"
+                                                                data-archived-player-history-modal
+                                                                data-season-id="{{ selected_archived_season.id }}"
+                                                                data-player-name="{{ standing.player_name }}"
+                                                            >
+                                                                {{ standing.player_name }}
+                                                            </a>
+                                                        {% else %}
+                                                            {{ standing.player_name }}
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ standing.team_name|default:"-" }}</td>
+                                                    <td>{{ standing.games_won }}</td>
+                                                    <td>{{ standing.games_lost }}</td>
+                                                    <td>{{ standing.run_outs }}</td>
+                                                    <td>{{ standing.eight_on_the_breaks }}</td>
+                                                    <td>{{ standing.sweeps }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <p class="text-muted mb-0">No archived player standings available.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if has_archived_matches %}
+                    <div class="col-12">
+                        <div class="card shadow-sm">
+                            <div class="card-header">
+                                <strong>Match Results</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    {% for week in archived_match_weeks %}
+                                        <div class="col-md-6 col-xl-4">
+                                            <h3 class="h6 mb-2">
+                                                {% if week.week_number %}Week {{ week.week_number }} &mdash; {% endif %}{{ week.date|date:"M. j, Y" }}
+                                            </h3>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-striped align-middle mb-0">
+                                                    <tbody>
+                                                        {% for match in week.matches %}
+                                                            <tr>
+                                                                <td>{{ match.home_team_name }}</td>
+                                                                <td class="text-nowrap">
+                                                                    {% if match.completed %}
+                                                                        {{ match.home_team_score }}-{{ match.away_team_score }}
+                                                                    {% else %}
+                                                                        <span class="text-muted">Not played</span>
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td>{{ match.away_team_name }}</td>
+                                                            </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
     {% else %}
         <p class="text-muted mb-0">No archived seasons available.</p>
     {% endif %}

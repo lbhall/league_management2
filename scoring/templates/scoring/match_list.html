@@ -155,7 +155,7 @@
                             <div>
                                 <div>{{ entry.match.home_team.name }} vs {{ entry.match.away_team.name }}</div>
                                 <div class="muted">
-                                    {{ entry.season_name }} — Week {{ entry.match.week.number }} — {{ entry.match.week.date }}
+                                    Week {{ entry.match.week.number }} — {{ entry.match.week.date }}
                                 </div>
                             </div>
                             <a href="{% url 'scoring:enter_score' entry.match.id %}"

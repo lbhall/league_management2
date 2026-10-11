@@ -7,7 +7,16 @@ from django.urls import reverse
 from content.models import NewsItem, Rule
 from core.models import League, Player, Team, Venue
 from results.models import MatchResult, PlayerMatchResult
-from scheduling.models import ArchivedPlayer, ArchivedSeason, ArchivedTeam, Match, Season, Week
+from scheduling.models import (
+    ArchivedMatch,
+    ArchivedPlayer,
+    ArchivedPlayerMatchResult,
+    ArchivedSeason,
+    ArchivedTeam,
+    Match,
+    Season,
+    Week,
+)
 
 
 def make_league(results_type=League.ResultsType.ONE_POCKET, team_size=1, **kwargs):
@@ -63,7 +72,7 @@ class NoActiveLeagueTests(ViewTestCase):
 class OnePocketViewsTests(ViewTestCase):
     def setUp(self):
         super().setUp()
-        self.league = make_league(name='Bogies Pool One Pocket', results_type=League.ResultsType.ONE_POCKET, team_size=1)
+        self.league = make_league(name='Bogies East One Pocket League', results_type=League.ResultsType.ONE_POCKET, team_size=1)
         self.venue = make_venue(self.league)
         self.team_a = make_team(self.league, self.venue, 'Marcus', team_rank=2)
         self.team_b = make_team(self.league, self.venue, 'Louie', team_rank=4)
@@ -90,10 +99,37 @@ class OnePocketViewsTests(ViewTestCase):
         Rule.objects.create(league=self.league, text='No slow play.', rule_type=Rule.RuleType.RULE_ENTRY, order=2)
         Rule.objects.create(league=self.league, text='Be on time.', rule_type=Rule.RuleType.RULE_ENTRY, order=3)
 
-        archived_season = ArchivedSeason.objects.create(league=self.league, name='Archived Season 1')
-        ArchivedTeam.objects.create(archived_season=archived_season, team_name='Marcus', matches_won=5, matches_lost=2)
+        archived_season = ArchivedSeason.objects.create(
+            league=self.league, name='Archived Season 1', results_type=League.ResultsType.ONE_POCKET, team_size=1,
+        )
+        ArchivedTeam.objects.create(
+            archived_season=archived_season, team_name='Marcus', matches_won=5, matches_lost=2,
+            league_rank=1, team_rank=2,
+        )
+        ArchivedTeam.objects.create(
+            archived_season=archived_season, team_name='Louie', matches_won=2, matches_lost=5,
+            league_rank=2, team_rank=4,
+        )
         ArchivedPlayer.objects.create(archived_season=archived_season, player_name='Marcus', games_won=10, games_lost=4)
+        archived_match = ArchivedMatch.objects.create(
+            archived_season=archived_season, date=date(2025, 6, 2), week_number=1,
+            home_team_name='Marcus', away_team_name='Louie', home_team_score=6, away_team_score=10,
+            home_team_rank=2, away_team_rank=4, home_race=6, away_race=10, completed=True,
+        )
+        ArchivedPlayerMatchResult.objects.create(
+            archived_match=archived_match, player_name='Marcus', team_name='Marcus', wins=6, losses=10,
+        )
+        ArchivedPlayerMatchResult.objects.create(
+            archived_match=archived_match, player_name='Louie', team_name='Louie', wins=10, losses=6,
+        )
         self.archived_season = archived_season
+
+        # Another league's archive must never leak into this site.
+        self.other_league = make_league(name='Other Pool League', results_type=League.ResultsType.EIGHT_BALL, team_size=5)
+        self.other_archived_season = ArchivedSeason.objects.create(
+            league=self.other_league, name='Other Archive', results_type=League.ResultsType.EIGHT_BALL, team_size=5,
+        )
+        ArchivedTeam.objects.create(archived_season=self.other_archived_season, team_name='Other Team')
 
     def test_home_page(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
@@ -170,24 +206,65 @@ class OnePocketViewsTests(ViewTestCase):
             )
             self.assertEqual(response.status_code, 200)
 
-    def test_archived_seasons_page_lists_pool_league_archives(self):
+    def test_archived_seasons_page_renders_one_pocket_archive(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('archived_seasons'))
             self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'Final Standings')
+            self.assertContains(response, 'Match Results')
+            # Standings ordered by archived league rank, with skill rank shown.
+            self.assertContains(response, 'Marcus')
+            self.assertContains(response, 'Louie')
+            # Race and skill ranks for the archived match.
+            self.assertContains(response, '6/10')
+            self.assertContains(response, 'Marcus (2)')
+            self.assertNotContains(response, 'only available for pool leagues')
 
             response = self.client.get(reverse('archived_seasons'), {'season': self.archived_season.id})
             self.assertEqual(response.status_code, 200)
+
+    def test_archived_seasons_page_never_lists_other_leagues(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('archived_seasons'))
+            self.assertNotContains(response, 'Other Archive')
+            self.assertNotContains(response, 'Other Team')
+
+            # Asking for another league's season falls back to our own.
+            response = self.client.get(reverse('archived_seasons'), {'season': self.other_archived_season.id})
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'Other Team')
+            self.assertContains(response, 'Marcus')
 
     def test_archived_standings_modal(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('archived_standings_modal'))
         self.assertEqual(response.status_code, 200)
+        html = response.json()['html']
+        self.assertIn('Marcus', html)
+        self.assertNotIn('Other Team', html)
 
     def test_archived_player_history_modal(self):
-        response = self.client.get(
-            reverse('archived_player_history', args=[self.archived_season.id, 'Marcus']),
-        )
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(
+                reverse('archived_player_history', args=[self.archived_season.id, 'Marcus']),
+            )
         self.assertEqual(response.status_code, 200)
+        html = response.json()['html']
+        self.assertIn('Louie (4)', html)
+        self.assertIn('6/10', html)
+        self.assertIn('<td>L</td>', html)
+
+    def test_archived_player_history_is_scoped_to_active_league(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(
+                reverse('archived_player_history', args=[self.other_archived_season.id, 'Marcus']),
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_home_page_links_to_archive_page(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('home'))
+        self.assertContains(response, 'href="/archived-seasons/"')
 
 
 class EightBallViewsTests(ViewTestCase):
@@ -243,10 +320,51 @@ class EightBallViewsTests(ViewTestCase):
             response = self.client.get(reverse('player_scores_modal', args=[self.home_player.id]))
         self.assertEqual(response.status_code, 200)
 
-    def test_archived_seasons_page_is_pool_league_for_eight_ball(self):
+    def test_archived_seasons_page_for_eight_ball(self):
+        archived_season = ArchivedSeason.objects.create(
+            league=self.league, name='2025 Fall', results_type=League.ResultsType.EIGHT_BALL, team_size=3,
+        )
+        ArchivedTeam.objects.create(
+            archived_season=archived_season, team_name='Home Team', matches_won=3, matches_lost=1,
+            league_rank=1, captain_name='Alice',
+        )
+        ArchivedPlayer.objects.create(
+            archived_season=archived_season, player_name='Alice', team_name='Home Team',
+            games_won=7, games_lost=2, male=False,
+        )
+        archived_match = ArchivedMatch.objects.create(
+            archived_season=archived_season, date=date(2025, 9, 8), week_number=1,
+            home_team_name='Home Team', away_team_name='Away Team', home_team_score=6, away_team_score=3,
+            completed=True,
+        )
+        ArchivedPlayerMatchResult.objects.create(
+            archived_match=archived_match, player_name='Alice', team_name='Home Team',
+            wins=3, losses=0, runouts=1, won_all_games=True,
+        )
+
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('archived_seasons'))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'Archived Team Standings')
+            self.assertContains(response, 'Captain: Alice')
+            self.assertContains(response, 'Match Results')
+            self.assertContains(response, '6-3')
+            self.assertNotContains(response, 'Skill')
+
+            response = self.client.get(
+                reverse('archived_player_history', args=[archived_season.id, 'Alice']),
+            )
+            self.assertEqual(response.status_code, 200)
+            html = response.json()['html']
+            self.assertIn('Away Team', html)
+            self.assertIn('Run Outs', html)
+            self.assertNotIn('Race', html)
+
+    def test_archived_seasons_page_without_archives(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('archived_seasons'))
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No archived seasons available')
 
     def test_bye_week_opponent_is_not_a_link(self):
         # Week 2 has no match for the team, so the schedule shows a Bye row.
