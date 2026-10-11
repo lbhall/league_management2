@@ -388,48 +388,181 @@ class ArchiveSeasonTests(TestCase):
         venue = make_venue(league)
         home = make_team(league, venue, 'Home')
         away = make_team(league, venue, 'Away')
+        home.team_rank = 5
+        home.save()
+        away.team_rank = 4
+        away.save()
 
         season = Season.objects.create(league=league, name='S1', status=Season.Status.ACTIVE)
         week = Week.objects.create(season=season, date=date(2026, 1, 1), number=1)
+        week2 = Week.objects.create(season=season, date=date(2026, 1, 8), number=2)
         match = Match.objects.create(week=week, home_team=home, away_team=away)
         MatchResult.objects.create(match=match, home_team_score=8, away_team_score=5)
+        # Never played before the archive.
+        Match.objects.create(week=week2, home_team=away, away_team=home)
 
         archived = services.archive_season(season)
 
         self.assertIsInstance(archived, ArchivedSeason)
-        self.assertEqual(archived.teams.count(), 2)
-        self.assertEqual(archived.players.count(), 2)
-        self.assertEqual(archived.matches.count(), 1)
-        archived_match = archived.matches.first()
-        self.assertEqual(archived_match.home_team_score, 8)
-        self.assertEqual(archived_match.away_team_score, 5)
-        self.assertEqual(archived_match.player_results.count(), 2)
-        self.assertFalse(Season.objects.filter(pk=season.pk).exists())
+        self.assertEqual(archived.results_type, League.ResultsType.ONE_POCKET)
+        self.assertEqual(archived.team_size, 1)
+        self.assertEqual(archived.start_date, date(2026, 1, 1))
+        self.assertEqual(archived.end_date, date(2026, 1, 8))
 
-    def test_archives_eight_ball_season_without_match_archive(self):
-        league = make_league(results_type=League.ResultsType.EIGHT_BALL, team_size=3)
+        self.assertEqual(archived.teams.count(), 2)
+        home_row = archived.teams.get(team_name='Home')
+        away_row = archived.teams.get(team_name='Away')
+        self.assertEqual(home_row.league_rank, 1)
+        self.assertEqual(away_row.league_rank, 2)
+        self.assertEqual(home_row.team_rank, 5)
+        self.assertEqual(away_row.team_rank, 4)
+        self.assertEqual(home_row.captain_name, 'Home')
+        self.assertEqual(home_row.venue_name, venue.name)
+
+        self.assertEqual(archived.players.count(), 2)
+        self.assertEqual(archived.matches.count(), 2)
+
+        played = archived.matches.get(date=date(2026, 1, 1))
+        self.assertEqual(played.week_number, 1)
+        self.assertEqual(played.home_team_score, 8)
+        self.assertEqual(played.away_team_score, 5)
+        self.assertEqual(played.home_team_rank, 5)
+        self.assertEqual(played.away_team_rank, 4)
+        self.assertEqual(played.home_race, 9)
+        self.assertEqual(played.away_race, 7)
+        self.assertEqual(played.race_label, '9/7')
+        self.assertTrue(played.completed)
+        self.assertEqual(played.player_results.count(), 2)
+
+        unplayed = archived.matches.get(date=date(2026, 1, 8))
+        self.assertIsNone(unplayed.home_team_score)
+        self.assertFalse(unplayed.completed)
+        self.assertEqual(unplayed.player_results.count(), 0)
+
+        # Soft archive: the season is kept, marked archived, and linked.
+        season.refresh_from_db()
+        self.assertEqual(season.status, Season.Status.ARCHIVED)
+        self.assertEqual(archived.season, season)
+        self.assertEqual(season.archive, archived)
+
+    def test_rearchiving_rebuilds_the_snapshot_from_live_data(self):
+        league = make_league(results_type=League.ResultsType.ONE_POCKET, team_size=1)
         venue = make_venue(league)
         home = make_team(league, venue, 'Home')
         away = make_team(league, venue, 'Away')
-        player = Player.objects.create(league=league, name='Alice', team=home)
 
         season = Season.objects.create(league=league, name='S1', status=Season.Status.ACTIVE)
         week = Week.objects.create(season=season, date=date(2026, 1, 1), number=1)
         match = Match.objects.create(week=week, home_team=home, away_team=away)
+        result = MatchResult.objects.create(match=match, home_team_score=3, away_team_score=1)
+
+        first = services.archive_season(season)
+        self.assertEqual(first.teams.get(team_name='Home').matches_won, 1)
+
+        # Fix a score after archiving, then rebuild.
+        result.home_team_score = 1
+        result.away_team_score = 3
+        result.save()
+
+        season.refresh_from_db()
+        rebuilt = services.archive_season(season)
+
+        self.assertFalse(ArchivedSeason.objects.filter(pk=first.pk).exists())
+        self.assertEqual(ArchivedSeason.objects.filter(league=league).count(), 1)
+        self.assertEqual(rebuilt.season, season)
+        self.assertEqual(rebuilt.teams.get(team_name='Home').matches_won, 0)
+        self.assertEqual(rebuilt.teams.get(team_name='Away').league_rank, 1)
+        season.refresh_from_db()
+        self.assertEqual(season.status, Season.Status.ARCHIVED)
+
+    def test_working_season_cannot_be_archived(self):
+        league = make_league()
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
+        Week.objects.create(season=season, date=date(2026, 1, 1), number=1)
+        with self.assertRaises(ValueError):
+            services.archive_season(season)
+
+    def test_archives_eight_ball_season_with_matches_and_player_results(self):
+        league = make_league(results_type=League.ResultsType.EIGHT_BALL, team_size=3)
+        venue = make_venue(league)
+        home = make_team(league, venue, 'Home')
+        away = make_team(league, venue, 'Away')
+        captain = Player.objects.create(league=league, name='Alice', team=home, male=False)
+        home.captain = captain
+        home.save()
+        bob = Player.objects.create(league=league, name='Bob', team=away)
+
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.ACTIVE)
+        week = Week.objects.create(season=season, date=date(2026, 1, 1), number=1)
+        week2 = Week.objects.create(season=season, date=date(2026, 1, 8), number=2)
+        match = Match.objects.create(week=week, home_team=home, away_team=away)
         match_result = MatchResult.objects.create(match=match)
         PlayerMatchResult.objects.create(
             match_result=match_result,
-            player=player,
+            player=captain,
             represented_team=home,
             wins=2,
+            runouts=1,
         )
+        PlayerMatchResult.objects.create(
+            match_result=match_result,
+            player=bob,
+            represented_team=away,
+            wins=3,
+            eight_on_the_breaks=1,
+        )
+        Match.objects.create(week=week2, home_team=away, away_team=home)
 
         archived = services.archive_season(season)
 
-        self.assertEqual(archived.matches.count(), 0)
+        self.assertEqual(archived.results_type, League.ResultsType.EIGHT_BALL)
+        self.assertEqual(archived.team_size, 3)
+
+        home_row = archived.teams.get(team_name='Home')
+        self.assertEqual(home_row.captain_name, 'Alice')
+        self.assertIsNone(home_row.team_rank)
+
         archived_player = archived.players.get(player_name='Alice')
         self.assertEqual(archived_player.games_won, 2)
         self.assertEqual(archived_player.games_lost, 1)
+        self.assertFalse(archived_player.male)
+
+        # 8-ball now keeps every match plus each player's line for it.
+        self.assertEqual(archived.matches.count(), 2)
+        played = archived.matches.get(date=date(2026, 1, 1))
+        self.assertTrue(played.completed)
+        self.assertEqual(played.home_team_score, 2)
+        self.assertEqual(played.away_team_score, 3)
+        self.assertIsNone(played.home_race)
+        self.assertEqual(played.player_results.count(), 2)
+        alice_line = played.player_results.get(player_name='Alice')
+        self.assertEqual(alice_line.team_name, 'Home')
+        self.assertEqual(alice_line.wins, 2)
+        self.assertEqual(alice_line.losses, 1)
+        self.assertEqual(alice_line.runouts, 1)
+        bob_line = played.player_results.get(player_name='Bob')
+        self.assertEqual(bob_line.eight_on_the_breaks, 1)
+        self.assertTrue(bob_line.won_all_games)
+
+        unplayed = archived.matches.get(date=date(2026, 1, 8))
+        self.assertFalse(unplayed.completed)
+        self.assertEqual(unplayed.player_results.count(), 0)
+
+    def test_darts_season_archives_standings_only(self):
+        league = make_league(results_type=League.ResultsType.DARTS, team_size=2)
+        venue = make_venue(league)
+        home = make_team(league, venue, 'Home')
+        away = make_team(league, venue, 'Away')
+
+        season = Season.objects.create(league=league, name='S1', status=Season.Status.ACTIVE)
+        week = Week.objects.create(season=season, date=date(2026, 1, 1), number=1)
+        match = Match.objects.create(week=week, home_team=home, away_team=away)
+        MatchResult.objects.create(match=match, home_team_score=5, away_team_score=3)
+
+        archived = services.archive_season(season)
+
+        self.assertEqual(archived.teams.count(), 2)
+        self.assertEqual(archived.matches.count(), 0)
 
 
 class MoveWeekUpDownTests(TestCase):

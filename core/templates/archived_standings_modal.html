@@ -30,7 +30,7 @@
                     {% endif %}
 
                     {% if selected_archived_season %}
-                        {% if selected_archived_season.league.results_type == 'one_pocket' %}
+                        {% if is_one_pocket_archive %}
                             <div class="card shadow-sm">
                                 <div class="card-header">
                                     <strong>Archived Player Standings</strong>
@@ -43,10 +43,9 @@
                                                     <tr>
                                                         <th scope="col">Rank</th>
                                                         <th scope="col">Player</th>
-                                                        <th scope="col">Matches Won</th>
-                                                        <th scope="col">Matches Lost</th>
-                                                        <th scope="col">Games Won</th>
-                                                        <th scope="col">Games Lost</th>
+                                                        <th scope="col">Skill</th>
+                                                        <th scope="col">Matches (W-L)</th>
+                                                        <th scope="col">Games (W-L)</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -54,10 +53,9 @@
                                                         <tr>
                                                             <td>{{ forloop.counter }}</td>
                                                             <td>{{ standing.team_name }}</td>
-                                                            <td>{{ standing.matches_won }}</td>
-                                                            <td>{{ standing.matches_lost }}</td>
-                                                            <td>{{ standing.games_won }}</td>
-                                                            <td>{{ standing.games_lost }}</td>
+                                                            <td>{{ standing.team_rank|default:"-" }}</td>
+                                                            <td>{{ standing.matches_won }}-{{ standing.matches_lost }}</td>
+                                                            <td>{{ standing.games_won }}-{{ standing.games_lost }}</td>
                                                         </tr>
                                                     {% endfor %}
                                                 </tbody>
@@ -128,7 +126,7 @@
                                                                 <th scope="col">Games Lost</th>
                                                                 <th scope="col">Run Outs</th>
                                                                 <th scope="col">8 on the Breaks</th>
-                                                                <th scope="col">{{ selected_archived_season.league.team_size }}/0</th>
+                                                                <th scope="col">{{ selected_archived_season.team_size|default:active_league.team_size }}/0</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>

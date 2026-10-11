@@ -9,7 +9,17 @@ from django.utils.html import format_html
 from django.template.response import TemplateResponse
 
 from core.models import League, Team
-from .models import Holiday, Match, Season, Week
+from .models import (
+    ArchivedMatch,
+    ArchivedPlayer,
+    ArchivedPlayerMatchResult,
+    ArchivedSeason,
+    ArchivedTeam,
+    Holiday,
+    Match,
+    Season,
+    Week,
+)
 from .services import (
     archive_season,
     create_mirrored_season_schedule,
@@ -151,6 +161,7 @@ class HolidayAdmin(admin.ModelAdmin):
 class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
     change_form_template = 'admin/scheduling/season/change_form.html'
     list_display = ('name', 'league', 'status', 'tournament_players_link')
+    list_filter = ('status',)
     search_fields = ('name', 'league__name')
     ordering = ('league__name', 'name')
     inlines = [WeekInline]
@@ -369,22 +380,28 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             'all_teams': list(league.teams.order_by('name')),
             'start_date_choices': self._get_start_date_choices(season),
             'venue_violations': get_venue_violations(season),
-            'mirror_schedule_url': reverse('admin:scheduling_season_mirror_schedule', args=[season.pk]),
-            'rebalance_schedule_url': reverse('admin:scheduling_season_rebalance_schedule', args=[season.pk]),
-            'renumber_weeks_url': reverse('admin:scheduling_season_renumber_weeks', args=[season.pk]),
             'swap_match_url_name': 'admin:scheduling_season_swap_match',
             'update_match_location_url_name': 'admin:scheduling_season_update_match_location',
             'move_match_url_name': 'admin:scheduling_season_move_match',
+            'is_archived': season.status == Season.Status.ARCHIVED,
         }
 
-        if season.status != Season.Status.ACTIVE:
-            context['recreate_schedule_url'] = reverse('admin:scheduling_season_recreate_schedule', args=[season.pk])
+        if season.status != Season.Status.ARCHIVED:
+            # Schedule-shaping tools only make sense before the season is archived.
+            context['mirror_schedule_url'] = reverse('admin:scheduling_season_mirror_schedule', args=[season.pk])
+            context['rebalance_schedule_url'] = reverse('admin:scheduling_season_rebalance_schedule', args=[season.pk])
+            context['renumber_weeks_url'] = reverse('admin:scheduling_season_renumber_weeks', args=[season.pk])
 
         if season.status == Season.Status.WORKING:
+            context['recreate_schedule_url'] = reverse('admin:scheduling_season_recreate_schedule', args=[season.pk])
             context['move_live_url'] = reverse('admin:scheduling_season_move_live', args=[season.pk])
 
         if season.status == Season.Status.ACTIVE:
             context['archive_season_url'] = reverse('admin:scheduling_season_archive', args=[season.pk])
+            context['archive_button_label'] = 'Archive Season'
+        elif season.status == Season.Status.ARCHIVED:
+            context['archive_season_url'] = reverse('admin:scheduling_season_archive', args=[season.pk])
+            context['archive_button_label'] = 'Rebuild Archive'
 
         return TemplateResponse(
             request,
@@ -471,11 +488,23 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         if request.method != 'POST':
             return self._get_redirect_url(request, season)
 
+        rebuilding = season.status == Season.Status.ARCHIVED
+
         try:
             archived_season = archive_season(season)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
             return self._get_redirect_url(request, season)
+
+        if rebuilding:
+            self.message_user(
+                request,
+                f'Archive rebuilt successfully as "{archived_season.name}".',
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(
+                reverse('admin:scheduling_archivedseason_change', args=[archived_season.pk])
+            )
 
         self.message_user(
             request,
@@ -490,10 +519,10 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         if request.method != 'POST':
             return self._get_redirect_url(request, season)
 
-        if season.status == Season.Status.ACTIVE:
+        if season.status != Season.Status.WORKING:
             self.message_user(
                 request,
-                'Cannot recreate the schedule of an active season.',
+                'Only a working season\'s schedule can be recreated.',
                 level=messages.ERROR,
             )
             return self._get_redirect_url(request, season)
@@ -522,6 +551,10 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
+            return self._get_redirect_url(request, season)
+
+        if season.status == Season.Status.ARCHIVED:
+            self.message_user(request, 'Cannot mirror the schedule of an archived season.', level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
         created_weeks = create_mirrored_season_schedule(season)
@@ -558,6 +591,10 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         season = self._get_league_scoped_object(request, object_id)
 
         if request.method != 'POST':
+            return self._get_redirect_url(request, season)
+
+        if season.status == Season.Status.ARCHIVED:
+            self.message_user(request, 'Cannot rebalance the schedule of an archived season.', level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
         moved_matches = rebalance_season_matches(season)
@@ -733,3 +770,115 @@ class MatchAdmin(admin.ModelAdmin):
     def enter_score_link(self, obj):
         url = reverse('admin:results_matchresult_enter_score', args=[obj.pk])
         return format_html('<a href="{}">Enter Score</a>', url)
+
+class LeagueScopedArchivedSeasonFilter(admin.SimpleListFilter):
+    title = 'archived season'
+    parameter_name = 'archived_season'
+
+    def lookups(self, request, model_admin):
+        queryset = ArchivedSeason.objects.select_related('league').order_by('-archived_at', '-id')
+
+        user_league = get_user_league(request)
+        if not request.user.is_superuser and user_league is not None:
+            queryset = queryset.filter(league=user_league)
+
+        return [(season.pk, str(season)) for season in queryset]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(archived_season_id=self.value())
+        return queryset
+
+
+class ArchivedTeamInline(admin.TabularInline):
+    model = ArchivedTeam
+    extra = 0
+    fields = (
+        'league_rank', 'team_name', 'team_rank', 'captain_name', 'venue_name',
+        'matches_won', 'matches_lost', 'games_won', 'games_lost',
+    )
+    ordering = ('league_rank', 'team_name')
+
+
+class ArchivedPlayerInline(admin.TabularInline):
+    model = ArchivedPlayer
+    extra = 0
+    fields = (
+        'player_name', 'team_name', 'male',
+        'games_won', 'games_lost', 'run_outs', 'eight_on_the_breaks', 'sweeps',
+    )
+    ordering = ('team_name', 'player_name')
+
+
+@admin.register(ArchivedSeason)
+class ArchivedSeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
+    """Archives are created by "Archive Season"; this admin exists to correct
+    names and numbers after the fact (and to inspect what was captured)."""
+
+    list_display = ('name', 'league', 'results_type', 'start_date', 'end_date', 'archived_at', 'matches_link')
+    search_fields = ('name', 'league__name', 'teams__team_name', 'players__player_name')
+    ordering = ('-archived_at', '-id')
+    fields = ('league', 'name', 'season', 'results_type', 'team_size', 'start_date', 'end_date', 'archived_at')
+    readonly_fields = ('season', 'archived_at')
+    inlines = [ArchivedTeamInline, ArchivedPlayerInline]
+
+    def get_list_filter(self, request):
+        if request.user.is_superuser:
+            return ('league', 'results_type')
+        return ('results_type',)
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description='Matches')
+    def matches_link(self, obj):
+        count = obj.matches.count()
+        if not count:
+            return '0'
+        url = reverse('admin:scheduling_archivedmatch_changelist') + f'?archived_season={obj.pk}'
+        return format_html('<a href="{}">{}</a>', url, count)
+
+
+class ArchivedPlayerMatchResultInline(admin.TabularInline):
+    model = ArchivedPlayerMatchResult
+    extra = 0
+    fields = ('player_name', 'team_name', 'wins', 'losses', 'runouts', 'eight_on_the_breaks', 'won_all_games')
+    ordering = ('team_name', 'player_name')
+
+
+@admin.register(ArchivedMatch)
+class ArchivedMatchAdmin(admin.ModelAdmin):
+    list_display = (
+        'date', 'week_number', 'archived_season', 'home_team_name', 'home_team_score',
+        'away_team_score', 'away_team_name', 'race_label', 'completed',
+    )
+    list_select_related = ('archived_season', 'archived_season__league')
+    search_fields = ('home_team_name', 'away_team_name', 'archived_season__name')
+    ordering = ('-date', 'sort_order')
+    inlines = [ArchivedPlayerMatchResultInline]
+
+    def get_list_filter(self, request):
+        if request.user.is_superuser:
+            return ('archived_season__league', LeagueScopedArchivedSeasonFilter, 'completed')
+        return (LeagueScopedArchivedSeasonFilter, 'completed')
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        user_league = get_user_league(request)
+
+        if request.user.is_superuser or user_league is None:
+            return queryset
+
+        return queryset.filter(archived_season__league=user_league)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        user_league = get_user_league(request)
+
+        if not request.user.is_superuser and user_league is not None:
+            if db_field.name == 'archived_season':
+                kwargs['queryset'] = ArchivedSeason.objects.filter(league=user_league)
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def has_add_permission(self, request):
+        return False

@@ -14,6 +14,7 @@ from scheduling.models import (
     ArchivedTeam,
     Holiday,
     Match,
+    Season,
     Week,
 )
 from results.models import PlayerMatchResult, MatchResult
@@ -679,22 +680,47 @@ def rebalance_season_matches(season):
     return moved_matches
 
 @transaction.atomic
+@transaction.atomic
 def archive_season(season):
+    """Snapshot a season into the Archived* tables and mark it archived.
+
+    The season itself is kept (status ARCHIVED) so scores can still be fixed
+    afterwards. Calling this again on an archived season throws away the old
+    snapshot and rebuilds it from the live data.
+    """
     weeks = list(season.weeks.all().order_by('date', 'number'))
     if not weeks:
         raise ValueError('Season has no weeks to archive.')
 
+    if season.status == Season.Status.WORKING:
+        raise ValueError('Only an active or archived season can be archived.')
+
+    league = season.league
     beginning_date = weeks[0].date
     ending_date = weeks[-1].date
     archived_season_name = f'{beginning_date} - {ending_date}'
 
+    # Rebuild: drop the previous snapshot for this season.
+    ArchivedSeason.objects.filter(season=season).delete()
+
     archived_season = ArchivedSeason.objects.create(
-        league=season.league,
+        league=league,
+        season=season,
         name=archived_season_name,
+        results_type=league.results_type,
+        team_size=league.team_size,
+        start_date=beginning_date,
+        end_date=ending_date,
     )
 
     team_stats = build_team_archive_stats(season)
-    for team in Team.objects.filter(league=season.league).order_by('name'):
+    teams = (
+        Team.objects.filter(league=league)
+        .exclude(name__iexact='BYE')
+        .select_related('captain', 'venue')
+        .order_by('name')
+    )
+    for team in teams:
         stats = team_stats.get(team.id, {})
         ArchivedTeam.objects.create(
             archived_season=archived_season,
@@ -703,10 +729,14 @@ def archive_season(season):
             matches_lost=stats.get('matches_lost', 0),
             games_won=stats.get('games_won', 0),
             games_lost=stats.get('games_lost', 0),
+            league_rank=stats.get('league_rank'),
+            team_rank=team.team_rank,
+            captain_name=team.captain.name if team.captain_id else '',
+            venue_name=team.venue.name if team.venue_id else '',
         )
 
     player_stats = build_player_archive_stats(season)
-    for player in Player.objects.filter(league=season.league).select_related('team').order_by('name'):
+    for player in Player.objects.filter(league=league).select_related('team').order_by('name'):
         stats = player_stats.get(player.id, {})
         ArchivedPlayer.objects.create(
             archived_season=archived_season,
@@ -717,55 +747,141 @@ def archive_season(season):
             run_outs=stats.get('run_outs', 0),
             eight_on_the_breaks=stats.get('eight_on_the_breaks', 0),
             sweeps=stats.get('sweeps', 0),
+            male=player.male,
         )
 
-    # Archive Matches and PlayerMatchResults if it's one_pocket
-    if season.league.results_type == 'one_pocket':
-        for week in weeks:
-            for match in week.matches.all():
-                try:
-                    res = match.result
-                except MatchResult.DoesNotExist:
-                    res = None
+    # Each league type keeps a different match-level record. Darts only
+    # archives standings (it doesn't use the archive pages).
+    if league.results_type == 'one_pocket':
+        _archive_one_pocket_matches(archived_season, weeks)
+    elif league.results_type == '8_ball':
+        _archive_eight_ball_matches(archived_season, weeks)
 
-                archived_match = ArchivedMatch.objects.create(
-                    archived_season=archived_season,
-                    date=week.date,
-                    home_team_name=match.home_team.name,
-                    away_team_name=match.away_team.name,
-                    home_team_score=res.home_team_score if res else None,
-                    away_team_score=res.away_team_score if res else None,
-                )
-
-                if res:
-                    # For one_pocket, we use the team's player (since team_size is 1)
-                    hp = Player.objects.filter(team=match.home_team).first()
-                    ap = Player.objects.filter(team=match.away_team).first()
-
-                    if hp:
-                        ArchivedPlayerMatchResult.objects.create(
-                            archived_match=archived_match,
-                            player_name=hp.name,
-                            team_name=match.home_team.name,
-                            wins=res.home_team_score or 0,
-                            losses=res.away_team_score or 0,
-                        )
-                    if ap:
-                        ArchivedPlayerMatchResult.objects.create(
-                            archived_match=archived_match,
-                            player_name=ap.name,
-                            team_name=match.away_team.name,
-                            wins=res.away_team_score or 0,
-                            losses=res.home_team_score or 0,
-                        )
-
-    season.delete()
+    season.status = Season.Status.ARCHIVED
+    season.save(update_fields=['status'])
     return archived_season
 
 
+def _iter_week_matches(weeks):
+    for week in weeks:
+        matches = (
+            week.matches.select_related('home_team', 'away_team')
+            .order_by('sort_order', 'id')
+        )
+        for match in matches:
+            try:
+                result = match.result
+            except MatchResult.DoesNotExist:
+                result = None
+            yield week, match, result
+
+
+def _archive_one_pocket_matches(archived_season, weeks):
+    from core.views import ONE_POCKET_COMPLETE_SCORE, get_one_pocket_races
+
+    for week, match, result in _iter_week_matches(weeks):
+        home_rank = match.home_team.team_rank
+        away_rank = match.away_team.team_rank
+        races = get_one_pocket_races(home_rank, away_rank)
+        home_race, away_race = races if races else (None, None)
+
+        home_score = result.home_team_score if result else None
+        away_score = result.away_team_score if result else None
+        completed = (
+            result is not None
+            and max(home_score or 0, away_score or 0) >= ONE_POCKET_COMPLETE_SCORE
+        )
+
+        archived_match = ArchivedMatch.objects.create(
+            archived_season=archived_season,
+            date=week.date,
+            week_number=week.number,
+            sort_order=match.sort_order,
+            home_team_name=match.home_team.name,
+            away_team_name=match.away_team.name,
+            home_team_score=home_score,
+            away_team_score=away_score,
+            location=match.location,
+            home_team_rank=home_rank,
+            away_team_rank=away_rank,
+            home_race=home_race,
+            away_race=away_race,
+            completed=completed,
+        )
+
+        if result is None:
+            continue
+
+        # One-pocket is singles: the team's single player carries the result.
+        home_player = Player.objects.filter(team=match.home_team).first()
+        away_player = Player.objects.filter(team=match.away_team).first()
+
+        if home_player:
+            ArchivedPlayerMatchResult.objects.create(
+                archived_match=archived_match,
+                player_name=home_player.name,
+                team_name=match.home_team.name,
+                wins=home_score or 0,
+                losses=away_score or 0,
+            )
+        if away_player:
+            ArchivedPlayerMatchResult.objects.create(
+                archived_match=archived_match,
+                player_name=away_player.name,
+                team_name=match.away_team.name,
+                wins=away_score or 0,
+                losses=home_score or 0,
+            )
+
+
+def _archive_eight_ball_matches(archived_season, weeks):
+    for week, match, result in _iter_week_matches(weeks):
+        player_results = []
+        if result is not None:
+            player_results = list(
+                result.player_results.select_related('player', 'represented_team')
+            )
+
+        home_score = result.home_team_score if result else None
+        away_score = result.away_team_score if result else None
+        if player_results:
+            if home_score is None:
+                home_score = sum(
+                    pr.wins for pr in player_results if pr.represented_team_id == match.home_team_id
+                )
+            if away_score is None:
+                away_score = sum(
+                    pr.wins for pr in player_results if pr.represented_team_id == match.away_team_id
+                )
+
+        archived_match = ArchivedMatch.objects.create(
+            archived_season=archived_season,
+            date=week.date,
+            week_number=week.number,
+            sort_order=match.sort_order,
+            home_team_name=match.home_team.name,
+            away_team_name=match.away_team.name,
+            home_team_score=home_score,
+            away_team_score=away_score,
+            location=match.location,
+            completed=bool(player_results),
+        )
+
+        for pr in player_results:
+            ArchivedPlayerMatchResult.objects.create(
+                archived_match=archived_match,
+                player_name=pr.player.name,
+                team_name=pr.represented_team.name,
+                wins=pr.wins,
+                losses=pr.losses,
+                runouts=pr.runouts,
+                eight_on_the_breaks=pr.eight_on_the_breaks,
+                won_all_games=pr.won_all_games,
+            )
+
+
 def build_team_archive_stats(season):
-    # Reuse your current standings logic here if you prefer.
-    # This keeps the archive data aligned with the live stats.
+    # Reuse the live standings logic so the archive matches what the site showed.
     from core.views import build_team_standings
 
     standings = build_team_standings(season.league, season)
@@ -775,6 +891,7 @@ def build_team_archive_stats(season):
             'matches_lost': row['matches_lost'],
             'games_won': row['games_won'],
             'games_lost': row['games_lost'],
+            'league_rank': row.get('league_rank'),
         }
         for row in standings
     }

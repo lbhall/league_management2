@@ -1202,23 +1202,30 @@ class MatchSearchTests(ScoringBase):
         results = response.context['match_search']['results']
         self.assertEqual([r['match'] for r in results], [self.op_match])
 
-    def test_search_spans_all_seasons(self):
-        old_season = Season.objects.create(
-            league=self.op_league, name='Early 2026', status=Season.Status.WORKING,
-        )
-        old_week = Week.objects.create(
-            season=old_season, date='2026-02-01', number=1,
-        )
-        old_match = Match.objects.create(
-            week=old_week, home_team=self.marcus, away_team=self.beau,
-        )
+    def test_search_only_covers_the_active_season(self):
+        for name, status in (
+            ('Early 2026', Season.Status.ARCHIVED),
+            ('Late 2026', Season.Status.WORKING),
+        ):
+            other_season = Season.objects.create(league=self.op_league, name=name, status=status)
+            other_week = Week.objects.create(season=other_season, date='2026-02-01', number=1)
+            Match.objects.create(week=other_week, home_team=self.marcus, away_team=self.beau)
 
         self._login()
         response = self.client.get(f'/score/?p1={self.beau.pk}&p2={self.marcus.pk}')
 
         results = [r['match'] for r in response.context['match_search']['results']]
-        self.assertIn(self.op_match, results)
-        self.assertIn(old_match, results)
+        self.assertEqual(results, [self.op_match])
+
+    def test_search_is_empty_without_an_active_season(self):
+        self.op_season.status = Season.Status.ARCHIVED
+        self.op_season.save(update_fields=['status'])
+
+        self._login()
+        response = self.client.get(f'/score/?p1={self.beau.pk}&p2={self.marcus.pk}')
+
+        self.assertEqual(response.context['match_search']['results'], [])
+        self.assertTrue(response.context['match_search']['searched'])
 
     def test_search_shows_result_label_for_scored_match(self):
         MatchResult.objects.create(match=self.op_match, home_team_score=3, away_team_score=1)
@@ -1929,6 +1936,24 @@ class CaptainFinalizedBlockTests(ScoringBase):
         self.client.force_login(user)
         response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
         self.assertEqual(response.status_code, 200)
+
+    def test_captain_cannot_score_archived_season_match(self):
+        # Even a same-day match is off limits once the season is archived.
+        self._set_week_date(timezone.localdate())
+        self.season.status = Season.Status.ARCHIVED
+        self.season.save(update_fields=['status'])
+        user, profile = self.make_captain(self.home_players[0])
+        self.assertFalse(profile.can_score_match(self.match))
+        self.client.force_login(user)
+        response = self.client.get(f'/score/match/{self.match.pk}/')
+        self.assertRedirects(response, '/score/', fetch_redirect_response=False)
+
+    def test_admin_can_fix_archived_season_match(self):
+        self.season.status = Season.Status.ARCHIVED
+        self.season.save(update_fields=['status'])
+        self._finalize()
+        user, profile = self.make_admin()
+        self.assertTrue(profile.can_score_match(self.match))
 
 
 class DualLineupPrefillTests(TestCase):

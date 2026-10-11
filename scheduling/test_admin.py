@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from core.models import League, LeagueAdminAccess, Team, Venue
 from scheduling.admin import get_user_league
-from scheduling.models import Match, Season, Week
+from scheduling.models import ArchivedMatch, ArchivedSeason, ArchivedTeam, Match, Season, Week
 
 
 def make_league(**kwargs):
@@ -203,7 +203,46 @@ class ArchiveSeasonViewTests(SeasonAdminTestCase):
 
         response = self.client.post(reverse('admin:scheduling_season_archive', args=[season.pk]))
         self.assertRedirects(response, reverse('admin:index'))
-        self.assertFalse(Season.objects.filter(pk=season.pk).exists())
+        season.refresh_from_db()
+        self.assertEqual(season.status, Season.Status.ARCHIVED)
+        self.assertTrue(ArchivedSeason.objects.filter(season=season).exists())
+
+    def test_rebuild_redirects_to_archived_season_change(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ARCHIVED)
+        Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+
+        response = self.client.post(reverse('admin:scheduling_season_archive', args=[season.pk]))
+        archived = ArchivedSeason.objects.get(season=season)
+        self.assertRedirects(response, reverse('admin:scheduling_archivedseason_change', args=[archived.pk]))
+
+    def test_working_season_archive_shows_error(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.WORKING)
+        Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+
+        response = self.client.post(reverse('admin:scheduling_season_archive', args=[season.pk]))
+        self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
+        self.assertFalse(ArchivedSeason.objects.filter(season=season).exists())
+
+    def test_archived_season_manage_schedule_offers_rebuild_only(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ARCHIVED)
+        Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+
+        response = self.client.get(reverse('admin:scheduling_season_manage_schedule', args=[season.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Rebuild Archive')
+        self.assertContains(response, reverse('admin:scheduling_season_archive', args=[season.pk]))
+        self.assertNotContains(response, reverse('admin:scheduling_season_recreate_schedule', args=[season.pk]))
+        self.assertNotContains(response, reverse('admin:scheduling_season_mirror_schedule', args=[season.pk]))
+        self.assertNotContains(response, reverse('admin:scheduling_season_move_live', args=[season.pk]))
+
+    def test_archived_season_rejects_mirror_and_rebalance(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ARCHIVED)
+        Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+
+        for url_name in ('scheduling_season_mirror_schedule', 'scheduling_season_rebalance_schedule'):
+            response = self.client.post(reverse(f'admin:{url_name}', args=[season.pk]))
+            self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
+        self.assertEqual(season.weeks.count(), 1)
 
 
 class RecreateScheduleViewTests(SeasonAdminTestCase):
@@ -606,3 +645,77 @@ class MatchAdminTests(SeasonAdminTestCase):
 
         response = self.client.get(reverse('admin:scheduling_match_add'))
         self.assertEqual(response.status_code, 200)
+
+
+class ArchivedDataAdminTests(SeasonAdminTestCase):
+    def setUp(self):
+        super().setUp()
+        self.archived = ArchivedSeason.objects.create(
+            league=self.league, name='2025 Spring', results_type=League.ResultsType.ONE_POCKET, team_size=1,
+        )
+        ArchivedTeam.objects.create(archived_season=self.archived, team_name='Home', league_rank=1)
+        self.archived_match = ArchivedMatch.objects.create(
+            archived_season=self.archived, date=date(2025, 3, 3), week_number=1,
+            home_team_name='Home', away_team_name='Away', home_team_score=3, away_team_score=1,
+            home_race=9, away_race=7, completed=True,
+        )
+
+        self.other_league = make_league(name='Other League3')
+        self.other_archived = ArchivedSeason.objects.create(
+            league=self.other_league, name='Other 2025', results_type=League.ResultsType.EIGHT_BALL, team_size=5,
+        )
+        self.other_match = ArchivedMatch.objects.create(
+            archived_season=self.other_archived, date=date(2025, 4, 4),
+            home_team_name='Other Home', away_team_name='Other Away',
+        )
+
+    def test_superuser_sees_all_archives(self):
+        response = self.client.get(reverse('admin:scheduling_archivedseason_changelist'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '2025 Spring')
+        self.assertContains(response, 'Other 2025')
+
+        response = self.client.get(reverse('admin:scheduling_archivedseason_change', args=[self.archived.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Home')
+
+        response = self.client.get(reverse('admin:scheduling_archivedmatch_changelist'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Other Home')
+        self.assertContains(response, '9/7')
+
+    def test_archives_cannot_be_added_by_hand(self):
+        response = self.client.get(reverse('admin:scheduling_archivedseason_add'))
+        self.assertEqual(response.status_code, 403)
+        response = self.client.get(reverse('admin:scheduling_archivedmatch_add'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_scoped_staff_only_sees_their_archives(self):
+        from django.contrib.auth.models import Permission
+
+        User = get_user_model()
+        staff_user = User.objects.create_user(username='archive_staffer', password='pw', is_staff=True)
+        LeagueAdminAccess.objects.create(user=staff_user, league=self.league)
+        staff_user.user_permissions.add(*Permission.objects.filter(content_type__app_label='scheduling'))
+        self.client.login(username='archive_staffer', password='pw')
+
+        response = self.client.get(reverse('admin:scheduling_archivedseason_changelist'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '2025 Spring')
+        self.assertNotContains(response, 'Other 2025')
+
+        response = self.client.get(reverse('admin:scheduling_archivedseason_change', args=[self.other_archived.pk]))
+        self.assertEqual(response.status_code, 302)
+
+        response = self.client.get(reverse('admin:scheduling_archivedmatch_changelist'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Home')
+        self.assertNotContains(response, 'Other Home')
+
+    def test_season_changelist_filters_by_status(self):
+        Season.objects.create(league=self.league, name='Old', status=Season.Status.ARCHIVED)
+        Season.objects.create(league=self.league, name='Now', status=Season.Status.ACTIVE)
+        response = self.client.get(reverse('admin:scheduling_season_changelist'), {'status__exact': 'archived'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Old')
+        self.assertNotContains(response, 'Now')

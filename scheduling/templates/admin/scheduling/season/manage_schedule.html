@@ -289,7 +289,7 @@
             <li>
                 <form action="{{ archive_season_url }}" method="post" style="display: inline;">
                     {% csrf_token %}
-                    <button type="submit" class="button">Archive Season</button>
+                    <button type="submit" class="button">{{ archive_button_label|default:"Archive Season" }}</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 </form>
             </li>

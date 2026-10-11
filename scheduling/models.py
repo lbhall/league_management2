@@ -26,6 +26,9 @@ class Season(models.Model):
     class Status(models.TextChoices):
         WORKING = 'working', 'Working'
         ACTIVE = 'active', 'Active'
+        # Archived seasons are kept (not deleted) so their results can still be
+        # corrected and the archive snapshot rebuilt from real data.
+        ARCHIVED = 'archived', 'Archived'
 
     league = models.ForeignKey(
         League,
@@ -176,12 +179,39 @@ class ArchivedSeason(models.Model):
     )
     name = models.CharField(max_length=255)
     archived_at = models.DateTimeField(auto_now_add=True)
+    # The live season this snapshot was built from. Null for archives imported
+    # from legacy databases or whose season was deleted.
+    season = models.OneToOneField(
+        Season,
+        on_delete=models.SET_NULL,
+        related_name='archive',
+        null=True,
+        blank=True,
+    )
+    # Snapshot of the league at archive time, so archived pages don't depend
+    # on the live league's current configuration.
+    results_type = models.CharField(
+        max_length=20,
+        choices=League.ResultsType.choices,
+        blank=True,
+    )
+    team_size = models.PositiveIntegerField(null=True, blank=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ['-archived_at', '-id']
 
     def __str__(self):
         return f'{self.league} - {self.name}'
+
+    @property
+    def is_one_pocket(self):
+        return self.results_type == League.ResultsType.ONE_POCKET
+
+    @property
+    def is_eight_ball(self):
+        return self.results_type == League.ResultsType.EIGHT_BALL
 
 
 class ArchivedTeam(models.Model):
@@ -195,6 +225,12 @@ class ArchivedTeam(models.Model):
     matches_lost = models.PositiveIntegerField(default=0)
     games_won = models.PositiveIntegerField(default=0)
     games_lost = models.PositiveIntegerField(default=0)
+    # Final standings position at archive time.
+    league_rank = models.PositiveIntegerField(null=True, blank=True)
+    # One-pocket skill rank (1-5) at archive time.
+    team_rank = models.PositiveIntegerField(null=True, blank=True)
+    captain_name = models.CharField(max_length=255, blank=True)
+    venue_name = models.CharField(max_length=255, blank=True)
 
     class Meta:
         ordering = ['team_name']
@@ -216,6 +252,7 @@ class ArchivedPlayer(models.Model):
     run_outs = models.PositiveIntegerField(default=0)
     eight_on_the_breaks = models.PositiveIntegerField(default=0)
     sweeps = models.PositiveIntegerField(default=0)
+    male = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['player_name']
@@ -231,13 +268,29 @@ class ArchivedMatch(models.Model):
         related_name='matches',
     )
     date = models.DateField()
+    week_number = models.PositiveIntegerField(null=True, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
     home_team_name = models.CharField(max_length=255)
     away_team_name = models.CharField(max_length=255)
     home_team_score = models.PositiveIntegerField(null=True, blank=True)
     away_team_score = models.PositiveIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    # One-pocket: skill ranks and race lengths in effect for this match.
+    home_team_rank = models.PositiveIntegerField(null=True, blank=True)
+    away_team_rank = models.PositiveIntegerField(null=True, blank=True)
+    home_race = models.PositiveIntegerField(null=True, blank=True)
+    away_race = models.PositiveIntegerField(null=True, blank=True)
+    # False when the match was never finished before the season was archived.
+    completed = models.BooleanField(default=False)
 
     class Meta:
-        ordering = ['date', 'home_team_name']
+        ordering = ['date', 'sort_order', 'home_team_name']
+
+    @property
+    def race_label(self):
+        if self.home_race is None or self.away_race is None:
+            return ''
+        return f'{self.home_race}/{self.away_race}'
 
     def __str__(self):
         return f'{self.date}: {self.home_team_name} vs {self.away_team_name}'

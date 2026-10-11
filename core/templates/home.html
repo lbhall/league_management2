@@ -263,11 +263,7 @@
                             {% if active_league.results_type == 'one_pocket' %}Standings{% else %}Current Standings{% endif %}
                             {% if has_archived_seasons %}
                                 <small class="ms-2">
-                                    {% if active_league.results_type == 'one_pocket' %}
-                                        (<a href="#" class="text-decoration-none" data-archived-standings-modal>Archive</a>)
-                                    {% else %}
-                                        (<a href="/archived-seasons/" class="text-decoration-none">Archive</a>)
-                                    {% endif %}
+                                    (<a href="/archived-seasons/" class="text-decoration-none">Archive</a>)
                                 </small>
                             {% endif %}
                         </h2>
