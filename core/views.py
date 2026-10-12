@@ -1179,6 +1179,14 @@ def player_scores_modal(request, player_id):
             through_week=through_week,
         )
 
+    is_darts = active_league.results_type == League.ResultsType.DARTS
+    season_history = []
+    career_totals = None
+    if not is_darts:
+        from scheduling.services import build_player_season_history
+
+        season_history, career_totals = build_player_season_history(player)
+
     html = render_to_string(
         'player_scores_modal.html',
         {
@@ -1186,7 +1194,10 @@ def player_scores_modal(request, player_id):
             'active_season': active_season,
             'through_week': through_week,
             'matchup_rows': matchup_rows,
-            'is_darts': active_league.results_type == League.ResultsType.DARTS,
+            'is_darts': is_darts,
+            'season_history': season_history,
+            'career_totals': career_totals,
+            'team_size': active_league.team_size,
         },
         request=request,
     )

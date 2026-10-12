@@ -78,6 +78,50 @@
                 {% else %}
                     <p class="text-muted mb-0">No score data available for this player.</p>
                 {% endif %}
+
+                {% if season_history %}
+                    <h6 class="mt-4 mb-2">Past Seasons</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Season</th>
+                                    <th>Team</th>
+                                    <th>Wins</th>
+                                    <th>Losses</th>
+                                    <th>%</th>
+                                    <th>Runs</th>
+                                    <th>{{ team_size }}/0</th>
+                                    <th>8s</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in season_history %}
+                                    <tr>
+                                        <td>{{ row.archived_season.name }}</td>
+                                        <td>{{ row.team_name|default:"-" }}</td>
+                                        <td>{{ row.games_won }}</td>
+                                        <td>{{ row.games_lost }}</td>
+                                        <td>{% widthratio row.games_won row.games_won|add:row.games_lost 100 %}%</td>
+                                        <td>{{ row.run_outs }}</td>
+                                        <td>{{ row.sweeps }}</td>
+                                        <td>{{ row.eight_on_the_breaks }}</td>
+                                    </tr>
+                                {% endfor %}
+                                <tr class="fw-bold">
+                                    <td>Career (archived)</td>
+                                    <td></td>
+                                    <td>{{ career_totals.games_won }}</td>
+                                    <td>{{ career_totals.games_lost }}</td>
+                                    <td>{{ career_totals.percentage|floatformat:1 }}%</td>
+                                    <td>{{ career_totals.run_outs }}</td>
+                                    <td>{{ career_totals.sweeps }}</td>
+                                    <td>{{ career_totals.eight_on_the_breaks }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>

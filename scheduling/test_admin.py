@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from core.models import League, LeagueAdminAccess, Team, Venue
 from scheduling.admin import get_user_league
-from scheduling.models import ArchivedMatch, ArchivedSeason, ArchivedTeam, Match, Season, Week
+from scheduling.models import ArchivedMatch, ArchivedPlayer, ArchivedSeason, ArchivedTeam, Match, Season, Week
 
 
 def make_league(**kwargs):
@@ -684,6 +684,21 @@ class ArchivedDataAdminTests(SeasonAdminTestCase):
         self.assertContains(response, 'Other Home')
         self.assertContains(response, '9/7')
 
+    def test_link_by_name_action(self):
+        from core.models import Player
+        # One-pocket teams auto-create a player of the same name.
+        player = Player.objects.get(league=self.league, name='Home')
+        ArchivedPlayer.objects.create(archived_season=self.archived, player_name='Home')
+
+        response = self.client.post(reverse('admin:scheduling_archivedseason_changelist'), {
+            'action': 'link_by_name',
+            '_selected_action': [self.archived.pk],
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Linked 1 team(s), 1 player(s)')
+        self.assertEqual(self.archived.teams.get(team_name='Home').team, self.home)
+        self.assertEqual(self.archived.players.get(player_name='Home').player, player)
+
     def test_archives_cannot_be_added_by_hand(self):
         response = self.client.get(reverse('admin:scheduling_archivedseason_add'))
         self.assertEqual(response.status_code, 403)
@@ -711,6 +726,107 @@ class ArchivedDataAdminTests(SeasonAdminTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Home')
         self.assertNotContains(response, 'Other Home')
+
+    def _scoped_staff(self):
+        from django.contrib.auth.models import Permission
+
+        User = get_user_model()
+        staff_user = User.objects.create_user(username='archive_staffer2', password='pw', is_staff=True)
+        LeagueAdminAccess.objects.create(user=staff_user, league=self.league)
+        staff_user.user_permissions.add(*Permission.objects.filter(content_type__app_label='scheduling'))
+        self.client.login(username='archive_staffer2', password='pw')
+        return staff_user
+
+    def test_scoped_staff_cannot_open_other_league_archived_objects(self):
+        self._scoped_staff()
+        other_team_row = ArchivedTeam.objects.create(archived_season=self.other_archived, team_name='Other Team')
+
+        for url in (
+            reverse('admin:scheduling_archivedseason_change', args=[self.other_archived.pk]),
+            reverse('admin:scheduling_archivedseason_delete', args=[self.other_archived.pk]),
+            reverse('admin:scheduling_archivedseason_history', args=[self.other_archived.pk]),
+            reverse('admin:scheduling_archivedmatch_change', args=[self.other_match.pk]),
+            reverse('admin:scheduling_archivedmatch_delete', args=[self.other_match.pk]),
+        ):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 302, url)
+            self.assertTrue(response.url.startswith('/admin/'), url)
+
+        # A POST against the other league's season must not touch its rows.
+        response = self.client.post(
+            reverse('admin:scheduling_archivedseason_change', args=[self.other_archived.pk]),
+            {'name': 'Hijacked', 'league': self.other_league.pk},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.other_archived.refresh_from_db()
+        other_team_row.refresh_from_db()
+        self.assertEqual(self.other_archived.name, 'Other 2025')
+        self.assertEqual(other_team_row.team_name, 'Other Team')
+
+    def test_scoped_staff_link_action_ignores_other_league_seasons(self):
+        self._scoped_staff()
+        Team.objects.create(league=self.other_league, venue=make_venue(self.other_league, name='V2'), name='Other Team')
+        other_team_row = ArchivedTeam.objects.create(archived_season=self.other_archived, team_name='Other Team')
+
+        self.client.post(reverse('admin:scheduling_archivedseason_changelist'), {
+            'action': 'link_by_name',
+            '_selected_action': [self.archived.pk, self.other_archived.pk],
+        }, follow=True)
+
+        other_team_row.refresh_from_db()
+        self.assertIsNone(other_team_row.team)
+        self.assertEqual(self.archived.teams.get(team_name='Home').team, self.home)
+
+    def test_scoped_staff_link_pickers_only_offer_own_league(self):
+        from django.contrib import admin as django_admin
+        from core.models import Player
+        from scheduling.admin import ArchivedPlayerInline, ArchivedPlayerMatchResultInline, ArchivedTeamInline
+
+        staff_user = self._scoped_staff()
+        own_player = Player.objects.get(league=self.league, name='Home')
+        other_player = Player.objects.create(league=self.other_league, name='Stranger')
+        other_team = Team.objects.create(
+            league=self.other_league, venue=make_venue(self.other_league, name='V3'), name='Strangers',
+        )
+        request = type('Req', (), {'user': staff_user})()
+
+        for inline_class in (ArchivedPlayerInline, ArchivedPlayerMatchResultInline):
+            inline = inline_class(inline_class.model, django_admin.site)
+            field = inline.formfield_for_foreignkey(inline_class.model._meta.get_field('player'), request)
+            self.assertIn(own_player, field.queryset)
+            self.assertNotIn(other_player, field.queryset)
+
+        inline = ArchivedTeamInline(ArchivedTeam, django_admin.site)
+        field = inline.formfield_for_foreignkey(ArchivedTeam._meta.get_field('team'), request)
+        self.assertIn(self.home, field.queryset)
+        self.assertNotIn(other_team, field.queryset)
+
+        # Superusers keep the full list.
+        request = type('Req', (), {'user': self.superuser})()
+        inline = ArchivedPlayerInline(ArchivedPlayer, django_admin.site)
+        field = inline.formfield_for_foreignkey(ArchivedPlayer._meta.get_field('player'), request)
+        self.assertIn(other_player, field.queryset)
+
+    def test_scoped_staff_cannot_link_other_league_player_by_post(self):
+        from core.models import Player
+        self._scoped_staff()
+        other_player = Player.objects.create(league=self.other_league, name='Stranger')
+        row = ArchivedPlayer.objects.create(archived_season=self.archived, player_name='Home')
+
+        data = {
+            'league': self.league.pk, 'name': self.archived.name, 'results_type': 'one_pocket', 'team_size': 1,
+            'teams-TOTAL_FORMS': '0', 'teams-INITIAL_FORMS': '0',
+            'players-TOTAL_FORMS': '1', 'players-INITIAL_FORMS': '1',
+            'players-0-id': row.pk, 'players-0-archived_season': self.archived.pk,
+            'players-0-player_name': 'Home', 'players-0-player': other_player.pk, 'players-0-team_name': '',
+            'players-0-male': 'on', 'players-0-games_won': 0, 'players-0-games_lost': 0,
+            'players-0-run_outs': 0, 'players-0-eight_on_the_breaks': 0, 'players-0-sweeps': 0,
+        }
+        response = self.client.post(reverse('admin:scheduling_archivedseason_change', args=[self.archived.pk]), data)
+        self.assertEqual(response.status_code, 200)  # re-rendered with a validation error
+        self.assertContains(response, 'Select a valid choice')
+        row.refresh_from_db()
+        self.assertIsNone(row.player)
 
     def test_season_changelist_filters_by_status(self):
         Season.objects.create(league=self.league, name='Old', status=Season.Status.ARCHIVED)

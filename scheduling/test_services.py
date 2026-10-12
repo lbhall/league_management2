@@ -7,6 +7,10 @@ from core.models import League, Player, Team, Venue
 from results.models import MatchResult, PlayerMatchResult
 from scheduling import services
 from scheduling.models import (
+    ArchivedMatch,
+    ArchivedPlayer,
+    ArchivedPlayerMatchResult,
+    ArchivedTeam,
     ArchivedSeason,
     Holiday,
     Match,
@@ -417,6 +421,7 @@ class ArchiveSeasonTests(TestCase):
         self.assertEqual(home_row.team_rank, 5)
         self.assertEqual(away_row.team_rank, 4)
         self.assertEqual(home_row.captain_name, 'Home')
+        self.assertEqual(home_row.team, home)
         self.assertEqual(home_row.venue_name, venue.name)
 
         self.assertEqual(archived.players.count(), 2)
@@ -433,6 +438,8 @@ class ArchiveSeasonTests(TestCase):
         self.assertEqual(played.race_label, '9/7')
         self.assertTrue(played.completed)
         self.assertEqual(played.player_results.count(), 2)
+        home_line = played.player_results.get(team_name='Home')
+        self.assertEqual(home_line.player, Player.objects.get(league=league, name='Home'))
 
         unplayed = archived.matches.get(date=date(2026, 1, 8))
         self.assertIsNone(unplayed.home_team_score)
@@ -526,6 +533,9 @@ class ArchiveSeasonTests(TestCase):
         self.assertEqual(archived_player.games_won, 2)
         self.assertEqual(archived_player.games_lost, 1)
         self.assertFalse(archived_player.male)
+        # Linked by id, so the stats follow the player across seasons.
+        self.assertEqual(archived_player.player, captain)
+        self.assertEqual(home_row.team, home)
 
         # 8-ball now keeps every match plus each player's line for it.
         self.assertEqual(archived.matches.count(), 2)
@@ -536,6 +546,7 @@ class ArchiveSeasonTests(TestCase):
         self.assertIsNone(played.home_race)
         self.assertEqual(played.player_results.count(), 2)
         alice_line = played.player_results.get(player_name='Alice')
+        self.assertEqual(alice_line.player, captain)
         self.assertEqual(alice_line.team_name, 'Home')
         self.assertEqual(alice_line.wins, 2)
         self.assertEqual(alice_line.losses, 1)
@@ -868,3 +879,88 @@ class PackSeasonScheduleTests(TestCase):
 
         self.assertEqual(services.compress_season_matches(season), (0, 0))
         self.assertEqual(season.weeks.count(), 2)
+
+
+class ArchiveLinkingTests(TestCase):
+    def setUp(self):
+        self.league = make_league(results_type=League.ResultsType.EIGHT_BALL, team_size=3)
+        venue = make_venue(self.league)
+        self.home = make_team(self.league, venue, 'Home')
+        self.alice = Player.objects.create(league=self.league, name='Alice', team=self.home)
+        # Two live players share a name: ambiguous, must not be linked.
+        Player.objects.create(league=self.league, name='Justin', team=self.home)
+        Player.objects.create(league=self.league, name='Justin')
+
+        self.archived = ArchivedSeason.objects.create(
+            league=self.league, name='2024', results_type=League.ResultsType.EIGHT_BALL, team_size=3,
+        )
+        self.team_row = ArchivedTeam.objects.create(archived_season=self.archived, team_name='home')
+        self.alice_row = ArchivedPlayer.objects.create(
+            archived_season=self.archived, player_name='ALICE ', team_name='Home', games_won=4, games_lost=2,
+        )
+        self.justin_row = ArchivedPlayer.objects.create(archived_season=self.archived, player_name='Justin')
+        self.gone_row = ArchivedPlayer.objects.create(archived_season=self.archived, player_name='Nobody')
+        match = ArchivedMatch.objects.create(
+            archived_season=self.archived, date=date(2024, 1, 1), home_team_name='Home', away_team_name='Away',
+        )
+        self.alice_line = ArchivedPlayerMatchResult.objects.create(
+            archived_match=match, player_name='Alice', team_name='Home', wins=2, losses=1,
+        )
+
+    def test_links_unique_names_only(self):
+        counts = services.link_archived_season_by_name(self.archived)
+        self.assertEqual(counts, (1, 1, 1))
+
+        self.team_row.refresh_from_db()
+        self.alice_row.refresh_from_db()
+        self.justin_row.refresh_from_db()
+        self.gone_row.refresh_from_db()
+        self.alice_line.refresh_from_db()
+        self.assertEqual(self.team_row.team, self.home)
+        self.assertEqual(self.alice_row.player, self.alice)
+        self.assertEqual(self.alice_line.player, self.alice)
+        self.assertIsNone(self.justin_row.player)
+        self.assertIsNone(self.gone_row.player)
+
+    def test_does_not_overwrite_existing_links(self):
+        other = Player.objects.create(league=self.league, name='Alice Other')
+        self.alice_row.player = other
+        self.alice_row.save()
+        services.link_archived_season_by_name(self.archived)
+        self.alice_row.refresh_from_db()
+        self.assertEqual(self.alice_row.player, other)
+
+    def test_other_league_players_are_never_linked(self):
+        other_league = make_league(name='Other', results_type=League.ResultsType.EIGHT_BALL, team_size=3)
+        Player.objects.create(league=other_league, name='Nobody')
+        services.link_archived_season_by_name(self.archived)
+        self.gone_row.refresh_from_db()
+        self.assertIsNone(self.gone_row.player)
+
+    def test_player_season_history_and_career_totals(self):
+        older = ArchivedSeason.objects.create(
+            league=self.league, name='2023', results_type=League.ResultsType.EIGHT_BALL, team_size=3,
+            start_date=date(2023, 1, 1),
+        )
+        self.archived.start_date = date(2024, 1, 1)
+        self.archived.save()
+        ArchivedPlayer.objects.create(
+            archived_season=older, player_name='Alice', player=self.alice, games_won=6, games_lost=4, run_outs=1,
+        )
+        self.alice_row.player = self.alice
+        self.alice_row.save()
+
+        rows, totals = services.build_player_season_history(self.alice)
+        self.assertEqual([r.archived_season.name for r in rows], ['2024', '2023'])
+        self.assertEqual(totals['games_won'], 10)
+        self.assertEqual(totals['games_lost'], 6)
+        self.assertEqual(totals['run_outs'], 1)
+        self.assertAlmostEqual(totals['percentage'], 62.5)
+
+    def test_deleting_a_player_keeps_the_archive_row(self):
+        self.alice_row.player = self.alice
+        self.alice_row.save()
+        self.alice.delete()
+        self.alice_row.refresh_from_db()
+        self.assertIsNone(self.alice_row.player)
+        self.assertEqual(self.alice_row.player_name, 'ALICE ')

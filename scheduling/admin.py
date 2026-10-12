@@ -8,7 +8,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.template.response import TemplateResponse
 
-from core.models import League, Team
+from core.models import League, Player, Team
 from .models import (
     ArchivedMatch,
     ArchivedPlayer,
@@ -26,6 +26,7 @@ from .services import (
     create_new_playable_week_at_end,
     delete_week,
     get_next_start_dates,
+    link_archived_season_by_name,
     get_valid_destination_weeks,
     get_venue_violations,
     move_match_to_week,
@@ -790,23 +791,43 @@ class LeagueScopedArchivedSeasonFilter(admin.SimpleListFilter):
         return queryset
 
 
-class ArchivedTeamInline(admin.TabularInline):
+class LeagueScopedLinkInlineMixin:
+    """Limit the live ``player``/``team`` link choices to the staff member's
+    own league. The autocomplete endpoint is already scoped through the
+    Player/Team admins; this also rejects a hand-crafted POST carrying
+    another league's id."""
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        user_league = get_user_league(request)
+
+        if not request.user.is_superuser and user_league is not None:
+            if db_field.name == 'player':
+                kwargs['queryset'] = Player.objects.filter(league=user_league).order_by('name')
+            elif db_field.name == 'team':
+                kwargs['queryset'] = Team.objects.filter(league=user_league).order_by('name')
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class ArchivedTeamInline(LeagueScopedLinkInlineMixin, admin.TabularInline):
     model = ArchivedTeam
     extra = 0
     fields = (
-        'league_rank', 'team_name', 'team_rank', 'captain_name', 'venue_name',
+        'league_rank', 'team_name', 'team', 'team_rank', 'captain_name', 'venue_name',
         'matches_won', 'matches_lost', 'games_won', 'games_lost',
     )
+    autocomplete_fields = ('team',)
     ordering = ('league_rank', 'team_name')
 
 
-class ArchivedPlayerInline(admin.TabularInline):
+class ArchivedPlayerInline(LeagueScopedLinkInlineMixin, admin.TabularInline):
     model = ArchivedPlayer
     extra = 0
     fields = (
-        'player_name', 'team_name', 'male',
+        'player_name', 'player', 'team_name', 'male',
         'games_won', 'games_lost', 'run_outs', 'eight_on_the_breaks', 'sweeps',
     )
+    autocomplete_fields = ('player',)
     ordering = ('team_name', 'player_name')
 
 
@@ -821,6 +842,7 @@ class ArchivedSeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
     fields = ('league', 'name', 'season', 'results_type', 'team_size', 'start_date', 'end_date', 'archived_at')
     readonly_fields = ('season', 'archived_at')
     inlines = [ArchivedTeamInline, ArchivedPlayerInline]
+    actions = ['link_by_name']
 
     def get_list_filter(self, request):
         if request.user.is_superuser:
@@ -829,6 +851,21 @@ class ArchivedSeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    @admin.action(description='Link archived teams/players to current records by name')
+    def link_by_name(self, request, queryset):
+        teams = players = results = 0
+        for archived_season in queryset:
+            t, p, r = link_archived_season_by_name(archived_season)
+            teams += t
+            players += p
+            results += r
+        self.message_user(
+            request,
+            f'Linked {teams} team(s), {players} player(s) and {results} match line(s). '
+            'Rows whose name is missing or duplicated in the league were left for manual linking.',
+            level=messages.SUCCESS,
+        )
 
     @admin.display(description='Matches')
     def matches_link(self, obj):
@@ -839,10 +876,11 @@ class ArchivedSeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         return format_html('<a href="{}">{}</a>', url, count)
 
 
-class ArchivedPlayerMatchResultInline(admin.TabularInline):
+class ArchivedPlayerMatchResultInline(LeagueScopedLinkInlineMixin, admin.TabularInline):
     model = ArchivedPlayerMatchResult
     extra = 0
-    fields = ('player_name', 'team_name', 'wins', 'losses', 'runouts', 'eight_on_the_breaks', 'won_all_games')
+    fields = ('player_name', 'player', 'team_name', 'wins', 'losses', 'runouts', 'eight_on_the_breaks', 'won_all_games')
+    autocomplete_fields = ('player',)
     ordering = ('team_name', 'player_name')
 
 
