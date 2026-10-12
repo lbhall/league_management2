@@ -1,0 +1,156 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Check the reading{% endblock %}
+
+{% block content %}
+    <h1>Check what was read</h1>
+    <p class="muted">
+        {{ match.home_team.name }} vs {{ match.away_team.name }} &mdash;
+        Week {{ match.week.number }}, {{ match.week.date }}
+    </p>
+
+    <div class="card">
+        <h2>Sheet header</h2>
+        <p>
+            Home: <strong>{{ review.sheet.home_team|default:"(blank)" }}</strong> &middot;
+            Away: <strong>{{ review.sheet.away_team|default:"(blank)" }}</strong> &middot;
+            Date: {{ review.sheet.date|default:"(blank)" }} &middot;
+            Legibility: {{ review.sheet.legibility|default:"unknown" }}
+        </p>
+        <p>
+            Games add up to <strong>{{ review.home_total }}&ndash;{{ review.away_total }}</strong>
+            {% if review.sheet.home_total >= 0 %}
+                (sheet says {{ review.sheet.home_total }}&ndash;{{ review.sheet.away_total }})
+            {% endif %}
+        </p>
+        {% if review.sheet.notes %}<p class="muted">{{ review.sheet.notes }}</p>{% endif %}
+    </div>
+
+    {% if review.issues %}
+        <div class="card" style="border-color:#c0392b;">
+            <h2>Check these before loading</h2>
+            <ul>
+                {% for issue in review.issues %}
+                    <li>{{ issue }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% else %}
+        <div class="card">
+            <h2>Everything cross-checks</h2>
+            <p class="muted">Both grids agree on all {{ review.games|length }} games and the Wins columns match.</p>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <h2>Lineups</h2>
+        <table>
+            <thead>
+                <tr><th>{{ match.home_team.name }}</th><th>Read as</th><th>Matched player</th></tr>
+            </thead>
+            <tbody>
+                {% for row in review.home_lineup %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.sheet_name|default:"(blank)" }}</td>
+                        <td>
+                            {% if row.player_id %}
+                                {{ row.player_name }}{% if row.quality == 'partial' %} <span class="muted">(closest match)</span>{% endif %}
+                            {% else %}
+                                <span style="color:#c0392b;">not found</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <table style="margin-top:12px;">
+            <thead>
+                <tr><th>{{ match.away_team.name }}</th><th>Read as</th><th>Matched player</th></tr>
+            </thead>
+            <tbody>
+                {% for row in review.away_lineup %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.sheet_name|default:"(blank)" }}</td>
+                        <td>
+                            {% if row.player_id %}
+                                {{ row.player_name }}{% if row.quality == 'partial' %} <span class="muted">(closest match)</span>{% endif %}
+                            {% else %}
+                                <span style="color:#c0392b;">not found</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Games</h2>
+        <p class="muted" style="margin-bottom:8px;">
+            One row per home player, one column per round. Each cell shows the home mark / away mark
+            and who that counts as a win for. Red cells disagree between the two sides of the sheet.
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Home</th>
+                    {% for rnd in rounds %}<th>R{{ rnd }}</th>{% endfor %}
+                    <th>Wins</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in grid %}
+                    <tr>
+                        <td>{{ row.home.label }} {{ row.home.player_name|default:row.home.sheet_name }}</td>
+                        {% for cell in row.cells %}
+                            <td{% if cell.conflict %} style="background:#f8d7da;"{% elif not cell.winner %} style="background:#fff3cd;"{% endif %}>
+                                {{ cell.home_mark }}/{{ cell.away_mark }}
+                                <small class="muted">vs {{ cell.away_label }}</small><br>
+                                {% if cell.winner == 'home' %}home{% elif cell.winner == 'away' %}away{% else %}?{% endif %}
+                                {% if cell.runout %} RO{% endif %}{% if cell.eight_on_break %} 8B{% endif %}
+                            </td>
+                        {% endfor %}
+                        <td>{{ row.home.sheet_wins }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if not finalized %}
+        <div class="card">
+            <h2>Load it</h2>
+            {% if review.lineup_complete %}
+                <form method="post">
+                    {% csrf_token %}
+                    {% if dual %}
+                        <p class="muted" style="margin-bottom:8px;">
+                            The paper sheet is signed by both captains. Record it as one side's entry and
+                            finalize from the referee screen.
+                        </p>
+                        <label><input type="radio" name="side" value="home" checked> {{ match.home_team.name }}'s entry</label>
+                        <label style="margin-left:12px;"><input type="radio" name="side" value="away"> {{ match.away_team.name }}'s entry</label>
+                        <br>
+                    {% endif %}
+                    <button class="btn" type="submit" style="margin-top:10px;">
+                        {% if review.ready %}Load into the match{% else %}Load anyway and fix by hand{% endif %}
+                    </button>
+                </form>
+            {% else %}
+                <p class="muted">
+                    Some lineup positions could not be matched to a player. Add the sub or fix the roster,
+                    then read the sheet again, or enter the score by hand.
+                </p>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <p class="muted">
+        Reading cost about ${{ scan.cost_usd|floatformat:4 }} ({{ scan.input_tokens }} in / {{ scan.output_tokens }} out, {{ scan.model }}).
+    </p>
+
+    <a class="btn btn-secondary" href="{% url 'scoring:scan_scoresheet' match.id %}">Read another photo</a>
+    <a class="btn btn-secondary" href="{% url 'scoring:resolve' match.id %}">Back</a>
+{% endblock %}

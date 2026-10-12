@@ -1,0 +1,52 @@
+{% extends "scoring/base.html" %}
+
+{% block title %}Read scoresheet{% endblock %}
+
+{% block content %}
+    <h1>Read a photo of the scoresheet</h1>
+    <p class="muted">
+        {{ match.home_team.name }} vs {{ match.away_team.name }} &mdash;
+        Week {{ match.week.number }}, {{ match.week.date }}
+    </p>
+
+    <div class="card">
+        <h2>Upload the sheet</h2>
+        <p class="muted" style="margin-bottom:10px;">
+            Take the photo straight on with the whole sheet in frame and good light.
+            You'll get a page showing what was read before anything is saved.
+        </p>
+        {% if remaining > 0 %}
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="file" name="photo" accept="image/*" capture="environment" required>
+                <button class="btn" type="submit" style="margin-top:10px;">Read scoresheet</button>
+            </form>
+            <p class="muted" style="margin-top:10px;">
+                {{ remaining }} of {{ max_attempts }} attempt{{ max_attempts|pluralize }} left for this match.
+            </p>
+        {% else %}
+            <p class="muted">All {{ max_attempts }} photo attempts for this match have been used. Enter the score by hand.</p>
+        {% endif %}
+    </div>
+
+    {% if scans %}
+        <div class="card">
+            <h2>Previous readings</h2>
+            <ul>
+                {% for scan in scans %}
+                    <li>
+                        <a href="{% url 'scoring:scan_review' match.id scan.id %}">{{ scan.created_at|date:"M j, g:i a" }}</a>
+                        &mdash; {{ scan.issue_count }} issue{{ scan.issue_count|pluralize }}
+                        {% if scan.applied_at %}&mdash; loaded{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <p class="muted">
+        This season: {{ usage.count }} reading{{ usage.count|pluralize }}, about ${{ usage.cost|floatformat:3 }}.
+    </p>
+
+    <a class="btn btn-secondary" href="{% url 'scoring:resolve' match.id %}">Back</a>
+{% endblock %}

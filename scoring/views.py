@@ -1,10 +1,12 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -14,6 +16,7 @@ from results.models import MatchResult, PlayerMatchResult
 from scheduling.models import Match, Season
 
 from .forms import LoginForm, SignupForm
+from . import scoresheet
 from .models import (
     GameResult,
     LineupSlot,
@@ -21,6 +24,7 @@ from .models import (
     MatchEntryGame,
     MatchEntryLineup,
     ScoringProfile,
+    ScoresheetScan,
 )
 
 
@@ -1662,6 +1666,7 @@ def resolve(request, match_id):
     return render(request, 'scoring/resolve.html', {
         'profile': profile,
         'match': match,
+        'scan_available': scoresheet.scan_available(league),
         'home': home,
         'away': away,
         'both_submitted': both_submitted,
@@ -1746,3 +1751,173 @@ self.addEventListener('fetch', function(event) {
 });
 """
     return HttpResponse(js, content_type='application/javascript')
+
+
+# --- Scoresheet photo reader (8-ball) ---------------------------------------
+
+def _match_is_finalized(match, league):
+    if league.dual_entry_scoring:
+        entries = {e.side: e for e in MatchEntry.objects.filter(match=match)}
+        home = entries.get(MatchEntry.Side.HOME)
+        away = entries.get(MatchEntry.Side.AWAY)
+        return bool(
+            home and away
+            and home.status == MatchEntry.Status.FINALIZED
+            and away.status == MatchEntry.Status.FINALIZED
+        )
+    return _match_fully_scored(match)
+
+
+def _scan_guard(request, match_id):
+    """Shared checks for the scan views. Returns (profile, match, league) or a
+    redirect response."""
+    profile = _get_profile(request)
+    if profile is None or not profile.is_approved:
+        return redirect('scoring:pending')
+
+    match = _get_scoreable_match(request, profile, match_id)
+    if match is None:
+        return redirect('scoring:match_list')
+
+    league = match.week.season.league
+    if profile.role != ScoringProfile.Role.ADMIN or not scoresheet.scan_available(league):
+        messages.error(request, 'Scoresheet photos are not available for this match.')
+        return redirect('scoring:match_list')
+    return profile, match, league
+
+
+def _season_scan_usage(match):
+    scans = ScoresheetScan.objects.filter(match__week__season=match.week.season)
+    total = scans.aggregate(count=Count('id'), cost=Sum('cost_usd'))
+    return {'count': total['count'] or 0, 'cost': total['cost'] or Decimal('0')}
+
+
+@login_required(login_url='scoring:login')
+def scan_scoresheet(request, match_id):
+    """Upload a photo of the paper sheet; the reading lands on a review page."""
+    guard = _scan_guard(request, match_id)
+    if not isinstance(guard, tuple):
+        return guard
+    profile, match, league = guard
+
+    if _match_is_finalized(match, league):
+        messages.error(request, 'This match is already finalized.')
+        return redirect('scoring:match_list')
+
+    scans = list(match.scoresheet_scans.all())
+    max_attempts = settings.SCORESHEET_SCAN_MAX_PER_MATCH
+    remaining = max(0, max_attempts - len(scans))
+
+    if request.method == 'POST':
+        if remaining <= 0:
+            messages.error(request, f'This match has used all {max_attempts} photo attempts. Enter it by hand.')
+            return redirect('scoring:scan_scoresheet', match.id)
+
+        upload = request.FILES.get('photo')
+        if upload is None:
+            messages.error(request, 'Choose a photo of the scoresheet first.')
+            return redirect('scoring:scan_scoresheet', match.id)
+
+        try:
+            image_bytes, media_type = scoresheet.prepare_image(upload.read())
+            data, usage = scoresheet.extract_scoresheet(
+                image_bytes, media_type,
+                home_team=match.home_team.name,
+                away_team=match.away_team.name,
+                home_roster=[p.name for p in match.home_team.players.order_by('name')],
+                away_roster=[p.name for p in match.away_team.players.order_by('name')],
+                team_size=league.team_size,
+            )
+        except scoresheet.ScanError as exc:
+            messages.error(request, str(exc))
+            return redirect('scoring:scan_scoresheet', match.id)
+
+        review = scoresheet.build_review(data, match)
+        scan = ScoresheetScan.objects.create(
+            match=match,
+            uploaded_by=request.user,
+            model=usage['model'],
+            input_tokens=usage['input_tokens'],
+            output_tokens=usage['output_tokens'],
+            cost_usd=usage['cost_usd'],
+            data=data,
+            review=review,
+            issue_count=len(review['issues']),
+        )
+        return redirect('scoring:scan_review', match.id, scan.id)
+
+    return render(request, 'scoring/scan.html', {
+        'profile': profile,
+        'match': match,
+        'scans': scans,
+        'remaining': remaining,
+        'max_attempts': max_attempts,
+        'usage': _season_scan_usage(match),
+    })
+
+
+@login_required(login_url='scoring:login')
+def scan_review(request, match_id, scan_id):
+    """Show what was read, with every cross-check failure called out, and let
+    the admin load it into the normal scoring flow."""
+    guard = _scan_guard(request, match_id)
+    if not isinstance(guard, tuple):
+        return guard
+    profile, match, league = guard
+
+    scan = get_object_or_404(ScoresheetScan, pk=scan_id, match=match)
+    review = scan.review
+
+    if request.method == 'POST':
+        if _match_is_finalized(match, league):
+            messages.error(request, 'This match is already finalized.')
+            return redirect('scoring:match_list')
+        side = request.POST.get('side') or MatchEntry.Side.HOME
+        if side not in (MatchEntry.Side.HOME, MatchEntry.Side.AWAY):
+            side = MatchEntry.Side.HOME
+        try:
+            complete = scoresheet.apply_review(review, match, request.user, side=side)
+        except scoresheet.ScanError as exc:
+            messages.error(request, str(exc))
+            return redirect('scoring:scan_review', match.id, scan.id)
+
+        scan.applied_at = timezone.now()
+        scan.applied_side = side if league.dual_entry_scoring else ''
+        scan.save(update_fields=['applied_at', 'applied_side'])
+
+        if league.dual_entry_scoring:
+            team = match.home_team if side == MatchEntry.Side.HOME else match.away_team
+            if complete:
+                messages.success(request, f"Loaded the sheet as {team.name}'s entry. Review it below before finalizing.")
+            else:
+                messages.warning(request, f"Loaded the sheet as {team.name}'s draft entry; some games still need a winner.")
+            _reconcile(match)
+            return redirect('scoring:resolve', match.id)
+
+        _recompute_from_games(match)
+        if complete:
+            messages.success(request, 'Loaded the sheet. Check the games below, then it counts as scored.')
+        else:
+            messages.warning(request, 'Loaded the sheet; some games still need a winner.')
+        return redirect('scoring:games', match.id)
+
+    # Row-major grid for the template: one row per home position, a cell per round.
+    grid = []
+    games_by_key = {(g['round'], g['home_position']): g for g in review.get('games', [])}
+    for home_row in review.get('home_lineup', []):
+        cells = [
+            games_by_key.get((rnd, home_row['position']))
+            for rnd in range(1, review.get('team_size', league.team_size) + 1)
+        ]
+        grid.append({'home': home_row, 'cells': cells})
+
+    return render(request, 'scoring/scan_review.html', {
+        'profile': profile,
+        'match': match,
+        'scan': scan,
+        'review': review,
+        'grid': grid,
+        'dual': league.dual_entry_scoring,
+        'finalized': _match_is_finalized(match, league),
+        'rounds': range(1, review.get('team_size', league.team_size) + 1),
+    })
