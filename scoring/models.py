@@ -274,3 +274,37 @@ class MatchEntryLineup(models.Model):
 
     def __str__(self):
         return f'{self.entry} — {self.team} pos {self.position}: {self.player}'
+
+
+class ScoresheetScan(models.Model):
+    """One attempt at reading a photographed scoresheet for a match. Kept for
+    the usage log (tokens, estimated cost) and so the review can be reopened."""
+
+    match = models.ForeignKey(
+        Match,
+        on_delete=models.CASCADE,
+        related_name='scoresheet_scans',
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    model = models.CharField(max_length=64, blank=True)
+    input_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    cost_usd = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    data = models.JSONField(default=dict, blank=True)
+    review = models.JSONField(default=dict, blank=True)
+    issue_count = models.PositiveSmallIntegerField(default=0)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    applied_side = models.CharField(max_length=4, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Scan of {self.match} at {self.created_at:%Y-%m-%d %H:%M}'

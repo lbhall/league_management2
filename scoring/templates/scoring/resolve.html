@@ -93,6 +93,9 @@
                 Don't want to wait on the captains? Enter the score directly on the totals grid.
             </p>
             <a class="btn" href="{% url 'scoring:enter_score' match.id %}?totals=1">Enter score</a>
+            {% if scan_available %}
+                <a class="btn btn-secondary" href="{% url 'scoring:scan_scoresheet' match.id %}">Read a photo of the sheet</a>
+            {% endif %}
         </div>
     {% endif %}
 

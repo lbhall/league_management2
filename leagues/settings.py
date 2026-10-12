@@ -177,3 +177,10 @@ if not DEBUG:
         f'https://{host}' for host in ALLOWED_HOSTS
         if host not in ('localhost', '127.0.0.1')
     ]
+
+# Scoresheet photo reader (8-ball leagues only). The feature is hidden unless a
+# key is present. Spend is capped in the Anthropic Console per workspace; these
+# settings bound what the app itself will attempt.
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+SCORESHEET_SCAN_MODEL = os.environ.get('SCORESHEET_SCAN_MODEL', 'claude-opus-5-5')
+SCORESHEET_SCAN_MAX_PER_MATCH = int(os.environ.get('SCORESHEET_SCAN_MAX_PER_MATCH') or 3)
