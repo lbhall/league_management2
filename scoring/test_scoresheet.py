@@ -229,6 +229,11 @@ class ScanViewTests(EightBallScanBase):
     def _upload(self):
         return {'photo': io.BytesIO(fake_image_bytes())}
 
+    def _set_lineup(self):
+        for pos, (h, a) in enumerate(zip(self.home_players, self.away_players), start=1):
+            LineupSlot.objects.create(match=self.match, team=self.home_team, position=pos, player=h)
+            LineupSlot.objects.create(match=self.match, team=self.away_team, position=pos, player=a)
+
     def _post_photo(self):
         photo = io.BytesIO(fake_image_bytes())
         photo.name = 'sheet.jpg'
@@ -257,6 +262,40 @@ class ScanViewTests(EightBallScanBase):
         self.client.force_login(user)
         response = self.client.get(f'/score/match/{self.match.pk}/scan/')
         self.assertRedirects(response, '/score/', fetch_redirect_response=False)
+
+    def test_games_and_totals_pages_link_to_the_reader_when_not_dual(self):
+        self.league.dual_entry_scoring = False
+        self.league.save()
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+
+        # Admins land on the lineup page first; the button must be there too.
+        response = self.client.get(f'/score/match/{self.match.pk}/lineup/')
+        self.assertContains(response, 'Read a photo of the sheet')
+        self._set_lineup()
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertContains(response, 'Read a photo of the sheet')
+        response = self.client.get(f'/score/match/{self.match.pk}/?totals=1')
+        self.assertContains(response, 'Read a photo of the sheet')
+
+        # Captains never see it, even on the same page.
+        captain, _ = self.make_captain(self.home_players[0])
+        self.client.force_login(captain)
+        response = self.client.get(f'/score/match/{self.match.pk}/games/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Read a photo of the sheet')
+
+    def test_games_page_hides_reader_without_key(self):
+        self.league.dual_entry_scoring = False
+        self.league.save()
+        user, _ = self.make_admin()
+        self.client.force_login(user)
+        self._set_lineup()
+        with override_settings(ANTHROPIC_API_KEY=''):
+            response = self.client.get(f'/score/match/{self.match.pk}/games/')
+            self.assertNotContains(response, 'Read a photo of the sheet')
+            response = self.client.get(f'/score/match/{self.match.pk}/lineup/')
+            self.assertNotContains(response, 'Read a photo of the sheet')
 
     def test_resolve_page_links_to_the_reader(self):
         user, _ = self.make_admin()
