@@ -16,6 +16,7 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>Opponent</th>
+                                    <th>Score</th>
                                     <th>Result</th>
                                 </tr>
                             </thead>
@@ -25,6 +26,13 @@
                                         <td>{{ row.date }}</td>
                                         <td>{{ row.opponent }}{% if row.opponent_rank %} ({{ row.opponent_rank }}){% endif %}</td>
                                         <td>{{ row.result }}</td>
+                                        <td>
+                                            {% if row.won %}
+                                                <span class="badge bg-success">Won</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Lost</span>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
