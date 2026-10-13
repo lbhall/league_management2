@@ -539,6 +539,7 @@ def enter_score(request, match_id):
     return render(request, 'scoring/enter_score.html', {
         'profile': profile,
         'match': match,
+        'scan_available': scoresheet.scan_available(league),
         'sections': sections,
         'readonly_sections': readonly_sections,
         'sub_choices': sub_choices,
@@ -1441,6 +1442,9 @@ def lineup(request, match_id):
         'match': match,
         'team_blocks': team_blocks,
         'positions': positions,
+        'scan_available': (
+            profile.role == ScoringProfile.Role.ADMIN and scoresheet.scan_available(league)
+        ),
     })
 
 
@@ -1563,6 +1567,9 @@ def games(request, match_id):
         'current_home_score': home_score,
         'current_away_score': away_score,
         'show_breaks': show_breaks,
+        'scan_available': (
+            profile.role == ScoringProfile.Role.ADMIN and scoresheet.scan_available(league)
+        ),
     })
 
 

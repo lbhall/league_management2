@@ -22,6 +22,11 @@
             <span class="muted">{{ games_entered }} of {{ total_games }} games recorded</span>
             <a href="{% url 'scoring:lineup' match.id %}" style="font-size:0.85rem;">Edit lineup</a>
         </div>
+        {% if scan_available %}
+            <div style="margin-top:10px;">
+                <a class="btn btn-secondary" href="{% url 'scoring:scan_scoresheet' match.id %}">Read a photo of the sheet</a>
+            </div>
+        {% endif %}
         {% if dual_entry %}
             <div class="dual-status dual-{{ dual_state }}">
                 {% if dual_state == 'finalized' %}

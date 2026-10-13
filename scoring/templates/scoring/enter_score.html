@@ -11,6 +11,9 @@
             Quick totals entry. Prefer game-by-game?
             <a href="{% url 'scoring:lineup' match.id %}">Use the round-robin sheet</a>.
         </p>
+        {% if scan_available %}
+            <a class="btn btn-secondary" href="{% url 'scoring:scan_scoresheet' match.id %}">Read a photo of the sheet</a>
+        {% endif %}
     </div>
 
     <form method="post">
