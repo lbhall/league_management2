@@ -1256,6 +1256,7 @@ def team_schedule_modal(request, team_id):
                         'opponent': opponent.name,
                         'opponent_rank': opponent.team_rank,
                         'result': f'{team_score}-{opponent_score}',
+                        'won': team_score > opponent_score,
                     })
                 else:
                     row = {

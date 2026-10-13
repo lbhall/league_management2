@@ -38,7 +38,17 @@
                                         {% if is_one_pocket %}
                                             <td>{{ row.race_label|default:"-" }}</td>
                                             <td>{{ row.team_score|default:"0" }} - {{ row.opp_score|default:"0" }}</td>
-                                            <td>{{ row.outcome|default:"-" }}</td>
+                                            <td>
+                                                {% if row.outcome == 'W' %}
+                                                    <span class="badge bg-success">Won</span>
+                                                {% elif row.outcome == 'L' %}
+                                                    <span class="badge bg-danger">Lost</span>
+                                                {% elif row.outcome == 'T' %}
+                                                    <span class="badge bg-secondary">Tie</span>
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            </td>
                                         {% else %}
                                             <td>
                                                 {% if row.team_score is not None and row.opp_score is not None %}

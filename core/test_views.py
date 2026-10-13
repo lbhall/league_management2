@@ -190,6 +190,16 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('html', response.json())
 
+    def test_team_schedule_modal_tags_wins_and_losses(self):
+        # match1: Marcus (home) 6, Louie (away) 10 -> Marcus lost, Louie won.
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            marcus = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+            louie = self.client.get(reverse('team_schedule_modal', args=[self.team_b.id])).json()['html']
+        self.assertIn('badge bg-danger">Lost', marcus)
+        self.assertNotIn('badge bg-success">Won', marcus)
+        self.assertIn('badge bg-success">Won', louie)
+        self.assertIn('10-6', louie)
+
     def test_one_pocket_full_schedule_modal(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('one_pocket_full_schedule_modal'))
@@ -252,7 +262,7 @@ class OnePocketViewsTests(ViewTestCase):
         html = response.json()['html']
         self.assertIn('Louie (4)', html)
         self.assertIn('6/10', html)
-        self.assertIn('<td>L</td>', html)
+        self.assertIn('badge bg-danger">Lost', html)
 
     def test_archived_player_history_is_scoped_to_active_league(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
