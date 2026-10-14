@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone as dt_timezone
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -115,6 +115,7 @@ class OnePocketViewsTests(ViewTestCase):
             archived_season=archived_season, date=date(2025, 6, 2), week_number=1,
             home_team_name='Marcus', away_team_name='Louie', home_team_score=6, away_team_score=10,
             home_team_rank=2, away_team_rank=4, home_race=6, away_race=10, completed=True,
+            result_recorded_at=datetime(2025, 6, 9, 20, 30, tzinfo=dt_timezone.utc),
         )
         ArchivedPlayerMatchResult.objects.create(
             archived_match=archived_match, player_name='Marcus', team_name='Marcus', wins=6, losses=10,
@@ -200,6 +201,18 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('badge bg-success">Won', louie)
         self.assertIn('10-6', louie)
 
+    def test_team_schedule_modal_shows_scheduled_and_entered_dates(self):
+        from django.utils import timezone
+        from django.utils.formats import date_format
+
+        # The week is dated 2026-01-05 but the score was entered today.
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+        self.assertIn('<th>Scheduled</th>', html)
+        self.assertIn('<th>Entered</th>', html)
+        self.assertIn(date_format(date(2026, 1, 5)), html)
+        self.assertIn(date_format(timezone.localdate()), html)
+
     def test_one_pocket_full_schedule_modal(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('one_pocket_full_schedule_modal'))
@@ -263,6 +276,10 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('Louie (4)', html)
         self.assertIn('6/10', html)
         self.assertIn('badge bg-danger">Lost', html)
+        # Scheduled week date and the (later) date the score went in.
+        self.assertIn('<th>Entered</th>', html)
+        self.assertIn('June 2, 2025', html)
+        self.assertIn('June 9, 2025', html)
 
     def test_archived_player_history_is_scoped_to_active_league(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):

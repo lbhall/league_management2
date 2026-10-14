@@ -14,7 +14,8 @@
                         <table class="table table-striped align-middle mb-0">
                             <thead>
                                 <tr>
-                                    <th>Date</th>
+                                    <th>Scheduled</th>
+                                    <th>Entered</th>
                                     <th>Opponent</th>
                                     <th>Score</th>
                                     <th>Result</th>
@@ -24,6 +25,7 @@
                                 {% for row in results_rows %}
                                     <tr>
                                         <td>{{ row.date }}</td>
+                                        <td>{% if row.entered %}{{ row.entered }}{% else %}-{% endif %}</td>
                                         <td>{{ row.opponent }}{% if row.opponent_rank %} ({{ row.opponent_rank }}){% endif %}</td>
                                         <td>{{ row.result }}</td>
                                         <td>
