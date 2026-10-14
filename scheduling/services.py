@@ -809,6 +809,7 @@ def _archive_one_pocket_matches(archived_season, weeks):
             home_race=home_race,
             away_race=away_race,
             completed=completed,
+            result_recorded_at=result.created_at if result else None,
         )
 
         if result is None:
@@ -869,6 +870,7 @@ def _archive_eight_ball_matches(archived_season, weeks):
             away_team_score=away_score,
             location=match.location,
             completed=bool(player_results),
+            result_recorded_at=result.created_at if result else None,
         )
 
         for pr in player_results:

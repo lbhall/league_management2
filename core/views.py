@@ -1253,6 +1253,9 @@ def team_schedule_modal(request, team_id):
 
                     results_rows.append({
                         'date': match.week.date,
+                        # When the score went in: a makeup played early or
+                        # late shows a different date here than the week.
+                        'entered': timezone.localtime(match.result.created_at).date(),
                         'opponent': opponent.name,
                         'opponent_rank': opponent.team_rank,
                         'result': f'{team_score}-{opponent_score}',
@@ -1560,6 +1563,10 @@ def archived_player_history(request, archived_season_id, player_name):
 
         history.append({
             'date': match.date,
+            'entered': (
+                timezone.localtime(match.result_recorded_at).date()
+                if match.result_recorded_at else None
+            ),
             'week_number': match.week_number,
             'opponent': opponent_names,
             'team_score': team_score,

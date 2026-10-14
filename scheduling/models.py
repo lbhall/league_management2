@@ -301,6 +301,8 @@ class ArchivedMatch(models.Model):
     away_race = models.PositiveIntegerField(null=True, blank=True)
     # False when the match was never finished before the season was archived.
     completed = models.BooleanField(default=False)
+    # When the score was entered (MatchResult.created_at); null if never scored.
+    result_recorded_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['date', 'sort_order', 'home_team_name']

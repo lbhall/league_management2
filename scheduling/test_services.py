@@ -437,6 +437,7 @@ class ArchiveSeasonTests(TestCase):
         self.assertEqual(played.away_race, 7)
         self.assertEqual(played.race_label, '9/7')
         self.assertTrue(played.completed)
+        self.assertIsNotNone(played.result_recorded_at)
         self.assertEqual(played.player_results.count(), 2)
         home_line = played.player_results.get(team_name='Home')
         self.assertEqual(home_line.player, Player.objects.get(league=league, name='Home'))
@@ -444,6 +445,7 @@ class ArchiveSeasonTests(TestCase):
         unplayed = archived.matches.get(date=date(2026, 1, 8))
         self.assertIsNone(unplayed.home_team_score)
         self.assertFalse(unplayed.completed)
+        self.assertIsNone(unplayed.result_recorded_at)
         self.assertEqual(unplayed.player_results.count(), 0)
 
         # Soft archive: the season is kept, marked archived, and linked.
