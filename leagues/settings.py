@@ -55,7 +55,11 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.PageViewMiddleware',
 ]
+
+# Server-side hit counting for the public pages (see core/middleware.py).
+PAGEVIEW_TRACKING = os.environ.get('PAGEVIEW_TRACKING', 'true').lower() == 'true'
 
 ROOT_URLCONF = 'leagues.urls'
 

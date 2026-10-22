@@ -1696,3 +1696,79 @@ def build_team_player_stats(active_season, team, through_week=None):
             )
 
     return sorted(player_map.values(), key=sort_key)
+
+
+@staff_member_required
+def traffic(request):
+    """Hits and unique visitors for the public site, for league operators."""
+    from datetime import timedelta
+
+    from django.db.models import Count
+
+    from .models import PageView
+
+    access = getattr(request.user, 'league_admin_access', None)
+    if request.user.is_superuser or access is None:
+        league_options = list(League.objects.order_by('name'))
+    else:
+        league_options = [access.league]
+
+    selected_league = None
+    requested = request.GET.get('league')
+    if requested:
+        selected_league = next((lg for lg in league_options if str(lg.id) == requested), None)
+    if selected_league is None and len(league_options) == 1:
+        selected_league = league_options[0]
+
+    views = PageView.objects.filter(is_staff=False)
+    if selected_league is not None:
+        views = views.filter(league=selected_league)
+    elif not request.user.is_superuser and access is not None:
+        views = views.filter(league=access.league)
+
+    today = timezone.localdate()
+
+    def summarise(queryset):
+        hits = queryset.count()
+        # Keys rotate daily, so "unique" is per device per day.
+        uniques = queryset.values('day', 'visitor_key').distinct().count()
+        return hits, uniques
+
+    cards = []
+    for label, since in (
+        ('Today', today),
+        ('Last 7 days', today - timedelta(days=6)),
+        ('Last 30 days', today - timedelta(days=29)),
+        ('All time', None),
+    ):
+        subset = views if since is None else views.filter(day__gte=since)
+        hits, uniques = summarise(subset)
+        cards.append({'label': label, 'hits': hits, 'uniques': uniques})
+
+    month = views.filter(day__gte=today - timedelta(days=29))
+    daily = [
+        {
+            'day': row['day'],
+            'hits': row['hits'],
+            'uniques': row['uniques'],
+        }
+        for row in month.values('day')
+        .annotate(hits=Count('id'), uniques=Count('visitor_key', distinct=True))
+        .order_by('-day')
+    ]
+    top_pages = [
+        {'path': row['path'], 'hits': row['hits'], 'uniques': row['uniques']}
+        for row in month.values('path')
+        .annotate(hits=Count('id'), uniques=Count('visitor_key', distinct=True))
+        .order_by('-hits', 'path')[:15]
+    ]
+
+    return render(request, 'traffic.html', {
+        'active_league': get_active_league(request),
+        'league_name': selected_league.name if selected_league else 'All leagues',
+        'league_options': league_options,
+        'selected_league': selected_league,
+        'cards': cards,
+        'daily': daily,
+        'top_pages': top_pages,
+    })
