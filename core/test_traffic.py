@@ -111,20 +111,36 @@ class TrafficPageTests(ViewTestCase):
         ]
         for league, path, key, day, is_staff in rows:
             PageView.objects.create(league=league, path=path, visitor_key=key, day=day, is_staff=is_staff)
+        self.url = reverse('admin:core_pageview_changelist')
 
     def _login_superuser(self):
         User = get_user_model()
         user = User.objects.create_superuser(username='root', password='pw', email='r@example.com')
         self.client.force_login(user)
 
+    def test_report_lives_only_in_the_admin(self):
+        # No public page, no nav link, even for staff.
+        self._login_superuser()
+        response = self.client.get('/traffic/')
+        self.assertEqual(response.status_code, 404)
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('home'))
+        self.assertNotContains(response, 'Traffic')
+
     def test_anonymous_is_sent_to_admin_login(self):
-        response = self.client.get(reverse('traffic'))
+        response = self.client.get(self.url)
         self.assertEqual(response.status_code, 302)
         self.assertIn('/admin/login/', response.url)
 
+    def test_admin_index_links_to_the_report(self):
+        self._login_superuser()
+        response = self.client.get(reverse('admin:index'))
+        self.assertContains(response, 'Site Traffic')
+        self.assertContains(response, self.url)
+
     def test_superuser_sees_all_leagues_and_can_filter(self):
         self._login_superuser()
-        response = self.client.get(reverse('traffic'))
+        response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         cards = {c['label']: c for c in response.context['cards']}
         # All leagues, today: 4 non-staff hits (3 EMC + 1 Bogies), 3 unique visitors.
@@ -132,7 +148,7 @@ class TrafficPageTests(ViewTestCase):
         self.assertEqual(cards['Today']['uniques'], 3)
         self.assertEqual(cards['All time']['hits'], 6)
 
-        response = self.client.get(reverse('traffic'), {'league': self.league.id})
+        response = self.client.get(self.url, {'league': self.league.id})
         cards = {c['label']: c for c in response.context['cards']}
         self.assertEqual(cards['Today']['hits'], 3)
         self.assertEqual(cards['Today']['uniques'], 2)
@@ -144,28 +160,45 @@ class TrafficPageTests(ViewTestCase):
         top = {row['path']: row for row in response.context['top_pages']}
         self.assertEqual(top['/']['hits'], 2)
         self.assertEqual(top['/']['uniques'], 2)
-        self.assertNotIn('/no-such/', top)
+
+    def test_staff_visits_can_be_included_for_checking(self):
+        self._login_superuser()
+        response = self.client.get(self.url, {'league': self.league.id})
+        self.assertEqual(response.context['staff_hits'], 1)
+        self.assertContains(response, '1 recorded, excluded below')
+        cards = {c['label']: c for c in response.context['cards']}
+        self.assertEqual(cards['Today']['hits'], 3)
+
+        response = self.client.get(self.url, {'league': self.league.id, 'staff': '1'})
+        cards = {c['label']: c for c in response.context['cards']}
+        self.assertEqual(cards['Today']['hits'], 4)
+        self.assertEqual(cards['Today']['uniques'], 3)
+        self.assertTrue(response.context['include_staff'])
 
     def test_league_admin_only_sees_their_league(self):
+        from django.contrib.auth.models import Permission
+
         User = get_user_model()
         user = User.objects.create_user(username='opr', password='pw', is_staff=True)
         LeagueAdminAccess.objects.create(user=user, league=self.other)
+        user.user_permissions.add(Permission.objects.get(codename='view_pageview'))
         self.client.force_login(user)
 
-        response = self.client.get(reverse('traffic'), {'league': self.league.id})
+        response = self.client.get(self.url, {'league': self.league.id})
         self.assertEqual(response.status_code, 200)
         cards = {c['label']: c for c in response.context['cards']}
         # The EMC filter is ignored; only Bogies rows are counted.
         self.assertEqual(cards['All time']['hits'], 1)
         self.assertEqual(len(response.context['league_options']), 1)
 
-    def test_nav_link_only_for_staff(self):
-        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
-            response = self.client.get(reverse('home'))
-            self.assertNotContains(response, 'href="/traffic/"')
-            self._login_superuser()
-            response = self.client.get(reverse('home'))
-            self.assertContains(response, 'href="/traffic/"')
+    def test_staff_without_permission_cannot_open_it(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='nope', password='pw', is_staff=True)
+        self.client.force_login(user)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+        response = self.client.get(reverse('admin:index'))
+        self.assertNotContains(response, 'Site Traffic')
 
 
 class PrunePageviewsTests(TestCase):

@@ -300,6 +300,8 @@ class PageView(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
+        verbose_name = 'site traffic'
+        verbose_name_plural = 'Site traffic'
         indexes = [
             models.Index(fields=['league', 'day']),
             models.Index(fields=['day']),
