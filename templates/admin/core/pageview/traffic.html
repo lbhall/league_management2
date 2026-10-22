@@ -1,0 +1,108 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Site traffic | {{ site_title|default:"Django site admin" }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='core' %}">Core</a>
+    &rsaquo; Site traffic
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Site traffic</h1>
+<p style="color:#666;">
+    Page loads on the public site. Unique visitors are counted once per day per device,
+    staff visits are left out, and bots are filtered.
+</p>
+
+<form method="get" style="margin: 12px 0 20px; display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
+    {% if league_options|length > 1 %}
+        <span>
+            <label for="league"><strong>League:</strong></label>
+            <select id="league" name="league" onchange="this.form.submit()">
+                <option value="">All leagues</option>
+                {% for league in league_options %}
+                    <option value="{{ league.id }}" {% if selected_league and league.id == selected_league.id %}selected{% endif %}>
+                        {{ league.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </span>
+    {% elif selected_league %}
+        <span><strong>League:</strong> {{ selected_league.name }}</span>
+    {% endif %}
+    <label>
+        <input type="checkbox" name="staff" value="1" {% if include_staff %}checked{% endif %} onchange="this.form.submit()">
+        Include staff visits ({{ staff_hits }} recorded{% if not include_staff %}, excluded below{% endif %})
+    </label>
+</form>
+
+<div class="module" style="margin-bottom:20px;">
+    <table>
+        <thead>
+            <tr>
+                <th>Period</th>
+                <th>Hits</th>
+                <th>Unique visitors</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card in cards %}
+                <tr>
+                    <td>{{ card.label }}</td>
+                    <td>{{ card.hits }}</td>
+                    <td>{{ card.uniques }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
+    <div class="module" style="flex:1;min-width:280px;">
+        <h2>Last 30 days</h2>
+        {% if daily %}
+            <table style="width:100%;">
+                <thead>
+                    <tr><th>Day</th><th>Hits</th><th>Unique</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in daily %}
+                        <tr>
+                            <td>{{ row.day|date:"D M j" }}</td>
+                            <td>{{ row.hits }}</td>
+                            <td>{{ row.uniques }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="padding:8px 10px;color:#666;">No visits recorded yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="module" style="flex:1;min-width:280px;">
+        <h2>Top pages, last 30 days</h2>
+        {% if top_pages %}
+            <table style="width:100%;">
+                <thead>
+                    <tr><th>Page</th><th>Hits</th><th>Unique</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in top_pages %}
+                        <tr>
+                            <td><code>{{ row.path }}</code></td>
+                            <td>{{ row.hits }}</td>
+                            <td>{{ row.uniques }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="padding:8px 10px;color:#666;">No visits recorded yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

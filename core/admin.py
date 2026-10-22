@@ -5,10 +5,11 @@ from django.contrib import admin
 from django.forms.models import BaseInlineFormSet
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import FailedLogin, League, LeagueAdminAccess, Player, Team, Venue
+from .models import FailedLogin, League, LeagueAdminAccess, PageView, Player, Team, Venue
 from scheduling.models import Match, Season
 
 def get_user_league(request):
@@ -653,3 +654,39 @@ class FailedLoginAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(PageView)
+class PageViewAdmin(admin.ModelAdmin):
+    """The "Site traffic" entry in the admin: its list page is the hits and
+    unique-visitors report rather than a row listing. Rows are written by
+    the middleware and never edited by hand."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.core.exceptions import PermissionDenied
+
+        from .traffic import build_traffic_report
+
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'title': 'Site traffic',
+            **build_traffic_report(
+                request.user,
+                request.GET.get('league'),
+                include_staff=request.GET.get('staff') == '1',
+            ),
+        }
+        return TemplateResponse(request, 'admin/core/pageview/traffic.html', context)
