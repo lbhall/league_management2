@@ -22,6 +22,7 @@ from core.views import (
     standings,
     team_detail,
     team_schedule_modal,
+    traffic,
 )
 from tournaments.views import (
     create_readysettourney_tournament,
@@ -34,6 +35,7 @@ from tournaments.views import (
 urlpatterns = [
     path('', home, name='home'),
     path('finance/', finance, name='finance'),
+    path('traffic/', traffic, name='traffic'),
     path('tournament-players/', tournament_players, name='tournament_players'),
     path('tournament-players/export/', export_tournament_teams, name='export_tournament_teams'),
     path('tournament-players/create-readysettourney/', create_readysettourney_tournament, name='create_readysettourney_tournament'),

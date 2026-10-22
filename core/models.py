@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 
@@ -279,3 +280,30 @@ class FailedLogin(models.Model):
         verbose_name = 'Failed Login'
         verbose_name_plural = 'Failed Logins'
         ordering = ['-timestamp']
+
+
+class PageView(models.Model):
+    """One public page load. visitor_key is a daily-rotating hash of IP and
+    browser, so visitors can be counted per day without being tracked."""
+
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name='page_views',
+        null=True,
+        blank=True,
+    )
+    path = models.CharField(max_length=255)
+    visitor_key = models.CharField(max_length=40)
+    day = models.DateField()
+    is_staff = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['league', 'day']),
+            models.Index(fields=['day']),
+        ]
+
+    def __str__(self):
+        return f'{self.day} {self.path}'
