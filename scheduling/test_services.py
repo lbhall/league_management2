@@ -613,6 +613,70 @@ class MoveWeekUpDownTests(TestCase):
             services.move_week_down(self.week3)
 
 
+class MoveWeekAroundHolidayTests(TestCase):
+    """Holiday weeks stay on their dates; play weeks swap across them."""
+
+    def setUp(self):
+        self.league = make_league()
+        self.season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ACTIVE)
+        self.week1 = Week.objects.create(season=self.season, date=date(2026, 1, 1), number=1)
+        self.week2 = Week.objects.create(season=self.season, date=date(2026, 1, 8), number=2)
+        self.holiday = Week.objects.create(season=self.season, date=date(2026, 1, 15), number=None, notes='Holiday')
+        self.week3 = Week.objects.create(season=self.season, date=date(2026, 1, 22), number=3)
+        venue = make_venue(self.league)
+        self.a = make_team(self.league, venue, 'A')
+        self.b = make_team(self.league, venue, 'B')
+        self.m2 = Match.objects.create(week=self.week2, home_team=self.a, away_team=self.b)
+        self.m3 = Match.objects.create(week=self.week3, home_team=self.b, away_team=self.a)
+
+    def _refresh(self):
+        for w in (self.week1, self.week2, self.holiday, self.week3):
+            w.refresh_from_db()
+
+    def test_move_down_skips_the_holiday(self):
+        services.move_week_down(self.week2)
+        self._refresh()
+        self.assertEqual(self.week2.date, date(2026, 1, 22))
+        self.assertEqual(self.week3.date, date(2026, 1, 8))
+        self.assertEqual(self.holiday.date, date(2026, 1, 15))
+        self.assertIsNone(self.holiday.number)
+        # Matches travel with their week; numbering follows the new order.
+        self.assertEqual(self.week3.number, 2)
+        self.assertEqual(self.week2.number, 3)
+        self.m2.refresh_from_db()
+        self.assertEqual(self.m2.week_id, self.week2.id)
+
+    def test_move_up_skips_the_holiday(self):
+        services.move_week_up(self.week3)
+        self._refresh()
+        self.assertEqual(self.week3.date, date(2026, 1, 8))
+        self.assertEqual(self.week2.date, date(2026, 1, 22))
+        self.assertEqual(self.holiday.date, date(2026, 1, 15))
+
+    def test_skips_several_consecutive_holidays(self):
+        Week.objects.create(season=self.season, date=date(2026, 1, 16), number=None, notes='Holiday 2')
+        services.move_week_down(self.week2)
+        self._refresh()
+        self.assertEqual(self.week2.date, date(2026, 1, 22))
+        self.assertEqual(self.week3.date, date(2026, 1, 8))
+        holidays = list(self.season.weeks.filter(number__isnull=True).order_by('date').values_list('date', flat=True))
+        self.assertEqual(holidays, [date(2026, 1, 15), date(2026, 1, 16)])
+
+    def test_last_play_week_cannot_move_down_past_a_trailing_holiday(self):
+        Week.objects.create(season=self.season, date=date(2026, 1, 29), number=None, notes='Season end party')
+        with self.assertRaises(ValueError):
+            services.move_week_down(self.week3)
+        self.week3.refresh_from_db()
+        self.assertEqual(self.week3.date, date(2026, 1, 22))
+
+    def test_holiday_week_itself_still_swaps_with_its_neighbour(self):
+        services.move_week_up(self.holiday)
+        self._refresh()
+        self.assertEqual(self.holiday.date, date(2026, 1, 8))
+        self.assertEqual(self.week2.date, date(2026, 1, 15))
+        self.assertIsNone(self.holiday.number)
+
+
 class CreateNewPlayableWeekAtEndTests(TestCase):
     def test_raises_without_existing_weeks(self):
         league = make_league()

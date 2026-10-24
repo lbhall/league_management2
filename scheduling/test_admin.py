@@ -289,6 +289,38 @@ class MirrorScheduleViewTests(SeasonAdminTestCase):
         self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
 
 
+class MoveWeekArrowsTests(SeasonAdminTestCase):
+    def test_arrows_reflect_play_week_neighbours_not_holidays(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.WORKING)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        holiday = Week.objects.create(season=season, date=date(2026, 1, 12), number=None, notes='Holiday')
+        week2 = Week.objects.create(season=season, date=date(2026, 1, 19), number=2)
+        trailing = Week.objects.create(season=season, date=date(2026, 1, 26), number=None, notes='Party')
+
+        response = self.client.get(reverse('admin:scheduling_season_manage_schedule', args=[season.pk]))
+        flags = {w.id: (w.can_move_up, w.can_move_down) for w in response.context['schedule_weeks']}
+        self.assertEqual(flags[week1.id], (False, True))   # can swap down across the holiday
+        self.assertEqual(flags[week2.id], (True, False))   # no play week after it, despite the party
+        self.assertEqual(flags[holiday.id], (True, True))  # holidays keep plain adjacent moves
+        self.assertEqual(flags[trailing.id], (True, False))
+
+    def test_move_down_view_skips_holiday(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.WORKING)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        holiday = Week.objects.create(season=season, date=date(2026, 1, 12), number=None, notes='Holiday')
+        week2 = Week.objects.create(season=season, date=date(2026, 1, 19), number=2)
+
+        response = self.client.post(
+            reverse('admin:scheduling_season_move_week_down', args=[season.pk, week1.pk]),
+        )
+        self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
+        for w in (week1, week2, holiday):
+            w.refresh_from_db()
+        self.assertEqual(week1.date, date(2026, 1, 19))
+        self.assertEqual(week2.date, date(2026, 1, 5))
+        self.assertEqual(holiday.date, date(2026, 1, 12))
+
+
 class CompressScheduleViewTests(SeasonAdminTestCase):
     def _two_week_season(self):
         big = make_venue(self.league, name='Big Room', max_home_teams=4)

@@ -362,8 +362,12 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 team for team in teams
                 if team.id not in scheduled_team_ids or team.id in teams_playing_bye
             ]
-            week.can_move_up = index > 0
-            week.can_move_down = index < len(weeks) - 1
+            if week.number is None:
+                week.can_move_up = index > 0
+                week.can_move_down = index < len(weeks) - 1
+            else:
+                week.can_move_up = any(w.number is not None for w in weeks[:index])
+                week.can_move_down = any(w.number is not None for w in weeks[index + 1:])
             week.can_delete = week.number is not None and not week.matches.all()
 
         return weeks

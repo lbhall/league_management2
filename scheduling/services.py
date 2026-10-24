@@ -1058,54 +1058,62 @@ def _renumber_season_weeks(season):
 
 
 @transaction.atomic
-def move_week_up(week):
+def _neighbour_week(week, direction):
+    """The week a move should swap with.
+
+    Play weeks swap with the nearest play week in that direction, skipping
+    holiday weeks so those stay pinned to their dates. A holiday week itself
+    simply swaps with the adjacent week. Returns None at the edge.
+    """
     season_weeks = list(week.season.weeks.order_by('date', 'number', 'id'))
-    current_index = season_weeks.index(week)
+    index = season_weeks.index(week)
+    step = 1 if direction == 'down' else -1
 
-    if current_index == 0:
-        raise ValueError('The first week of the season cannot be moved up.')
+    candidates = season_weeks[index + 1:] if step == 1 else season_weeks[:index][::-1]
+    if week.number is None:
+        return candidates[0] if candidates else None
+    for candidate in candidates:
+        if candidate.number is not None:
+            return candidate
+    return None
 
-    previous_week = season_weeks[current_index - 1]
+
+def _swap_week_dates(week, other):
     placeholder_date = _get_swap_placeholder_date(week.season)
-
-    previous_week_date = previous_week.date
+    other_date = other.date
     week_date = week.date
 
-    previous_week.date = placeholder_date
-    previous_week.save(update_fields=['date'])
+    other.date = placeholder_date
+    other.save(update_fields=['date'])
 
-    week.date = previous_week_date
+    week.date = other_date
     week.save(update_fields=['date'])
 
-    previous_week.date = week_date
-    previous_week.save(update_fields=['date'])
+    other.date = week_date
+    other.save(update_fields=['date'])
 
+
+@transaction.atomic
+def move_week_up(week):
+    previous_week = _neighbour_week(week, 'up')
+    if previous_week is None:
+        if week.number is None:
+            raise ValueError('The first week of the season cannot be moved up.')
+        raise ValueError('There is no earlier play week to swap with.')
+
+    _swap_week_dates(week, previous_week)
     _renumber_season_weeks(week.season)
     return week
 
 
 @transaction.atomic
 def move_week_down(week):
-    season_weeks = list(week.season.weeks.order_by('date', 'number', 'id'))
-    current_index = season_weeks.index(week)
+    next_week = _neighbour_week(week, 'down')
+    if next_week is None:
+        if week.number is None:
+            raise ValueError('The last week of the season cannot be moved down.')
+        raise ValueError('There is no later play week to swap with.')
 
-    if current_index == len(season_weeks) - 1:
-        raise ValueError('The last week of the season cannot be moved down.')
-
-    next_week = season_weeks[current_index + 1]
-    placeholder_date = _get_swap_placeholder_date(week.season)
-
-    next_week_date = next_week.date
-    week_date = week.date
-
-    next_week.date = placeholder_date
-    next_week.save(update_fields=['date'])
-
-    week.date = next_week_date
-    week.save(update_fields=['date'])
-
-    next_week.date = week_date
-    next_week.save(update_fields=['date'])
-
+    _swap_week_dates(week, next_week)
     _renumber_season_weeks(week.season)
     return week
