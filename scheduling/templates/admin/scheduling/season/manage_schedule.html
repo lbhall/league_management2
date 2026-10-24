@@ -275,6 +275,16 @@
             </li>
         {% endif %}
 
+        {% if compress_schedule_url %}
+            <li>
+                <form action="{{ compress_schedule_url }}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="button">Compress Schedule</button>
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                </form>
+            </li>
+        {% endif %}
+
         {% if move_live_url %}
             <li>
                 <form action="{{ move_live_url }}" method="post" style="display: inline;">
