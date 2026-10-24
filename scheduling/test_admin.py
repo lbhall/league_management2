@@ -289,6 +289,58 @@ class MirrorScheduleViewTests(SeasonAdminTestCase):
         self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
 
 
+class CompressScheduleViewTests(SeasonAdminTestCase):
+    def _two_week_season(self):
+        big = make_venue(self.league, name='Big Room', max_home_teams=4)
+        a, b, c, d = [make_team(self.league, big, name) for name in ('A', 'B', 'C', 'D')]
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.WORKING)
+        week1 = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        week2 = Week.objects.create(season=season, date=date(2026, 1, 12), number=2)
+        Match.objects.create(week=week1, home_team=a, away_team=b)
+        Match.objects.create(week=week2, home_team=c, away_team=d)
+        return season
+
+    def test_compresses_working_season(self):
+        season = self._two_week_season()
+        response = self.client.post(
+            reverse('admin:scheduling_season_compress_schedule', args=[season.pk]), follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'compressed from 2 to 1 play weeks')
+        self.assertEqual(season.weeks.filter(number__isnull=False).count(), 1)
+        self.assertEqual(season.weeks.get(number=1).matches.count(), 2)
+
+    def test_reports_when_already_minimal(self):
+        season = self._two_week_season()
+        self.client.post(reverse('admin:scheduling_season_compress_schedule', args=[season.pk]))
+        response = self.client.post(
+            reverse('admin:scheduling_season_compress_schedule', args=[season.pk]), follow=True,
+        )
+        self.assertContains(response, 'already as short as the venues allow')
+
+    def test_rejects_active_season(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ACTIVE)
+        Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        response = self.client.post(
+            reverse('admin:scheduling_season_compress_schedule', args=[season.pk]), follow=True,
+        )
+        self.assertContains(response, 'Only a working season can be compressed')
+
+    def test_button_only_on_working_season(self):
+        working = Season.objects.create(league=self.league, name='W', status=Season.Status.WORKING)
+        active = Season.objects.create(league=self.league, name='A', status=Season.Status.ACTIVE)
+        response = self.client.get(reverse('admin:scheduling_season_manage_schedule', args=[working.pk]))
+        self.assertContains(response, 'Compress Schedule')
+        response = self.client.get(reverse('admin:scheduling_season_manage_schedule', args=[active.pk]))
+        self.assertNotContains(response, 'Compress Schedule')
+
+    def test_get_is_noop(self):
+        season = self._two_week_season()
+        response = self.client.get(reverse('admin:scheduling_season_compress_schedule', args=[season.pk]))
+        self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
+        self.assertEqual(season.weeks.filter(number__isnull=False).count(), 2)
+
+
 class MoveLiveViewTests(SeasonAdminTestCase):
     def test_success_moves_working_season_to_active(self):
         season = Season.objects.create(league=self.league, name='S1', status=Season.Status.WORKING)

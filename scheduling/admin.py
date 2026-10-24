@@ -32,6 +32,7 @@ from .services import (
     move_match_to_week,
     move_week_down,
     move_week_up,
+    pack_season_schedule,
     rebalance_season_matches,
     recreate_season_schedule,
     renumber_weeks,
@@ -204,6 +205,11 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 '<path:object_id>/move-live/',
                 self.admin_site.admin_view(self.move_live_view),
                 name='scheduling_season_move_live',
+            ),
+            path(
+                '<path:object_id>/compress-schedule/',
+                self.admin_site.admin_view(self.compress_schedule_view),
+                name='scheduling_season_compress_schedule',
             ),
             path(
                 '<path:object_id>/archive/',
@@ -396,6 +402,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         if season.status == Season.Status.WORKING:
             context['recreate_schedule_url'] = reverse('admin:scheduling_season_recreate_schedule', args=[season.pk])
             context['move_live_url'] = reverse('admin:scheduling_season_move_live', args=[season.pk])
+            context['compress_schedule_url'] = reverse('admin:scheduling_season_compress_schedule', args=[season.pk])
 
         if season.status == Season.Status.ACTIVE:
             context['archive_season_url'] = reverse('admin:scheduling_season_archive', args=[season.pk])
@@ -586,6 +593,42 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         season.save(update_fields=['status'])
 
         self.message_user(request, 'Season moved live successfully.', level=messages.SUCCESS)
+        return self._get_redirect_url(request, season)
+
+    def compress_schedule_view(self, request, object_id):
+        """Repack a working season into the fewest weeks the venues allow.
+        Matchups, home/away and locations are untouched; only the week each
+        match lands in changes, and empty weeks at the end are deleted."""
+        season = self._get_league_scoped_object(request, object_id)
+
+        if request.method != 'POST':
+            return self._get_redirect_url(request, season)
+
+        if season.status != Season.Status.WORKING:
+            self.message_user(request, 'Only a working season can be compressed.', level=messages.ERROR)
+            return self._get_redirect_url(request, season)
+
+        before = season.weeks.filter(number__isnull=False).count()
+        try:
+            result = pack_season_schedule(season, random_seed=1, attempts=20000)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return self._get_redirect_url(request, season)
+
+        after = season.weeks.filter(number__isnull=False).count()
+        if result['deleted_weeks']:
+            self.message_user(
+                request,
+                f'Schedule compressed from {before} to {after} play weeks '
+                f'({result["moved"]} match(es) moved).',
+                level=messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                f'The schedule is already as short as the venues allow ({after} play weeks).',
+                level=messages.INFO,
+            )
         return self._get_redirect_url(request, season)
 
     def rebalance_schedule_view(self, request, object_id):
