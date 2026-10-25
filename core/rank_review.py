@@ -111,7 +111,7 @@ def build_rank_review(league, season):
             if row is None:
                 # Played for this spot earlier in the season, then left.
                 row = rows[player.id] = blank_row(player, me.team_rank, player.team_id is not None)
-            split = row['splits'][weight_category(me.team_rank, opp.team_rank)]
+            split = row['splits'][weight_category(result.side_rank(me), result.side_rank(opp))]
             won = mine > theirs
             for target in (row, split):
                 target['matches_won' if won else 'matches_lost'] += 1

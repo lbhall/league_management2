@@ -607,21 +607,40 @@ class TeamAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             messages.error(request, 'Player changes are only recorded for one-pocket leagues.')
             return HttpResponseRedirect(reverse('admin:core_team_change', args=[team.pk]))
 
-        form_data = {'taking_over': '', 'left': '', 'took_over_on': ''}
+        form_data = {'taking_over': '', 'left': '', 'took_over_on': '', 'new_rank': '', 'old_rank': ''}
         if request.method == 'POST':
             form_data = {
                 'taking_over': request.POST.get('taking_over', '').strip(),
                 'left': request.POST.get('left', '').strip(),
                 'took_over_on': request.POST.get('took_over_on', '').strip(),
+                'new_rank': request.POST.get('new_rank', '').strip(),
+                'old_rank': request.POST.get('old_rank', '').strip(),
             }
+
+            def parse_rank(value):
+                if not value:
+                    return None
+                rank = int(value)  # ValueError propagates
+                if not 1 <= rank <= 5:
+                    raise ValueError(value)
+                return rank
+
+            took_over_on = None
             try:
-                took_over_on = date_type.fromisoformat(form_data['took_over_on'])
+                new_rank = parse_rank(form_data['new_rank'])
+                old_rank = parse_rank(form_data['old_rank'])
             except ValueError:
-                messages.error(request, 'Enter the takeover date.')
+                messages.error(request, 'Ranks must be numbers from 1 to 5.')
             else:
+                try:
+                    took_over_on = date_type.fromisoformat(form_data['took_over_on'])
+                except ValueError:
+                    messages.error(request, 'Enter the takeover date.')
+            if took_over_on is not None:
                 try:
                     old, new, reassigned = record_player_change(
                         team, form_data['taking_over'], took_over_on, left=form_data['left'],
+                        new_rank=new_rank, old_rank=old_rank,
                     )
                 except PlayerChangeError as exc:
                     messages.error(request, str(exc))

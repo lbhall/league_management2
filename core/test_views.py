@@ -280,6 +280,15 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('aria-label="Trending down"', marcus)
         self.assertIn('stroke="#dc3545"', marcus)
 
+    def test_team_schedule_modal_uses_ranks_as_played(self):
+        # Louie was rank 4 when match1 was played; reranking him later must not change the row.
+        self.team_b.team_rank = 5
+        self.team_b.save()
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+        self.assertIn('Louie (4)', html)
+        self.assertNotIn('Louie (5)', html)
+
     def test_team_schedule_modal_streak(self):
         # Two more losses for Marcus -> "Lost 3 in a row".
         w = Week.objects.create(season=self.season, date=date(2026, 1, 26), number=4)

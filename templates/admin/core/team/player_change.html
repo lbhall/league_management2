@@ -39,6 +39,16 @@
             <div class="help">Only needed if the spot already shows the new player's name.</div>
         </div>
         <div class="form-row">
+            <label for="id_old_rank">Rank of player who left:</label>
+            <input type="number" id="id_old_rank" name="old_rank" min="1" max="5" value="{{ form_data.old_rank }}" style="width:5em;">
+            <div class="help">Optional. Fill in if the spot was reranked when it changed hands; their earlier results are stored at this rank.</div>
+        </div>
+        <div class="form-row">
+            <label for="id_new_rank">New skill rank:</label>
+            <input type="number" id="id_new_rank" name="new_rank" min="1" max="5" value="{{ form_data.new_rank }}" style="width:5em;">
+            <div class="help">Optional. Leave blank to keep the spot's current rank ({{ team.team_rank|default_if_none:"none" }}). Results from the takeover on are stored at this rank.</div>
+        </div>
+        <div class="form-row">
             <label for="id_took_over_on">Took over on:</label>
             <input type="date" id="id_took_over_on" name="took_over_on" value="{{ form_data.took_over_on }}" required>
             <div class="help">Scores entered on or after this date count for the new player.</div>
