@@ -29,6 +29,28 @@
                         {% if avg_margin %}
                             <div class="small text-muted" data-avg-margin>avg margin {{ avg_margin.label }}</div>
                         {% endif %}
+                        {% if rank_outlook %}
+                            <div class="mt-2" data-rank-outlook="{{ rank_outlook.state }}" title="{{ rank_outlook.reason }}">
+                                <div class="small text-muted">Rank outlook</div>
+                                {% if rank_outlook.state == 'up' %}
+                                    <svg width="36" height="36" viewBox="0 0 36 36" role="img" aria-label="Trending up">
+                                        <polyline points="8,24 18,12 28,24" fill="none" stroke="#198754" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                                    </svg>
+                                    <div class="small fw-semibold" style="color:#198754;">Trending up</div>
+                                {% elif rank_outlook.state == 'down' %}
+                                    <svg width="36" height="36" viewBox="0 0 36 36" role="img" aria-label="Trending down">
+                                        <polyline points="8,12 18,24 28,12" fill="none" stroke="#dc3545" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                                    </svg>
+                                    <div class="small fw-semibold" style="color:#dc3545;">Trending down</div>
+                                {% else %}
+                                    <svg width="36" height="36" viewBox="0 0 36 36" role="img" aria-label="Holding">
+                                        <line x1="8" y1="18" x2="28" y2="18" stroke="#adb5bd" stroke-width="5" stroke-linecap="round"></line>
+                                    </svg>
+                                    <div class="small fw-semibold text-muted">Holding</div>
+                                {% endif %}
+                                <div class="small text-muted">{{ rank_outlook.reason }}</div>
+                            </div>
+                        {% endif %}
                     </div>
                     <div class="flex-grow-1">
                         <div class="small text-muted mb-1">Win percentage by opponent rank</div>

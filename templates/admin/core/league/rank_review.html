@@ -81,6 +81,8 @@
                             <strong class="rr-flag-up">&#9650; Consider moving up</strong>
                         {% elif row.signal == 'down' %}
                             <strong class="rr-flag-down">&#9660; Consider moving down</strong>
+                        {% else %}
+                            <strong class="rr-muted">&#9644; Hold</strong>
                         {% endif %}
                         {% if row.reason %}<div class="rr-muted" style="font-size:0.9em;">{{ row.reason }}</div>{% endif %}
                     </td>
