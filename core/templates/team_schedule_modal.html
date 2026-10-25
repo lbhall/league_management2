@@ -43,7 +43,7 @@
                         </div>
                         <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
                             <div data-form-strip>
-                                <div class="small text-muted mb-1">Form (last {{ form.dots|length }})</div>
+                                <div class="small text-muted mb-1">Last {{ form.dots|length }} match{{ form.dots|length|pluralize:"es" }}</div>
                                 {% if form.dots %}
                                     <div class="d-flex align-items-center gap-1">
                                         {% for dot in form.dots %}

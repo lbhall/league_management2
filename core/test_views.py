@@ -234,6 +234,7 @@ class OnePocketViewsTests(ViewTestCase):
 
         # Form: one red dot, no streak text (needs two in a row).
         self.assertIn('data-form-strip', html)
+        self.assertIn('Last 1 match<', html)
         self.assertEqual(html.count('rounded-circle bg-danger'), 1)
         self.assertNotIn('in a row', html)
         # Marcus (2) lost to Louie (4): a "getting weight" loss; the other buckets empty.
@@ -267,6 +268,7 @@ class OnePocketViewsTests(ViewTestCase):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
         self.assertIn('Lost 3 in a row', html)
+        self.assertIn('Last 3 matches', html)
         self.assertEqual(html.count('rounded-circle bg-danger'), 3)
         # Marcus (2) vs Beau (1) was giving weight; vs Danni (3) getting weight.
         self.assertIn('Giving weight', html)
