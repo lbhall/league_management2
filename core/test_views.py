@@ -347,7 +347,7 @@ class OnePocketViewsTests(ViewTestCase):
             self.assertNotIn('Holiday - ', html)
             self.assertNotIn('Notes:</strong> Thanksgiving', html)
         # The heading is the note itself, not a generic label.
-        self.assertNotRegex(page, r'<strong>\s*Holiday\s*</strong>')
+        self.assertRegex(page, r'<strong>\s*Thanksgiving\s*</strong>')
 
     def test_full_schedule_marks_played_matches(self):
         # match1: Marcus (home) 6, Louie (away) 10 -> played, Louie won. match2 unplayed.
