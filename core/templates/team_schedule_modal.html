@@ -93,12 +93,15 @@
                 <div class="card mb-3">
                     <div class="card-body py-3">
                         <div class="small text-muted mb-2">Win rate by opponent rank</div>
-                        <div class="d-flex flex-wrap gap-2" data-rank-breakdown>
+                        {# Always one row of five, even on a phone: compact text and 1-unit gutters. #}
+                        <div class="row row-cols-5 g-1" data-rank-breakdown>
                             {% for row in by_rank %}
-                                <div class="border rounded px-3 py-2 text-center flex-fill">
-                                    <div class="small text-muted">Rank {{ row.rank }}</div>
-                                    <div class="fw-bold{% if not row.played %} text-muted{% endif %}">{{ row.pct_label }}</div>
-                                    <div class="small text-muted">{% if row.played %}{{ row.wins }}-{{ row.losses }}{% else %}no matches{% endif %}</div>
+                                <div class="col">
+                                    <div class="border rounded px-1 py-2 text-center h-100">
+                                        <div class="text-muted text-nowrap" style="font-size:0.7rem;">Rank {{ row.rank }}</div>
+                                        <div class="fw-bold{% if not row.played %} text-muted{% endif %}" style="font-size:0.95rem;">{{ row.pct_label }}</div>
+                                        <div class="text-muted text-nowrap" style="font-size:0.7rem;">{% if row.played %}{{ row.wins }}-{{ row.losses }}{% else %}&mdash;{% endif %}</div>
+                                    </div>
                                 </div>
                             {% endfor %}
                         </div>
