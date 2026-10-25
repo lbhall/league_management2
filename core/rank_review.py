@@ -26,6 +26,10 @@ def _pct(won, lost):
     return (won / total) if total else None
 
 
+def _pct_label(value):
+    return f'{round(value * 100)}%' if value is not None else '-'
+
+
 def weight_category(my_rank, opp_rank):
     """'giving' when the higher-ranked player spots the opponent, 'getting'
     when they receive the spot, 'even' at equal rank (or unknown ranks)."""
@@ -105,9 +109,11 @@ def build_rank_review(league, season):
         row['matches_played'] = matches_played
         row['game_pct'] = _pct(row['games_won'], row['games_lost'])
         row['avg_margin'] = (row['margin_total'] / matches_played) if matches_played else None
+        row['game_pct_label'] = _pct_label(row['game_pct'])
         for split in row['splits'].values():
             split['games_played'] = split['games_won'] + split['games_lost']
             split['game_pct'] = _pct(split['games_won'], split['games_lost'])
+            split['game_pct_label'] = _pct_label(split['game_pct'])
         row['split_cells'] = [row['splits'][key] for key in ('giving', 'even', 'getting')]
         row['signal'], row['reason'] = _signal(row)
         out.append(row)

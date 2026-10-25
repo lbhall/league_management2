@@ -12,8 +12,17 @@
 </div>
 {% endblock %}
 
+{% block extrastyle %}{{ block.super }}
+<style>
+    .rr-muted { opacity: 0.7; }
+    .rr-up td:first-child { border-left: 5px solid #2e8b57; }
+    .rr-down td:first-child { border-left: 5px solid #c0392b; }
+    .rr-flag-up { color: #2e8b57; }
+    .rr-flag-down { color: #e05a4c; }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>Rank review &mdash; {{ league.name }}</h1>
 <p style="color:#666;">
     Who looks ready to move up a rank, and who may belong a rank lower, based on games won and lost
     against each opponent's rank. "Giving weight" means the player was the higher rank and spotted
@@ -50,17 +59,17 @@
         </thead>
         <tbody>
             {% for row in rows %}
-                <tr{% if row.signal == 'up' %} style="background:#e6f4ea;"{% elif row.signal == 'down' %} style="background:#fdecea;"{% endif %}>
+                <tr class="{% if row.signal == 'up' %}rr-up{% elif row.signal == 'down' %}rr-down{% endif %}">
                     <td>{{ row.rank|default_if_none:"-" }}</td>
                     <td><strong>{{ row.name }}</strong></td>
                     <td>{{ row.matches_won }}-{{ row.matches_lost }}</td>
                     <td>{{ row.games_won }}-{{ row.games_lost }}</td>
-                    <td>{% if row.game_pct is not None %}{{ row.game_pct|floatformat:"0%" }}{% else %}-{% endif %}</td>
+                    <td>{{ row.game_pct_label }}</td>
                     {% for split in row.split_cells %}
                         <td>
                             {% if split.games_played %}
                                 {{ split.games_won }}-{{ split.games_lost }}
-                                <span style="color:#666;">({{ split.game_pct|floatformat:"0%" }})</span>
+                                <span class="rr-muted">({{ split.game_pct_label }})</span>
                             {% else %}
                                 <span style="color:#999;">&mdash;</span>
                             {% endif %}
@@ -69,11 +78,11 @@
                     <td>{% if row.avg_margin is not None %}{{ row.avg_margin|floatformat:1 }}{% else %}-{% endif %}</td>
                     <td>
                         {% if row.signal == 'up' %}
-                            <strong style="color:#1e7e34;">&#9650; Consider moving up</strong>
+                            <strong class="rr-flag-up">&#9650; Consider moving up</strong>
                         {% elif row.signal == 'down' %}
-                            <strong style="color:#c0392b;">&#9660; Consider moving down</strong>
+                            <strong class="rr-flag-down">&#9660; Consider moving down</strong>
                         {% endif %}
-                        {% if row.reason %}<div style="color:#666;font-size:0.9em;">{{ row.reason }}</div>{% endif %}
+                        {% if row.reason %}<div class="rr-muted" style="font-size:0.9em;">{{ row.reason }}</div>{% endif %}
                     </td>
                 </tr>
             {% endfor %}
