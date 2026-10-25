@@ -5,8 +5,26 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
 from core.models import Player, League
-from scheduling.models import Match
+from scheduling.models import Match, Season
 from .models import MatchResult, PlayerMatchResult
+
+
+class LeagueScopedSeasonFilter(admin.SimpleListFilter):
+    """Season filter for match results, limited to the staff member's league."""
+    title = 'season'
+    parameter_name = 'season'
+
+    def lookups(self, request, model_admin):
+        seasons = Season.objects.select_related('league').order_by('league__name', '-id')
+        user_league = get_user_league(request)
+        if not request.user.is_superuser and user_league is not None:
+            seasons = seasons.filter(league=user_league)
+        return [(season.pk, str(season)) for season in seasons]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(match__week__season_id=self.value())
+        return queryset
 
 
 def get_user_league(request):
@@ -19,11 +37,29 @@ def get_user_league(request):
 
 @admin.register(MatchResult)
 class MatchResultAdmin(admin.ModelAdmin):
-    list_display = ('match', 'home_team_score', 'away_team_score', 'created_at', 'updated_at')
+    list_display = ('match', 'league', 'week', 'home_team_score', 'away_team_score', 'created_at', 'updated_at')
+    list_select_related = ('match__week__season__league', 'match__home_team', 'match__away_team')
+    ordering = ('-match__week__date', 'match__sort_order')
     search_fields = (
         'match__home_team__name',
         'match__away_team__name',
     )
+
+    def get_list_filter(self, request):
+        # Superusers see every league and can filter by it; scoped staff only
+        # ever see their own league, so they get the season filter alone.
+        if request.user.is_superuser:
+            return ('match__week__season__league', LeagueScopedSeasonFilter)
+        return (LeagueScopedSeasonFilter,)
+
+    @admin.display(description='League', ordering='match__week__season__league__name')
+    def league(self, obj):
+        return obj.match.week.season.league.name
+
+    @admin.display(description='Week', ordering='match__week__date')
+    def week(self, obj):
+        week = obj.match.week
+        return f'Week {week.number} — {week.date}' if week.number is not None else str(week.date)
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
