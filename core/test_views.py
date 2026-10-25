@@ -219,7 +219,7 @@ class OnePocketViewsTests(ViewTestCase):
         # Per-rank strip lists every rank 5..1; Marcus's only match was vs a rank 4.
         for rank in (5, 4, 3, 2, 1):
             self.assertIn(f'Rank {rank}', marcus)
-        self.assertIn('no matches', marcus)
+        self.assertIn('row-cols-5', marcus)
         self.assertIn('Win rate by opponent rank', marcus)
 
     def test_team_schedule_modal_extras(self):
