@@ -220,6 +220,7 @@ def build_week_schedule_with_byes(active_league, week, team_standings=None):
             'away_team_skill_rank': match.away_team.team_rank,
             'location': match.location,
             'is_bye': False,
+            'match_id': match.id,
             'race_label': _schedule_race_label(active_league, match),
             'result_label': _schedule_result_label(active_league, match),
             'winner': _schedule_winner(active_league, match),
@@ -1281,6 +1282,7 @@ def team_schedule_modal(request, team_id):
                     )
 
                     results_rows.append({
+                        'match_id': match.id,
                         'played_by': played_by_name,
                         'date': match.week.date,
                         # When the score went in: a makeup played early or
@@ -1414,6 +1416,78 @@ def one_pocket_full_schedule_modal(request):
         request=request,
     )
     return JsonResponse({'html': html})
+
+def one_pocket_match_result_modal(request, match_id):
+    """Popup with one match's result: who played, at what rank, and the score."""
+    active_league = get_active_league(request)
+
+    if not active_league or active_league.results_type != League.ResultsType.ONE_POCKET:
+        raise Http404('Match result modal is only available for one pocket leagues.')
+
+    match = get_object_or_404(
+        Match.objects.select_related('home_team', 'away_team', 'week'),
+        pk=match_id,
+        week__season__league=active_league,
+    )
+    result = _schedule_result(active_league, match)
+
+    def side(team):
+        info = {'name': team.name, 'rank': team.team_rank, 'score': '-', 'played_by': ''}
+        if result is not None:
+            current = MatchResult.slot_player(team)
+            played_by = result.side_player(team)
+            info['rank'] = result.side_rank(team)
+            info['score'] = result.home_team_score if team.id == match.home_team_id else result.away_team_score
+            if played_by is not None and (current is None or played_by.id != current.id):
+                info['played_by'] = played_by.name
+        return info
+
+    html = render_to_string(
+        'match_result_modal.html',
+        {
+            'match': match,
+            'home': side(match.home_team),
+            'away': side(match.away_team),
+            'complete': result is not None,
+            'winner': _schedule_winner(active_league, match),
+            'race_label': _schedule_race_label(active_league, match),
+            'entered': timezone.localtime(result.created_at).date() if result is not None else None,
+        },
+        request=request,
+    )
+    return JsonResponse({'html': html})
+
+
+def one_pocket_makeup_matches_modal(request):
+    """Popup listing every match that was due before today but has no final score."""
+    active_league = get_active_league(request)
+    active_season = get_active_season(active_league)
+
+    if not active_league or active_league.results_type != League.ResultsType.ONE_POCKET:
+        raise Http404('Makeup matches modal is only available for one pocket leagues.')
+
+    makeups = []
+    if active_season:
+        matches = (
+            Match.objects.filter(week__season=active_season, week__date__lt=date.today())
+            .select_related('home_team', 'away_team', 'week', 'result')
+            .order_by('week__date', 'sort_order', 'id')
+        )
+        makeups = [
+            {
+                'match_id': match.id,
+                'week': match.week,
+                'home_team': match.home_team,
+                'away_team': match.away_team,
+                'race_label': _schedule_race_label(active_league, match),
+            }
+            for match in matches
+            if _schedule_result(active_league, match) is None
+        ]
+
+    html = render_to_string('makeup_matches_modal.html', {'makeups': makeups}, request=request)
+    return JsonResponse({'html': html})
+
 
 def league_supports_archives(league):
     """Darts leagues don't use the archive pages; pool leagues do."""

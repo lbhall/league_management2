@@ -349,6 +349,51 @@ class OnePocketViewsTests(ViewTestCase):
         # The heading is the note itself, not a generic label.
         self.assertRegex(page, r'<strong>\s*Thanksgiving\s*</strong>')
 
+    def test_match_result_modal_shows_who_played_and_the_score(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('match_result_modal', args=[self.match1.id])).json()['html']
+        self.assertIn('Marcus (2)', html)
+        self.assertIn('Louie (4)', html)
+        self.assertIn('>6<', html)
+        self.assertIn('>10<', html)
+        self.assertIn('race 6/10', html)
+        self.assertIn('entered', html)
+        self.assertEqual(html.count('>Won<'), 1)
+        self.assertNotIn("hasn't been finished", html)
+
+    def test_match_result_modal_for_unplayed_match(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('match_result_modal', args=[self.match2.id])).json()['html']
+        self.assertIn("hasn't been finished", html)
+        self.assertNotIn('>Won<', html)
+
+    def test_match_result_modal_is_scoped_to_the_active_league(self):
+        other = make_league(name='Other', results_type=League.ResultsType.ONE_POCKET)
+        with self.settings(FRONTEND_LEAGUE_ID=other.id):
+            response = self.client.get(reverse('match_result_modal', args=[self.match1.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_schedule_badges_open_the_match_result_modal(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('one_pocket_full_schedule_modal')).json()['html']
+            popup = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+        self.assertIn(f'data-match-result-modal data-match-id="{self.match1.id}"', html)
+        self.assertIn(f'data-match-result-modal data-match-id="{self.match1.id}"', popup)
+
+    def test_makeup_matches_modal_lists_past_unplayed_matches(self):
+        # match1 (Jan 5) is played; match2 (Jan 12) is past and unplayed; a future match is not due.
+        from datetime import timedelta
+        future = Week.objects.create(season=self.season, date=date.today() + timedelta(days=7), number=9)
+        Match.objects.create(week=future, home_team=self.team_a, away_team=self.team_c)
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('one_pocket_makeup_matches_modal')).json()['html']
+            home = self.client.get(reverse('home')).content.decode()
+        self.assertIn('Beau', html)
+        self.assertIn('Danni', html)
+        self.assertNotIn('Louie', html)
+        self.assertEqual(html.count('Week '), 1)
+        self.assertIn('data-one-pocket-makeup-matches-modal', home)
+
     def test_full_schedule_marks_played_matches(self):
         # match1: Marcus (home) 6, Louie (away) 10 -> played, Louie won. match2 unplayed.
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):

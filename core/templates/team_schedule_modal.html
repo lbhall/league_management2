@@ -175,7 +175,7 @@
                                             {% if row.h2h %}<small class="text-muted ms-1">all-time {{ row.h2h }}</small>{% endif %}
                                             {% if row.played_by %}<br><small class="text-muted">played by {{ row.played_by }}</small>{% endif %}
                                         </td>
-                                        <td>{{ row.result }}</td>
+                                        <td><a href="#" class="text-decoration-none" title="Show the result" data-match-result-modal data-match-id="{{ row.match_id }}">{{ row.result }}</a></td>
                                         <td>
                                             {% if row.won %}
                                                 <span class="badge bg-success">Won</span>

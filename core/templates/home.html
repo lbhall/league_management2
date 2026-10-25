@@ -115,6 +115,7 @@
                             {% if active_league.results_type == 'one_pocket' %}
                                 <small class="ms-2">
                                     (<a href="#" class="text-decoration-none" data-one-pocket-full-schedule-modal>full schedule</a>)
+                                    (<a href="#" class="text-decoration-none" data-one-pocket-makeup-matches-modal>makeup matches</a>)
                                 </small>
                             {% endif %}
                         </h2>
@@ -168,7 +169,7 @@
                                                     <span class="text-muted"> {{ entry.race_label }}</span>
                                                 {% endif %}
                                                 {% if entry.result_label %}
-                                                    <span class="badge bg-success ms-2" title="Already played">Final {{ entry.result_label }}</span>
+                                                    <a href="#" class="badge bg-success ms-2 text-decoration-none" title="Show the result" data-match-result-modal data-match-id="{{ entry.match_id }}">Final {{ entry.result_label }}</a>
                                                 {% endif %}
                                             </div>
                                             {% if active_league.results_type != 'one_pocket' and entry.location %}

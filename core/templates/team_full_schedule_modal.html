@@ -34,7 +34,7 @@
                                                 {% endif %}
                                             </div>
                                             {% if entry.result_label %}
-                                                <span class="badge bg-success" title="Already played">Final {{ entry.result_label }}</span>
+                                                <a href="#" class="badge bg-success text-decoration-none" title="Show the result" data-match-result-modal data-match-id="{{ entry.match_id }}">Final {{ entry.result_label }}</a>
                                             {% endif %}
                                         </li>
                                     {% endfor %}
