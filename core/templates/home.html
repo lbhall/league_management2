@@ -141,7 +141,7 @@
                                                         data-team-schedule-modal
                                                         data-team-id="{{ entry.home_team.id }}"
                                                     >
-                                                        {{ entry.home_team.name }}
+                                                        {% if entry.winner == 'home' %}<strong>{{ entry.home_team.name }}</strong>{% else %}{{ entry.home_team.name }}{% endif %}
                                                     </a>
                                                     {% if entry.home_team_skill_rank %}({{ entry.home_team_skill_rank }}){% endif %}
                                                 {% else %}
@@ -157,7 +157,7 @@
                                                         data-team-schedule-modal
                                                         data-team-id="{{ entry.away_team.id }}"
                                                     >
-                                                        {{ entry.away_team.name }}
+                                                        {% if entry.winner == 'away' %}<strong>{{ entry.away_team.name }}</strong>{% else %}{{ entry.away_team.name }}{% endif %}
                                                     </a>
                                                     {% if entry.away_team_skill_rank %}({{ entry.away_team_skill_rank }}){% endif %}
                                                 {% else %}
@@ -166,6 +166,9 @@
                                                 {% endif %}
                                                 {% if active_league.results_type == 'one_pocket' and entry.race_label %}
                                                     <span class="text-muted"> {{ entry.race_label }}</span>
+                                                {% endif %}
+                                                {% if entry.result_label %}
+                                                    <span class="badge bg-success ms-2" title="Already played">Final {{ entry.result_label }}</span>
                                                 {% endif %}
                                             </div>
                                             {% if active_league.results_type != 'one_pocket' and entry.location %}

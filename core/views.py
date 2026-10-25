@@ -144,6 +144,42 @@ def get_one_pocket_race_label(team_a, team_b):
     return f'{race_a}/{race_b}'
 
 
+def _schedule_result(active_league, match):
+    """The match's result if it counts as played, else None."""
+    result = getattr(match, 'result', None)
+    if result is None or result.home_team_score is None or result.away_team_score is None:
+        return None
+    if (
+        active_league.results_type == League.ResultsType.ONE_POCKET
+        and max(result.home_team_score, result.away_team_score) < ONE_POCKET_COMPLETE_SCORE
+    ):
+        return None
+    return result
+
+
+def _schedule_result_label(active_league, match):
+    result = _schedule_result(active_league, match)
+    return f'{result.home_team_score}-{result.away_team_score}' if result else ''
+
+
+def _schedule_winner(active_league, match):
+    result = _schedule_result(active_league, match)
+    if result is None or result.home_team_score == result.away_team_score:
+        return ''
+    return 'home' if result.home_team_score > result.away_team_score else 'away'
+
+
+def _schedule_race_label(active_league, match):
+    if active_league.results_type != League.ResultsType.ONE_POCKET:
+        return ''
+    result = getattr(match, 'result', None)
+    if result is not None:
+        # A played match shows the race at the ranks it was actually played.
+        races = get_one_pocket_races(result.side_rank(match.home_team), result.side_rank(match.away_team))
+        return f'{races[0]}/{races[1]}' if races else ''
+    return get_one_pocket_race_label(match.home_team, match.away_team)
+
+
 def build_week_schedule_with_byes(active_league, week, team_standings=None):
     teams = list(
         Team.objects.filter(league=active_league).order_by('name')
@@ -184,22 +220,9 @@ def build_week_schedule_with_byes(active_league, week, team_standings=None):
             'away_team_skill_rank': match.away_team.team_rank,
             'location': match.location,
             'is_bye': False,
-            'race_label': (
-                get_one_pocket_race_label(match.home_team, match.away_team)
-                if active_league.results_type == League.ResultsType.ONE_POCKET
-                else ''
-            ),
-            'result_label': (
-                f'{match.result.home_team_score or 0}-{match.result.away_team_score or 0}'
-                if hasattr(match, 'result')
-                and match.result.home_team_score is not None
-                and match.result.away_team_score is not None
-                and (
-                    active_league.results_type != League.ResultsType.ONE_POCKET
-                    or max(match.result.home_team_score, match.result.away_team_score) >= 3
-                )
-                else ''
-            ),
+            'race_label': _schedule_race_label(active_league, match),
+            'result_label': _schedule_result_label(active_league, match),
+            'winner': _schedule_winner(active_league, match),
         }
         for match in matches
     ]
