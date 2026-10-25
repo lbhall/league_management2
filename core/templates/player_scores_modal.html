@@ -1,13 +1,91 @@
 <div class="modal fade" id="playerScoresModal" tabindex="-1" aria-labelledby="playerScoresModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
+            {% if is_darts %}
             <div class="modal-header">
                 <h5 class="modal-title">Player Scores: {{ player.name }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+            {% else %}
+            <div class="modal-header align-items-start">
+                <div>
+                    <h2 class="modal-title fw-bold mb-0" id="playerScoresModalLabel" style="font-size:2rem;line-height:1.1;">
+                        {{ player.name }}
+                    </h2>
+                    {% if player.team %}
+                        <div class="text-muted">{{ player.team.name }}</div>
+                    {% endif %}
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            {% endif %}
             <div class="modal-body">
-                {% if player.team %}
-                    <p><strong>Team:</strong> {{ player.team.name }}</p>
+                {% if is_darts %}
+                    {% if player.team %}
+                        <p><strong>Team:</strong> {{ player.team.name }}</p>
+                    {% endif %}
+                {% elif season_totals %}
+                    {# --- headline: this season's totals --- #}
+                    <div class="row row-cols-3 row-cols-sm-6 g-2 mb-3 text-center">
+                        <div class="col">
+                            <div class="card h-100">
+                                <div class="card-body p-2" data-win-ring>
+                                    <div class="text-muted" style="font-size:0.75rem;">Win rate</div>
+                                    <svg width="56" height="56" viewBox="0 0 120 120" role="img" aria-label="Win percentage {{ season_totals.pct_label }}">
+                                        <circle cx="60" cy="60" r="45" fill="none" stroke="#e9ecef" stroke-width="12"></circle>
+                                        {% if season_totals.pct %}
+                                        <circle cx="60" cy="60" r="45" fill="none" stroke="#198754" stroke-width="12"
+                                                stroke-linecap="round"
+                                                stroke-dasharray="{{ season_totals.ring_filled }} {{ season_totals.ring_total }}"
+                                                transform="rotate(-90 60 60)"></circle>
+                                        {% endif %}
+                                        <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
+                                              font-size="30" font-weight="700" fill="#198754">{{ season_totals.pct_label }}</text>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card h-100">
+                                <div class="card-body p-2 d-flex flex-column justify-content-center">
+                                    <div class="text-muted" style="font-size:0.75rem;">Wins</div>
+                                    <div class="fw-bold text-success" style="font-size:1.6rem;line-height:1.1;">{{ season_totals.wins }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card h-100">
+                                <div class="card-body p-2 d-flex flex-column justify-content-center">
+                                    <div class="text-muted" style="font-size:0.75rem;">Losses</div>
+                                    <div class="fw-bold text-danger" style="font-size:1.6rem;line-height:1.1;">{{ season_totals.losses }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card h-100">
+                                <div class="card-body p-2 d-flex flex-column justify-content-center">
+                                    <div class="text-muted" style="font-size:0.75rem;">{{ team_size }}/0s</div>
+                                    <div class="fw-bold" style="font-size:1.6rem;line-height:1.1;">{{ season_totals.sweeps }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card h-100">
+                                <div class="card-body p-2 d-flex flex-column justify-content-center">
+                                    <div class="text-muted" style="font-size:0.75rem;">8 on break</div>
+                                    <div class="fw-bold" style="font-size:1.6rem;line-height:1.1;">{{ season_totals.eights }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card h-100">
+                                <div class="card-body p-2 d-flex flex-column justify-content-center">
+                                    <div class="text-muted" style="font-size:0.75rem;">Run outs</div>
+                                    <div class="fw-bold" style="font-size:1.6rem;line-height:1.1;">{{ season_totals.runs }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 {% endif %}
 
                 {% if matchup_rows %}
