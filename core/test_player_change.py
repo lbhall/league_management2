@@ -1,9 +1,10 @@
 """A different player taking over a one-pocket spot mid-season."""
-from datetime import date
+from datetime import date, datetime, time
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import League, Player, Team, Venue
 from core.player_change import PlayerChangeError, record_player_change
@@ -30,11 +31,17 @@ class PlayerChangeBase(TestCase):
         self.abel = Team.objects.create(league=self.league, venue=self.venue, name='Abel', team_rank=5)
         self.week_no = 0
 
-    def play(self, home, away, home_score, away_score, day):
+    def play(self, home, away, home_score, away_score, day, entered=None):
+        """Record a result; the score counts as entered on ``entered`` (defaults to the week date)."""
         self.week_no += 1
         week = Week.objects.create(season=self.season, date=day, number=self.week_no)
         match = Match.objects.create(week=week, home_team=home, away_team=away)
-        return MatchResult.objects.create(match=match, home_team_score=home_score, away_team_score=away_score)
+        result = MatchResult.objects.create(match=match, home_team_score=home_score, away_team_score=away_score)
+        entered_on = entered or day
+        stamp = timezone.make_aware(datetime.combine(entered_on, time(21, 0)))
+        MatchResult.objects.filter(pk=result.pk).update(created_at=stamp)
+        result.refresh_from_db()
+        return result
 
     def player(self, name):
         return Player.objects.get(league=self.league, name=name)
@@ -129,6 +136,15 @@ class RecordPlayerChangeTests(PlayerChangeBase):
         self.league.save()
         with self.assertRaises(PlayerChangeError):
             record_player_change(self.beau, 'Sysco', date(2026, 8, 9))
+
+    def test_goes_by_entered_date_not_scheduled_week(self):
+        # A week-1 makeup that Sysco actually played and entered on Aug 20.
+        late = self.play(self.beau, self.lupe, 3, 2, date(2026, 7, 19), entered=date(2026, 8, 20))
+        old, new, _ = record_player_change(self.beau, 'Sysco', date(2026, 8, 9))
+        late.refresh_from_db()
+        self.assertEqual(late.home_player, new)
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.home_player, old)
 
     def test_archived_seasons_are_left_alone(self):
         old_season = Season.objects.create(league=self.league, name='Early', status=Season.Status.ARCHIVED)

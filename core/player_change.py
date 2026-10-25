@@ -10,6 +10,7 @@ in the schedule and standings under the new name.
 """
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 
 from core.models import League, Player
 from results.models import MatchResult
@@ -32,7 +33,8 @@ def record_player_change(slot, taking_over, took_over_on, left=''):
     name, the slot is renamed and the previous occupant leaves the roster.
     If the slot was already renamed by hand (the common case today), pass the
     departing player's name as ``left`` so their earlier matches can be
-    credited to them. Returns (old_player, new_player, reassigned_count).
+    credited to them. Results whose score was entered before ``took_over_on``
+    stay with the departing player. Returns (old_player, new_player, reassigned_count).
     """
     league = slot.league
     if league.results_type != League.ResultsType.ONE_POCKET:
@@ -86,7 +88,10 @@ def record_player_change(slot, taking_over, took_over_on, left=''):
         .select_related('match__week')
     )
     for result in results:
-        player = old if result.match.week.date < took_over_on else new
+        # Go by when the score was entered, not the scheduled week: a makeup
+        # played late belongs to whoever held the spot when it was played.
+        played_on = timezone.localtime(result.created_at).date() if result.created_at else result.match.week.date
+        player = old if played_on < took_over_on else new
         if player is None:
             continue
         field = 'home_player' if result.match.home_team_id == slot.id else 'away_player'
