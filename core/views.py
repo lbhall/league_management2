@@ -1292,12 +1292,44 @@ def team_schedule_modal(request, team_id):
                 else:
                     upcoming_rows.append(row)
 
+    # Headline numbers are for the player currently in the spot; matches
+    # played by someone who held the spot earlier are listed but not counted.
+    own_rows = [r for r in results_rows if not r['played_by']]
+    wins = sum(1 for r in own_rows if r['won'])
+    losses = len(own_rows) - wins
+    pct = (wins / len(own_rows)) if own_rows else None
+    ring_circumference = 2 * 3.14159 * 45  # r=45 in the SVG below
+    overall = {
+        'wins': wins,
+        'losses': losses,
+        'pct': pct,
+        'pct_label': f'{round(pct * 100)}%' if pct is not None else '-',
+        # stroke-dasharray "filled gap" draws the ring to the percentage
+        'ring_filled': round(ring_circumference * (pct or 0), 1),
+        'ring_total': round(ring_circumference, 1),
+    }
+
+    rank_values = sorted({r['opponent_rank'] for r in own_rows if r['opponent_rank']} | set(range(1, 6)), reverse=True)
+    by_rank = []
+    for rank in rank_values:
+        rows = [r for r in own_rows if r['opponent_rank'] == rank]
+        rank_wins = sum(1 for r in rows if r['won'])
+        by_rank.append({
+            'rank': rank,
+            'wins': rank_wins,
+            'losses': len(rows) - rank_wins,
+            'played': len(rows),
+            'pct_label': f'{round(rank_wins / len(rows) * 100)}%' if rows else '-',
+        })
+
     html = render_to_string(
         'team_schedule_modal.html',
         {
             'team': team,
             'team_league_rank': rank_map.get(team.id) if active_season else None,
             'team_skill_rank': team.team_rank,
+            'overall': overall,
+            'by_rank': by_rank,
             'results_rows': results_rows,
             'former_players': sorted({r['played_by'] for r in results_rows if r['played_by']}),
             'makeup_rows': makeup_rows,

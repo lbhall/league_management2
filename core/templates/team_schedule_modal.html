@@ -1,13 +1,45 @@
 <div class="modal fade" id="teamScheduleModal" tabindex="-1" aria-labelledby="teamScheduleModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="teamScheduleModalLabel">
-                    {{ team.name }}{% if team_skill_rank %} ({{ team_skill_rank }}){% endif %} Schedule
-                </h5>
+            <div class="modal-header align-items-start">
+                <div>
+                    <h2 class="modal-title fw-bold mb-0" id="teamScheduleModalLabel" style="font-size:2rem;line-height:1.1;">
+                        {{ team.name }}
+                    </h2>
+                    <div class="text-muted">
+                        {% if team_skill_rank %}Skill rank {{ team_skill_rank }}{% endif %}
+                        {% if team_league_rank %}{% if team_skill_rank %} &middot; {% endif %}#{{ team_league_rank }} in the standings{% endif %}
+                    </div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div class="d-flex flex-wrap align-items-center gap-4 mb-4">
+                    <div class="text-center" data-win-ring>
+                        <svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Win percentage {{ overall.pct_label }}">
+                            <circle cx="60" cy="60" r="45" fill="none" stroke="#e9ecef" stroke-width="12"></circle>
+                            <circle cx="60" cy="60" r="45" fill="none" stroke="#198754" stroke-width="12"
+                                    stroke-linecap="round"
+                                    stroke-dasharray="{{ overall.ring_filled }} {{ overall.ring_total }}"
+                                    transform="rotate(-90 60 60)"></circle>
+                            <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
+                                  font-size="26" font-weight="700" fill="#198754">{{ overall.pct_label }}</text>
+                        </svg>
+                        <div class="small text-muted">{{ overall.wins }}-{{ overall.losses }} matches</div>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="small text-muted mb-1">Win percentage by opponent rank</div>
+                        <div class="d-flex flex-wrap gap-2" data-rank-breakdown>
+                            {% for row in by_rank %}
+                                <div class="border rounded px-3 py-2 text-center" style="min-width:72px;">
+                                    <div class="small text-muted">Rank {{ row.rank }}</div>
+                                    <div class="fw-bold{% if not row.played %} text-muted{% endif %}">{{ row.pct_label }}</div>
+                                    <div class="small text-muted">{% if row.played %}{{ row.wins }}-{{ row.losses }}{% else %}no matches{% endif %}</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
                 {% if former_players %}
                     <p class="text-muted small mb-3">
                         Earlier this season this spot was played by {{ former_players|join:", " }}.
