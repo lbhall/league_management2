@@ -210,9 +210,9 @@ class OnePocketViewsTests(ViewTestCase):
         # Big name in the header, ring with the match win percentage.
         self.assertIn('font-size:2rem', marcus)
         self.assertIn('>0%</text>', marcus)
-        self.assertIn('0-1 matches', marcus)
+        self.assertIn('>0-1</div>', marcus)
         self.assertIn('>100%</text>', louie)
-        self.assertIn('1-0 matches', louie)
+        self.assertIn('>1-0</div>', louie)
         # Ring drawn to the percentage: no arc at all for 0% (no stray dot), full circle for 100%.
         self.assertNotIn('stroke-dasharray', marcus)
         self.assertIn('stroke-dasharray="282.7 282.7"', louie)
@@ -241,7 +241,7 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('Getting weight', html)
         self.assertIn('data-weight-split', html)
         # Average margin of the 6-10 loss.
-        self.assertIn('avg margin -4.0', html)
+        self.assertIn('margin -4.0', html)
         # Next match card with the race for rank 2 vs rank 4 and the all-time record
         # (this season 0-1 plus the archived 6-10 loss).
         self.assertIn('data-next-match', html)
@@ -308,7 +308,7 @@ class OnePocketViewsTests(ViewTestCase):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
         self.assertIn('>-</text>', html)
-        self.assertIn('0-0 matches', html)
+        self.assertIn('>0-0</div>', html)
         self.assertIn('played by Old Marcus', html)
 
     def test_team_schedule_modal_shows_scheduled_and_entered_dates(self):
