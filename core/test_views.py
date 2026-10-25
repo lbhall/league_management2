@@ -201,6 +201,38 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('badge bg-success">Won', louie)
         self.assertIn('10-6', louie)
 
+    def test_team_schedule_modal_headline_and_rank_breakdown(self):
+        # match1: Marcus (rank 2) lost to Louie (rank 4) 6-10.
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            marcus = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+            louie = self.client.get(reverse('team_schedule_modal', args=[self.team_b.id])).json()['html']
+
+        # Big name in the header, ring with the match win percentage.
+        self.assertIn('font-size:2rem', marcus)
+        self.assertIn('>0%</text>', marcus)
+        self.assertIn('0-1 matches', marcus)
+        self.assertIn('>100%</text>', louie)
+        self.assertIn('1-0 matches', louie)
+        # Ring drawn to the percentage: nothing filled for 0%, full circle for 100%.
+        self.assertIn('stroke-dasharray="0.0 282.7"', marcus)
+        self.assertIn('stroke-dasharray="282.7 282.7"', louie)
+        # Per-rank strip lists every rank 5..1; Marcus's only match was vs a rank 4.
+        for rank in (5, 4, 3, 2, 1):
+            self.assertIn(f'Rank {rank}', marcus)
+        self.assertIn('no matches', marcus)
+        self.assertIn('Win percentage by opponent rank', marcus)
+
+    def test_team_schedule_modal_headline_ignores_former_players(self):
+        from results.models import MatchResult as MR
+        # Credit match1 to a former holder of Marcus's spot: it must not count.
+        former = Player.objects.create(league=self.league, name='Old Marcus')
+        MR.objects.filter(match=self.match1).update(home_player=former)
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+        self.assertIn('>-</text>', html)
+        self.assertIn('0-0 matches', html)
+        self.assertIn('played by Old Marcus', html)
+
     def test_team_schedule_modal_shows_scheduled_and_entered_dates(self):
         from django.utils import timezone
         from django.utils.formats import date_format
