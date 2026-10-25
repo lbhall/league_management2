@@ -15,8 +15,10 @@
 {% block content %}
 <p style="max-width:720px;">
     Use this when a player can't finish the season and someone else takes over their spot.
-    Matches before the takeover date stay credited to the player who left; matches from that
-    date on go to the new player. The spot keeps its place in the schedule and standings.
+    Scores entered before the takeover date stay credited to the player who left; scores entered
+    from that date on go to the new player. (The entered date is used rather than the scheduled
+    week, so a makeup played late is credited to whoever actually played it.) The spot keeps its
+    place in the schedule and standings.
 </p>
 <p style="max-width:720px;color:#666;">
     Currently in this spot: <strong>{{ current_player|default:"nobody" }}</strong>.
@@ -39,7 +41,7 @@
         <div class="form-row">
             <label for="id_took_over_on">Took over on:</label>
             <input type="date" id="id_took_over_on" name="took_over_on" value="{{ form_data.took_over_on }}" required>
-            <div class="help">Matches on or after this date count for the new player.</div>
+            <div class="help">Scores entered on or after this date count for the new player.</div>
         </div>
     </fieldset>
     <div class="submit-row">
