@@ -1322,6 +1322,10 @@ def team_schedule_modal(request, team_id):
             'pct_label': f'{round(rank_wins / len(rows) * 100)}%' if rows else '-',
         })
 
+    from .player_page import build_player_extras
+
+    extras = build_player_extras(current_player, team, own_rows, results_rows, upcoming_rows)
+
     html = render_to_string(
         'team_schedule_modal.html',
         {
@@ -1330,6 +1334,7 @@ def team_schedule_modal(request, team_id):
             'team_skill_rank': team.team_rank,
             'overall': overall,
             'by_rank': by_rank,
+            **extras,
             'results_rows': results_rows,
             'former_players': sorted({r['played_by'] for r in results_rows if r['played_by']}),
             'makeup_rows': makeup_rows,
