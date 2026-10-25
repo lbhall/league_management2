@@ -152,7 +152,12 @@ class RankReviewViewTests(RankReviewBase):
         self.assertEqual(response.status_code, 200)
         red = next(r for r in response.context['rows'] if r['name'] == 'Red')
         self.assertEqual(red['signal'], 'up')
+        self.assertEqual(red['game_pct_label'], '86%')
+        self.assertContains(response, '<td>86%</td>', html=True)
         self.assertContains(response, 'Red')
+        # The admin base prints the title once; the template must not repeat it.
+        self.assertEqual(response.content.decode().count('Rank review — Bogies'), 1)
+        self.assertNotContains(response, '0.857')
         self.assertContains(response, 'Mid 2026 (Active)')
         self.assertContains(response, 'Giving weight')
 
