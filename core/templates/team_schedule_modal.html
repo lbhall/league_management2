@@ -14,91 +14,135 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="d-flex flex-wrap align-items-center gap-4 mb-4">
-                    <div class="text-center" data-win-ring>
-                        <svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Win percentage {{ overall.pct_label }}">
-                            <circle cx="60" cy="60" r="45" fill="none" stroke="#e9ecef" stroke-width="12"></circle>
-                            <circle cx="60" cy="60" r="45" fill="none" stroke="#198754" stroke-width="12"
-                                    stroke-linecap="round"
-                                    stroke-dasharray="{{ overall.ring_filled }} {{ overall.ring_total }}"
-                                    transform="rotate(-90 60 60)"></circle>
-                            <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
-                                  font-size="26" font-weight="700" fill="#198754">{{ overall.pct_label }}</text>
-                        </svg>
-                        <div class="small text-muted">{{ overall.wins }}-{{ overall.losses }} matches</div>
-                        {% if avg_margin %}
-                            <div class="small text-muted" data-avg-margin>avg margin {{ avg_margin.label }}</div>
-                        {% endif %}
-                        {% if rank_outlook %}
-                            <div class="mt-2" data-rank-outlook="{{ rank_outlook.state }}" title="{{ rank_outlook.reason }}">
-                                <div class="small text-muted">Rank outlook</div>
-                                {% if rank_outlook.state == 'up' %}
-                                    <svg width="36" height="36" viewBox="0 0 36 36" role="img" aria-label="Trending up">
-                                        <polyline points="8,24 18,12 28,24" fill="none" stroke="#198754" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                                    </svg>
-                                    <div class="small fw-semibold" style="color:#198754;">Trending up</div>
-                                {% elif rank_outlook.state == 'down' %}
-                                    <svg width="36" height="36" viewBox="0 0 36 36" role="img" aria-label="Trending down">
-                                        <polyline points="8,12 18,24 28,12" fill="none" stroke="#dc3545" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                                    </svg>
-                                    <div class="small fw-semibold" style="color:#dc3545;">Trending down</div>
-                                {% else %}
-                                    <svg width="36" height="36" viewBox="0 0 36 36" role="img" aria-label="Holding">
-                                        <line x1="8" y1="18" x2="28" y2="18" stroke="#adb5bd" stroke-width="5" stroke-linecap="round"></line>
-                                    </svg>
-                                    <div class="small fw-semibold text-muted">Holding</div>
+                {# --- headline: three equal cards --- #}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="card h-100 text-center">
+                            <div class="card-body py-3" data-win-ring>
+                                <div class="small text-muted mb-1">Match win rate</div>
+                                <svg width="104" height="104" viewBox="0 0 120 120" role="img" aria-label="Win percentage {{ overall.pct_label }}">
+                                    <circle cx="60" cy="60" r="45" fill="none" stroke="#e9ecef" stroke-width="12"></circle>
+                                    {% if overall.pct %}
+                                    <circle cx="60" cy="60" r="45" fill="none" stroke="#198754" stroke-width="12"
+                                            stroke-linecap="round"
+                                            stroke-dasharray="{{ overall.ring_filled }} {{ overall.ring_total }}"
+                                            transform="rotate(-90 60 60)"></circle>
+                                    {% endif %}
+                                    <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
+                                          font-size="26" font-weight="700" fill="#198754">{{ overall.pct_label }}</text>
+                                </svg>
+                                <div class="fw-semibold">{{ overall.wins }}-{{ overall.losses }} matches</div>
+                                {% if avg_margin %}
+                                    <div class="small text-muted" data-avg-margin>avg margin {{ avg_margin.label }} games</div>
                                 {% endif %}
-                                <div class="small text-muted">{{ rank_outlook.reason }}</div>
                             </div>
-                        {% endif %}
+                        </div>
                     </div>
-                    <div class="flex-grow-1">
-                        <div class="small text-muted mb-1">Win percentage by opponent rank</div>
+
+                    <div class="col-md-4">
+                        <div class="card h-100 text-center">
+                            <div class="card-body py-3 d-flex flex-column justify-content-center"
+                                 {% if rank_outlook %}data-rank-outlook="{{ rank_outlook.state }}"{% endif %}>
+                                <div class="small text-muted mb-1">Rank outlook</div>
+                                {% if rank_outlook %}
+                                    {% if rank_outlook.state == 'up' %}
+                                        <svg width="56" height="56" viewBox="0 0 36 36" role="img" aria-label="Trending up" class="mx-auto">
+                                            <polyline points="8,24 18,12 28,24" fill="none" stroke="#198754" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                                        </svg>
+                                        <div class="fw-semibold" style="color:#198754;">Trending up</div>
+                                    {% elif rank_outlook.state == 'down' %}
+                                        <svg width="56" height="56" viewBox="0 0 36 36" role="img" aria-label="Trending down" class="mx-auto">
+                                            <polyline points="8,12 18,24 28,12" fill="none" stroke="#dc3545" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                                        </svg>
+                                        <div class="fw-semibold" style="color:#dc3545;">Trending down</div>
+                                    {% else %}
+                                        <svg width="56" height="56" viewBox="0 0 36 36" role="img" aria-label="Holding" class="mx-auto">
+                                            <line x1="8" y1="18" x2="28" y2="18" stroke="#adb5bd" stroke-width="5" stroke-linecap="round"></line>
+                                        </svg>
+                                        <div class="fw-semibold text-muted">Holding</div>
+                                    {% endif %}
+                                    <div class="small text-muted mt-1">{{ rank_outlook.reason }}</div>
+                                {% else %}
+                                    <div class="text-muted">No active season</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="card h-100 text-center">
+                            <div class="card-body py-3 d-flex flex-column justify-content-center" {% if next_match %}data-next-match{% endif %}>
+                                <div class="small text-muted mb-1">Next match</div>
+                                {% if next_match %}
+                                    <div class="fw-semibold">{{ next_match.date|date:"D M j" }}</div>
+                                    <div class="fs-5">vs {{ next_match.opponent }}{% if next_match.opponent_rank %} ({{ next_match.opponent_rank }}){% endif %}</div>
+                                    <div class="small text-muted">
+                                        {% if next_match.race_label %}race {{ next_match.race_label }}{% endif %}
+                                        {% if next_match.h2h %}{% if next_match.race_label %}&middot;{% endif %} all-time {{ next_match.h2h }}{% endif %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-muted">Nothing scheduled</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# --- by opponent rank --- #}
+                <div class="card mb-3">
+                    <div class="card-body py-3">
+                        <div class="small text-muted mb-2">Win rate by opponent rank</div>
                         <div class="d-flex flex-wrap gap-2" data-rank-breakdown>
                             {% for row in by_rank %}
-                                <div class="border rounded px-3 py-2 text-center" style="min-width:72px;">
+                                <div class="border rounded px-3 py-2 text-center flex-fill">
                                     <div class="small text-muted">Rank {{ row.rank }}</div>
                                     <div class="fw-bold{% if not row.played %} text-muted{% endif %}">{{ row.pct_label }}</div>
                                     <div class="small text-muted">{% if row.played %}{{ row.wins }}-{{ row.losses }}{% else %}no matches{% endif %}</div>
                                 </div>
                             {% endfor %}
                         </div>
-                        <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
-                            <div data-form-strip>
-                                <div class="small text-muted mb-1">Last {{ form.dots|length }} match{{ form.dots|length|pluralize:"es" }}</div>
+                    </div>
+                </div>
+
+                {# --- form and weight --- #}
+                <div class="row g-3 mb-4">
+                    <div class="col-md-5">
+                        <div class="card h-100">
+                            <div class="card-body py-3" data-form-strip>
+                                <div class="small text-muted mb-2">Last {{ form.dots|length }} match{{ form.dots|length|pluralize:"es" }}</div>
                                 {% if form.dots %}
-                                    <div class="d-flex align-items-center gap-1">
-                                        {% for dot in form.dots %}
-                                            <span class="d-inline-block rounded-circle {% if dot.won %}bg-success{% else %}bg-danger{% endif %}"
-                                                  style="width:16px;height:16px;" title="{{ dot.title }}"></span>
-                                        {% endfor %}
-                                        {% if form.streak %}<span class="small ms-2 fw-semibold">{{ form.streak }}</span>{% endif %}
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <div class="d-flex gap-1">
+                                            {% for dot in form.dots %}
+                                                <span class="d-inline-block rounded-circle {% if dot.won %}bg-success{% else %}bg-danger{% endif %}"
+                                                      style="width:18px;height:18px;" title="{{ dot.title }}"></span>
+                                            {% endfor %}
+                                        </div>
+                                        {% if form.streak %}<span class="fw-semibold">{{ form.streak }}</span>{% endif %}
                                     </div>
                                 {% else %}
-                                    <span class="small text-muted">no matches yet</span>
+                                    <span class="text-muted">no matches yet</span>
                                 {% endif %}
                             </div>
-                            <div class="d-flex flex-wrap gap-2" data-weight-split>
-                                {% for split in weight_split %}
-                                    <div class="border rounded px-3 py-2 text-center" style="min-width:96px;">
-                                        <div class="small text-muted">{{ split.label }}</div>
-                                        <div class="fw-bold{% if not split.played %} text-muted{% endif %}">{{ split.pct_label }}</div>
-                                        <div class="small text-muted">{% if split.played %}{{ split.wins }}-{{ split.losses }}{% else %}no matches{% endif %}</div>
-                                    </div>
-                                {% endfor %}
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="card h-100">
+                            <div class="card-body py-3">
+                                <div class="small text-muted mb-2">Record by weight</div>
+                                <div class="d-flex gap-2" data-weight-split>
+                                    {% for split in weight_split %}
+                                        <div class="border rounded px-2 py-2 text-center flex-fill">
+                                            <div class="small text-muted">{{ split.label }}</div>
+                                            <div class="fw-bold{% if not split.played %} text-muted{% endif %}">{{ split.pct_label }}</div>
+                                            <div class="small text-muted">{% if split.played %}{{ split.wins }}-{{ split.losses }}{% else %}none{% endif %}</div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                {% if next_match %}
-                    <div class="alert alert-primary py-2 px-3 mb-4" data-next-match>
-                        <strong>Next match:</strong>
-                        {{ next_match.date }} vs {{ next_match.opponent }}{% if next_match.opponent_rank %} ({{ next_match.opponent_rank }}){% endif %}
-                        {% if next_match.race_label %}&middot; race {{ next_match.race_label }}{% endif %}
-                        {% if next_match.h2h %}&middot; all-time {{ next_match.h2h }}{% endif %}
-                    </div>
-                {% endif %}
                 {% if former_players %}
                     <p class="text-muted small mb-3">
                         Earlier this season this spot was played by {{ former_players|join:", " }}.

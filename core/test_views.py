@@ -213,14 +213,14 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('0-1 matches', marcus)
         self.assertIn('>100%</text>', louie)
         self.assertIn('1-0 matches', louie)
-        # Ring drawn to the percentage: nothing filled for 0%, full circle for 100%.
-        self.assertIn('stroke-dasharray="0.0 282.7"', marcus)
+        # Ring drawn to the percentage: no arc at all for 0% (no stray dot), full circle for 100%.
+        self.assertNotIn('stroke-dasharray', marcus)
         self.assertIn('stroke-dasharray="282.7 282.7"', louie)
         # Per-rank strip lists every rank 5..1; Marcus's only match was vs a rank 4.
         for rank in (5, 4, 3, 2, 1):
             self.assertIn(f'Rank {rank}', marcus)
         self.assertIn('no matches', marcus)
-        self.assertIn('Win percentage by opponent rank', marcus)
+        self.assertIn('Win rate by opponent rank', marcus)
 
     def test_team_schedule_modal_extras(self):
         from datetime import timedelta
@@ -244,7 +244,7 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('avg margin -4.0', html)
         # Next match card with the race for rank 2 vs rank 4 and the all-time record
         # (this season 0-1 plus the archived 6-10 loss).
-        self.assertIn('Next match:', html)
+        self.assertIn('data-next-match', html)
         self.assertIn('race 6/10', html)
         self.assertIn('all-time 0-2', html)
         # Past seasons from the archive: finish #1, rank 2, 5-2.
