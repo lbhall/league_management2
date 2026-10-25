@@ -71,3 +71,86 @@ class SwapWeeksCommandTests(TestCase):
     def test_errors_for_missing_week(self):
         with self.assertRaises(CommandError):
             call_command('swap_weeks', 1, 9, league=self.league.name)
+
+
+class RestoreSeasonFromBackupCommandTests(TestCase):
+    """Builds a tiny old-schema SQLite backup and restores a season out of it."""
+
+    def setUp(self):
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+
+        self.league = make_league(name='Restore League', results_type='8_ball', team_size=3)
+        self.venue = make_venue(self.league, max_home_teams=4)
+        self.team_a, self.team_b = make_teams(self.league, self.venue, 2)
+        from core.models import Player
+        self.alice = Player.objects.create(league=self.league, name='Alice', team=self.team_a, male=False)
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = str(Path(self.tmp.name) / 'old.sqlite3')
+        conn = sqlite3.connect(self.db_path)
+        conn.executescript("""
+            CREATE TABLE scheduling_season (id INTEGER PRIMARY KEY, name TEXT, status TEXT, league_id INTEGER);
+            CREATE TABLE scheduling_week (id INTEGER PRIMARY KEY, date TEXT, number INTEGER, notes TEXT, season_id INTEGER);
+            CREATE TABLE scheduling_match (id INTEGER PRIMARY KEY, location TEXT, away_team_id INTEGER, home_team_id INTEGER, week_id INTEGER, sort_order INTEGER);
+            CREATE TABLE results_matchresult (id INTEGER PRIMARY KEY, created_at TEXT, updated_at TEXT, match_id INTEGER, away_team_score INTEGER, home_team_score INTEGER);
+            CREATE TABLE results_playermatchresult (id INTEGER PRIMARY KEY, wins INTEGER, losses INTEGER, runouts INTEGER, eight_on_the_breaks INTEGER, won_all_games INTEGER, match_result_id INTEGER, player_id INTEGER, represented_team_id INTEGER);
+            CREATE TABLE core_team (id INTEGER PRIMARY KEY, name TEXT, captain_id INTEGER, league_id INTEGER, venue_id INTEGER, seed INTEGER, team_rank INTEGER);
+            CREATE TABLE core_player (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, male INTEGER, league_id INTEGER, team_id INTEGER);
+            INSERT INTO scheduling_season VALUES (12, 'Early 2026', 'active', 7);
+            INSERT INTO scheduling_week VALUES (1, '2026-04-13', 1, '', 12), (2, '2026-04-20', NULL, 'Holiday', 12);
+            INSERT INTO core_team VALUES (101, 'Team 1', NULL, 7, 1, NULL, NULL), (102, 'Team 2', NULL, 7, 1, NULL, NULL);
+            INSERT INTO core_player VALUES (201, 'Alice', '', 0, 7, 101), (202, 'Bob', '555', 1, 7, 102);
+            INSERT INTO scheduling_match VALUES (301, 'Venue', 102, 101, 1, 0);
+            INSERT INTO results_matchresult VALUES (401, '2026-04-14 03:10:00', '2026-04-14 03:10:00', 301, 1, 2);
+            INSERT INTO results_playermatchresult VALUES (501, 2, 1, 1, 0, 0, 401, 201, 101), (502, 1, 2, 0, 1, 0, 401, 202, 102);
+        """)
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_dry_run_creates_nothing(self):
+        call_command('restore_season_from_backup', db=self.db_path, league=self.league.name, season_id=12)
+        self.assertFalse(Season.objects.filter(league=self.league).exists())
+
+    def test_apply_restores_weeks_matches_results_and_players(self):
+        from core.models import Player
+        from results.models import MatchResult, PlayerMatchResult
+        call_command('restore_season_from_backup', db=self.db_path, league=self.league.name, season_id=12,
+                     status='active', apply=True)
+        season = Season.objects.get(league=self.league, name='Early 2026')
+        self.assertEqual(season.status, Season.Status.ACTIVE)
+        self.assertEqual(season.weeks.count(), 2)
+        self.assertEqual(season.weeks.get(number__isnull=True).notes, 'Holiday')
+        match = Match.objects.get(week__season=season)
+        self.assertEqual((match.home_team, match.away_team), (self.team_a, self.team_b))
+        result = MatchResult.objects.get(match=match)
+        self.assertEqual((result.home_team_score, result.away_team_score), (2, 1))
+        self.assertEqual(result.created_at.year, 2026)
+        bob = Player.objects.get(league=self.league, name='Bob')
+        self.assertEqual(bob.team, self.team_b)
+        self.assertEqual(Player.objects.filter(league=self.league, name='Alice').count(), 1)
+        scores = {s.player.name: s for s in PlayerMatchResult.objects.filter(match_result=result)}
+        self.assertEqual((scores['Alice'].wins, scores['Alice'].runouts), (2, 1))
+        self.assertEqual((scores['Bob'].wins, scores['Bob'].eight_on_the_breaks), (1, 1))
+
+    def test_refuses_duplicate_name_or_second_active_season(self):
+        Season.objects.create(league=self.league, name='Early 2026', status=Season.Status.WORKING)
+        with self.assertRaises(CommandError):
+            call_command('restore_season_from_backup', db=self.db_path, league=self.league.name, season_id=12)
+        # A different name is fine while no season is active...
+        call_command('restore_season_from_backup', db=self.db_path, league=self.league.name, season_id=12,
+                     name='Copy', status='active')
+        Season.objects.create(league=self.league, name='Current', status=Season.Status.ACTIVE)
+        with self.assertRaises(CommandError):
+            call_command('restore_season_from_backup', db=self.db_path, league=self.league.name, season_id=12,
+                         name='Copy', status='active')
+
+    def test_errors_for_missing_backup_or_season(self):
+        with self.assertRaises(CommandError):
+            call_command('restore_season_from_backup', db=self.db_path, league=self.league.name, season_id=99)
+        with self.assertRaises(CommandError):
+            call_command('restore_season_from_backup', db=self.db_path + '.nope', league=self.league.name, season_id=12)
