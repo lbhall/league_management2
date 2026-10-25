@@ -15,6 +15,37 @@ class MatchResult(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     home_team_score = models.PositiveIntegerField(null=True, blank=True)
     away_team_score = models.PositiveIntegerField(null=True, blank=True)
+    # One-pocket: who actually played each side. Filled from the spot's
+    # current player when a result is first saved, and reassigned by the
+    # "Record a player change" admin action when someone takes over a spot.
+    home_player = models.ForeignKey(
+        Player, null=True, blank=True, on_delete=models.SET_NULL, related_name='home_results',
+    )
+    away_player = models.ForeignKey(
+        Player, null=True, blank=True, on_delete=models.SET_NULL, related_name='away_results',
+    )
+
+    @staticmethod
+    def slot_player(team):
+        """The player currently holding a one-pocket spot."""
+        return Player.objects.filter(team=team).order_by('id').first()
+
+    def side_player(self, team):
+        """Who played for ``team`` in this match, falling back to the spot's
+        current player for results recorded before attribution existed."""
+        if team.id == self.match.home_team_id:
+            return self.home_player or self.slot_player(team)
+        if team.id == self.match.away_team_id:
+            return self.away_player or self.slot_player(team)
+        return None
+
+    def save(self, *args, **kwargs):
+        if self.match_id and self.match.week.season.league.results_type == 'one_pocket':
+            if self.home_player_id is None:
+                self.home_player = self.slot_player(self.match.home_team)
+            if self.away_player_id is None:
+                self.away_player = self.slot_player(self.match.away_team)
+        super().save(*args, **kwargs)
 
     def clean(self):
         super().clean()

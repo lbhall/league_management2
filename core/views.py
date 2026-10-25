@@ -12,7 +12,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 from content.models import NewsItem, Rule
-from results.models import PlayerMatchResult
+from results.models import MatchResult, PlayerMatchResult
 from scheduling.models import (
     ArchivedPlayerMatchResult,
     ArchivedSeason,
@@ -1222,6 +1222,8 @@ def team_schedule_modal(request, team_id):
     makeup_rows = []
     upcoming_rows = []
     today = date.today()
+    current_player = MatchResult.slot_player(team)
+    current_player_id = current_player.id if current_player else None
 
     if active_season:
         team_standings = build_team_standings(active_league, active_season)
@@ -1250,8 +1252,13 @@ def team_schedule_modal(request, team_id):
                 if is_complete:
                     team_score = home_score if is_home else away_score
                     opponent_score = away_score if is_home else home_score
+                    played_by = match.result.side_player(team)
+                    played_by_name = (
+                        played_by.name if played_by is not None and played_by.id != current_player_id else ''
+                    )
 
                     results_rows.append({
+                        'played_by': played_by_name,
                         'date': match.week.date,
                         # When the score went in: a makeup played early or
                         # late shows a different date here than the week.
@@ -1292,6 +1299,7 @@ def team_schedule_modal(request, team_id):
             'team_league_rank': rank_map.get(team.id) if active_season else None,
             'team_skill_rank': team.team_rank,
             'results_rows': results_rows,
+            'former_players': sorted({r['played_by'] for r in results_rows if r['played_by']}),
             'makeup_rows': makeup_rows,
             'upcoming_rows': upcoming_rows,
         },

@@ -815,9 +815,10 @@ def _archive_one_pocket_matches(archived_season, weeks):
         if result is None:
             continue
 
-        # One-pocket is singles: the team's single player carries the result.
-        home_player = Player.objects.filter(team=match.home_team).first()
-        away_player = Player.objects.filter(team=match.away_team).first()
+        # One-pocket is singles: credit whoever actually played the match
+        # (a spot can change hands mid-season).
+        home_player = result.side_player(match.home_team)
+        away_player = result.side_player(match.away_team)
 
         if home_player:
             ArchivedPlayerMatchResult.objects.create(
@@ -981,8 +982,8 @@ def build_player_archive_stats(season):
                 continue
             
             res = match.result
-            # Home player
-            hp = Player.objects.filter(team=match.home_team).first()
+            # Home player (whoever actually played; a spot can change hands)
+            hp = res.side_player(match.home_team)
             if hp:
                 if hp.id not in player_stats:
                     player_stats[hp.id] = {'games_won': 0, 'games_lost': 0, 'run_outs': 0, 'eight_on_the_breaks': 0, 'sweeps': 0}
@@ -990,7 +991,7 @@ def build_player_archive_stats(season):
                 player_stats[hp.id]['games_lost'] += res.away_team_score or 0
             
             # Away player
-            ap = Player.objects.filter(team=match.away_team).first()
+            ap = res.side_player(match.away_team)
             if ap:
                 if ap.id not in player_stats:
                     player_stats[ap.id] = {'games_won': 0, 'games_lost': 0, 'run_outs': 0, 'eight_on_the_breaks': 0, 'sweeps': 0}

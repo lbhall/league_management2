@@ -7,6 +7,7 @@ same page gains spot-adjusted margins and the promotion/relegation stress
 tests; the flags below are deliberately simple and their thresholds are
 shown on the page so they can be tuned by eye.
 """
+from results.models import MatchResult
 from scheduling.models import Match, Season
 
 # Flag rules. A player needs a reasonable sample before anything is said.
@@ -56,12 +57,12 @@ def season_choices(league):
 def build_rank_review(league, season):
     from core.views import ONE_POCKET_COMPLETE_SCORE
 
-    players = list(league.teams.exclude(name__iexact='BYE').order_by('name'))
-    rows = {
-        p.id: {
-            'team_id': p.id,
-            'name': p.name,
-            'rank': p.team_rank,
+    def blank_row(player, rank, active):
+        return {
+            'player_id': player.id,
+            'name': player.name,
+            'rank': rank,
+            'active': active,
             'matches_won': 0,
             'matches_lost': 0,
             'games_won': 0,
@@ -69,8 +70,15 @@ def build_rank_review(league, season):
             'margin_total': 0,
             'splits': {'giving': _blank_split(), 'even': _blank_split(), 'getting': _blank_split()},
         }
-        for p in players
-    }
+
+    # One row per person: everyone currently holding a spot, plus anyone who
+    # left mid-season but played matches (credited through the result's
+    # home_player/away_player).
+    rows = {}
+    for slot in league.teams.exclude(name__iexact='BYE').order_by('name'):
+        player = MatchResult.slot_player(slot)
+        if player is not None:
+            rows[player.id] = blank_row(player, slot.team_rank, True)
 
     matches = (
         Match.objects.filter(week__season=season)
@@ -90,9 +98,15 @@ def build_rank_review(league, season):
             (match.home_team, match.away_team, home_score, away_score),
             (match.away_team, match.home_team, away_score, home_score),
         ):
-            row = rows.get(me.id)
-            if row is None:
+            if me.name.strip().upper() == 'BYE':
                 continue
+            player = result.side_player(me)
+            if player is None:
+                continue
+            row = rows.get(player.id)
+            if row is None:
+                # Played for this spot earlier in the season, then left.
+                row = rows[player.id] = blank_row(player, me.team_rank, player.team_id is not None)
             split = row['splits'][weight_category(me.team_rank, opp.team_rank)]
             won = mine > theirs
             for target in (row, split):
@@ -118,7 +132,12 @@ def build_rank_review(league, season):
         row['signal'], row['reason'] = _signal(row)
         out.append(row)
 
-    out.sort(key=lambda r: (-(r['rank'] or 0), -(r['game_pct'] if r['game_pct'] is not None else -1), r['name']))
+    out.sort(key=lambda r: (
+        -(r['rank'] or 0),
+        0 if r['active'] else 1,
+        -(r['game_pct'] if r['game_pct'] is not None else -1),
+        r['name'],
+    ))
     return out
 
 

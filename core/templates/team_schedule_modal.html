@@ -8,6 +8,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                {% if former_players %}
+                    <p class="text-muted small mb-3">
+                        Earlier this season this spot was played by {{ former_players|join:", " }}.
+                    </p>
+                {% endif %}
                 <h6 class="mb-3">Results</h6>
                 {% if results_rows %}
                     <div class="table-responsive mb-4">
@@ -26,7 +31,10 @@
                                     <tr>
                                         <td>{{ row.date }}</td>
                                         <td>{% if row.entered %}{{ row.entered }}{% else %}-{% endif %}</td>
-                                        <td>{{ row.opponent }}{% if row.opponent_rank %} ({{ row.opponent_rank }}){% endif %}</td>
+                                        <td>
+                                            {{ row.opponent }}{% if row.opponent_rank %} ({{ row.opponent_rank }}){% endif %}
+                                            {% if row.played_by %}<br><small class="text-muted">played by {{ row.played_by }}</small>{% endif %}
+                                        </td>
                                         <td>{{ row.result }}</td>
                                         <td>
                                             {% if row.won %}
