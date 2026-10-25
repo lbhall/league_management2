@@ -1264,7 +1264,9 @@ def team_schedule_modal(request, team_id):
                         # late shows a different date here than the week.
                         'entered': timezone.localtime(match.result.created_at).date(),
                         'opponent': opponent.name,
-                        'opponent_rank': opponent.team_rank,
+                        # Ranks as they stood when the match was played.
+                        'opponent_rank': match.result.side_rank(opponent),
+                        'my_rank': match.result.side_rank(team),
                         'result': f'{team_score}-{opponent_score}',
                         'won': team_score > opponent_score,
                     })

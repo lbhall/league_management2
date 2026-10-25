@@ -782,8 +782,8 @@ def _archive_one_pocket_matches(archived_season, weeks):
     from core.views import ONE_POCKET_COMPLETE_SCORE, get_one_pocket_races
 
     for week, match, result in _iter_week_matches(weeks):
-        home_rank = match.home_team.team_rank
-        away_rank = match.away_team.team_rank
+        home_rank = result.side_rank(match.home_team) if result else match.home_team.team_rank
+        away_rank = result.side_rank(match.away_team) if result else match.away_team.team_rank
         races = get_one_pocket_races(home_rank, away_rank)
         home_race, away_race = races if races else (None, None)
 

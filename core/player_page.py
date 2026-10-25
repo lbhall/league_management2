@@ -41,9 +41,10 @@ def weight_split(own_rows, my_rank):
     """Record when giving weight (opponent ranked lower), getting it, and even."""
     def category(row):
         opp = row['opponent_rank']
-        if my_rank is None or opp is None or opp == my_rank:
+        mine = row.get('my_rank', my_rank)
+        if mine is None or opp is None or opp == mine:
             return 'even'
-        return 'giving' if opp < my_rank else 'getting'
+        return 'giving' if opp < mine else 'getting'
 
     buckets = {'giving': [], 'even': [], 'getting': []}
     for row in own_rows:

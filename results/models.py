@@ -25,6 +25,20 @@ class MatchResult(models.Model):
         Player, null=True, blank=True, on_delete=models.SET_NULL, related_name='away_results',
     )
 
+    # One-pocket: each side's skill rank when the match was played, so a
+    # rank change later in the season doesn't relabel earlier results.
+    home_rank = models.PositiveSmallIntegerField(null=True, blank=True)
+    away_rank = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    def side_rank(self, team):
+        """The rank ``team`` played this match at, falling back to its current
+        rank for results recorded before ranks were stored."""
+        if team.id == self.match.home_team_id:
+            return self.home_rank if self.home_rank is not None else team.team_rank
+        if team.id == self.match.away_team_id:
+            return self.away_rank if self.away_rank is not None else team.team_rank
+        return None
+
     @staticmethod
     def slot_player(team):
         """The player currently holding a one-pocket spot."""
@@ -45,6 +59,10 @@ class MatchResult(models.Model):
                 self.home_player = self.slot_player(self.match.home_team)
             if self.away_player_id is None:
                 self.away_player = self.slot_player(self.match.away_team)
+            if self.home_rank is None:
+                self.home_rank = self.match.home_team.team_rank
+            if self.away_rank is None:
+                self.away_rank = self.match.away_team.team_rank
         super().save(*args, **kwargs)
 
     def clean(self):

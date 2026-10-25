@@ -145,6 +145,77 @@ class DuplicatePlayerNameTests(PlayerChangeBase):
         return Player.objects.filter(team=Team.objects.get(league=self.league, name=team_name)).order_by('id').first()
 
 
+class StoredRankTests(PlayerChangeBase):
+    def test_ranks_are_stored_when_the_result_is_saved(self):
+        result = self.play(self.beau, self.abel, 1, 3, date(2026, 7, 5))
+        self.assertEqual((result.home_rank, result.away_rank), (2, 5))
+        self.assertEqual(result.side_rank(self.beau), 2)
+        self.assertEqual(result.side_rank(self.abel), 5)
+
+    def test_rerank_does_not_relabel_earlier_results(self):
+        result = self.play(self.beau, self.abel, 1, 3, date(2026, 7, 5))
+        self.beau.team_rank = 4
+        self.beau.save()
+        result.refresh_from_db()
+        self.assertEqual(result.side_rank(self.beau), 2)
+        # Rank review judges the loss as "getting weight" (2 vs 5), not even (4 vs 5 is still getting) —
+        # make the point with a rank that would flip the category.
+        self.abel.team_rank = 3
+        self.abel.save()
+        rows = {r['name']: r for r in build_rank_review(self.league, self.season)}
+        self.assertEqual(rows['Beau']['splits']['getting']['matches_lost'], 1)
+        self.assertEqual(rows['Beau']['splits']['giving']['matches_lost'], 0)
+        self.assertEqual(rows['Beau']['rank'], 4)  # the row shows the current rank
+
+    def test_side_rank_falls_back_to_current_when_unstored(self):
+        result = self.play(self.beau, self.abel, 1, 3, date(2026, 7, 5))
+        MatchResult.objects.filter(pk=result.pk).update(home_rank=None)
+        result.refresh_from_db()
+        self.assertEqual(result.side_rank(self.beau), 2)
+
+    def test_archive_uses_the_stored_ranks(self):
+        self.play(self.beau, self.abel, 1, 3, date(2026, 7, 5))
+        self.beau.team_rank = 5
+        self.beau.save()
+        archived = services.archive_season(self.season)
+        match = archived.matches.get()
+        self.assertEqual((match.home_team_rank, match.away_team_rank), (2, 5))
+        self.assertEqual(match.race_label, '5/11')  # rank 2 vs rank 5
+
+    def test_player_change_with_new_rank(self):
+        r1 = self.play(self.beau, self.abel, 1, 3, date(2026, 7, 5))
+        r2 = self.play(self.beau, self.lupe, 3, 1, date(2026, 8, 9))
+        record_player_change(self.beau, 'Sysco', date(2026, 8, 9), new_rank=3)
+        self.beau.refresh_from_db()
+        self.assertEqual(self.beau.team_rank, 3)
+        r1.refresh_from_db()
+        r2.refresh_from_db()
+        self.assertEqual(r1.home_rank, 2)   # Beau's match keeps rank 2
+        self.assertEqual(r2.home_rank, 3)   # Sysco's match is at the new rank
+
+    def test_player_change_corrects_the_departing_players_rank(self):
+        # The spot was renamed by hand AND reranked (Beau was a 4, Sysco is a 2) before
+        # ranks were stored, so the backfill guessed 2 for everything.
+        r1 = self.play(self.beau, self.abel, 1, 3, date(2026, 7, 5))
+        r2 = self.play(self.beau, self.lupe, 3, 1, date(2026, 8, 9))
+        real = Player.objects.get(league=self.league, name='Beau')
+        real.name = 'Sysco'
+        real.save()
+        self.beau.name = 'Sysco'
+        self.beau.save()
+
+        record_player_change(self.beau, 'Sysco', date(2026, 8, 9), left='Beau', old_rank=4)
+
+        r1.refresh_from_db()
+        r2.refresh_from_db()
+        self.assertEqual(r1.home_rank, 4)   # Beau played this one as a 4
+        self.assertEqual(r1.home_player.name, 'Beau')
+        self.assertEqual(r2.home_rank, 2)   # Sysco's match stays at the spot's rank
+        self.assertEqual(r2.home_player.name, 'Sysco')
+        # Opponents' stored ranks are untouched.
+        self.assertEqual(r1.away_rank, 5)
+
+
 class RecordPlayerChangeTests(PlayerChangeBase):
     def setUp(self):
         super().setUp()
@@ -276,8 +347,10 @@ class PlayerChangeViewsTests(PlayerChangeBase):
         response = self.client.get(url)
         self.assertContains(response, 'Currently in this spot: <strong>Beau</strong>', html=False)
 
-        response = self.client.post(url, {'taking_over': 'Sysco', 'left': '', 'took_over_on': '2026-08-09'}, follow=True)
+        response = self.client.post(url, {'taking_over': 'Sysco', 'left': '', 'took_over_on': '2026-08-09', 'new_rank': '3'}, follow=True)
         self.assertRedirects(response, reverse('admin:core_team_change', args=[self.beau.pk]))
+        self.beau.refresh_from_db()
+        self.assertEqual(self.beau.team_rank, 3)
         self.assertContains(response, 'Recorded Beau → Sysco from 2026-08-09; 1 match result(s) re-credited.')
         self.beau.refresh_from_db()
         self.assertEqual(self.beau.name, 'Sysco')
@@ -292,6 +365,10 @@ class PlayerChangeViewsTests(PlayerChangeBase):
         self.assertContains(response, 'Enter the takeover date')
         response = self.client.post(url, {'taking_over': 'Beau', 'left': '', 'took_over_on': '2026-08-09'})
         self.assertContains(response, 'Enter the name of the player who left')
+        response = self.client.post(url, {'taking_over': 'Sysco', 'left': '', 'took_over_on': '2026-08-09', 'new_rank': '9'})
+        self.assertContains(response, 'Ranks must be numbers from 1 to 5')
+        response = self.client.post(url, {'taking_over': 'Sysco', 'left': '', 'took_over_on': '2026-08-09', 'old_rank': 'x'})
+        self.assertContains(response, 'Ranks must be numbers from 1 to 5')
 
     def test_popup_shows_who_played(self):
         record_player_change(self.beau, 'Sysco', date(2026, 8, 9))

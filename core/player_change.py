@@ -63,7 +63,7 @@ def _prune_stray_duplicates(league, name, keep):
 
 
 @transaction.atomic
-def record_player_change(slot, taking_over, took_over_on, left=''):
+def record_player_change(slot, taking_over, took_over_on, left='', new_rank=None, old_rank=None):
     """Apply a takeover of ``slot`` (a one-pocket Team).
 
     ``taking_over`` is the new player's name. If it differs from the slot's
@@ -71,7 +71,11 @@ def record_player_change(slot, taking_over, took_over_on, left=''):
     If the slot was already renamed by hand (the common case today), pass the
     departing player's name as ``left`` so their earlier matches can be
     credited to them. Results whose score was entered before ``took_over_on``
-    stay with the departing player. Returns (old_player, new_player, reassigned_count).
+    stay with the departing player. ``new_rank`` reranks the spot for the new
+    player and is stored on results from the takeover on; ``old_rank`` is the
+    rank the departing player held and is stored on the earlier results (the
+    spot may have been reranked when it changed hands).
+    Returns (old_player, new_player, reassigned_count).
     """
     league = slot.league
     if league.results_type != League.ResultsType.ONE_POCKET:
@@ -123,6 +127,10 @@ def record_player_change(slot, taking_over, took_over_on, left=''):
     if old is not None:
         _prune_stray_duplicates(league, old.name, old)
 
+    if new_rank is not None and new_rank != slot.team_rank:
+        slot.team_rank = new_rank
+        slot.save(update_fields=['team_rank'])
+
     reassigned = 0
     results = (
         MatchResult.objects.filter(match__week__season__league=league)
@@ -134,13 +142,21 @@ def record_player_change(slot, taking_over, took_over_on, left=''):
         # Go by when the score was entered, not the scheduled week: a makeup
         # played late belongs to whoever held the spot when it was played.
         played_on = timezone.localtime(result.created_at).date() if result.created_at else result.match.week.date
-        player = old if played_on < took_over_on else new
-        if player is None:
-            continue
-        field = 'home_player' if result.match.home_team_id == slot.id else 'away_player'
-        if getattr(result, f'{field}_id') != player.id:
-            setattr(result, field, player)
-            result.save(update_fields=[field, 'updated_at'])
+        after_takeover = played_on >= took_over_on
+        player = new if after_takeover else old
+        is_home = result.match.home_team_id == slot.id
+        player_field = 'home_player' if is_home else 'away_player'
+        rank_field = 'home_rank' if is_home else 'away_rank'
+        changed = []
+        if player is not None and getattr(result, f'{player_field}_id') != player.id:
+            setattr(result, player_field, player)
+            changed.append(player_field)
+        wanted_rank = new_rank if after_takeover else old_rank
+        if wanted_rank is not None and getattr(result, rank_field) != wanted_rank:
+            setattr(result, rank_field, wanted_rank)
+            changed.append(rank_field)
+        if changed:
+            result.save(update_fields=changed + ['updated_at'])
             reassigned += 1
 
     return old, new, reassigned
