@@ -337,6 +337,36 @@ class OnePocketViewsTests(ViewTestCase):
             response = self.client.get(reverse('one_pocket_full_schedule_modal'))
         self.assertEqual(response.status_code, 200)
 
+    def test_full_schedule_marks_played_matches(self):
+        # match1: Marcus (home) 6, Louie (away) 10 -> played, Louie won. match2 unplayed.
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('one_pocket_full_schedule_modal')).json()['html']
+        self.assertIn('Final 6-10', html)
+        self.assertIn('<u>Louie</u>', html)
+        self.assertNotIn('<u>Marcus</u>', html)
+        self.assertEqual(html.count('Final '), 1)
+        # The played match shows the race at the ranks it was played (2 vs 4 -> 6/10),
+        # even after a later rerank.
+        self.team_b.team_rank = 5
+        self.team_b.save()
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('one_pocket_full_schedule_modal')).json()['html']
+        self.assertIn('6/10', html)
+
+    def test_home_current_schedule_marks_played_matches(self):
+        from datetime import timedelta
+        from django.utils import timezone as tz
+        # Put a played match and an unplayed one in the coming week so the home page lists them.
+        week = Week.objects.create(season=self.season, date=tz.localdate() + timedelta(days=3), number=8)
+        played = Match.objects.create(week=week, home_team=self.team_a, away_team=self.team_b)
+        MatchResult.objects.create(match=played, home_team_score=3, away_team_score=1)
+        Match.objects.create(week=week, home_team=self.team_c, away_team=self.team_d)
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            response = self.client.get(reverse('home'))
+        self.assertContains(response, 'Final 3-1')
+        self.assertContains(response, '<strong>Marcus</strong>')
+        self.assertEqual(response.content.decode().count('Final '), 1)
+
     def test_player_scores_modal(self):
         player = Player.objects.get(league=self.league, name='Marcus')
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
