@@ -293,7 +293,7 @@ class LeagueAdmin(admin.ModelAdmin):
         from django.http import HttpResponseRedirect
 
         from .rank_review import (
-            DOWN_GAME_PCT, MAX_RANK, MIN_GAMES, MIN_RANK, UP_GAME_PCT,
+            DOWN_MATCH_PCT, MAX_RANK, MIN_MATCHES, MIN_RANK, UP_MATCH_PCT,
             build_rank_review, season_choices,
         )
 
@@ -321,9 +321,9 @@ class LeagueAdmin(admin.ModelAdmin):
             'season_options': options,
             'rows': rows,
             'thresholds': {
-                'min_games': MIN_GAMES,
-                'up_pct': f'{UP_GAME_PCT:.0%}',
-                'down_pct': f'{DOWN_GAME_PCT:.0%}',
+                'min_matches': MIN_MATCHES,
+                'up_pct': f'{UP_MATCH_PCT:.0%}',
+                'down_pct': f'{DOWN_MATCH_PCT:.0%}',
                 'max_rank': MAX_RANK,
                 'min_rank': MIN_RANK,
             },
