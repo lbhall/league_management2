@@ -10,6 +10,9 @@
             <a href="{% url 'finance' %}" style="display: inline-block; padding: 15px 25px; background-color: #28a745; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 1.1em; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">💰 Finance Breakdown</a>
             <a href="{% url 'tournament_players' %}" style="display: inline-block; padding: 15px 25px; background-color: #ffc107; color: black; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 1.1em; border: 2px solid #e0a800; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🏆 TOURNAMENT PLAYERS</a>
             {% endif %}
+            {% if request.user.league_admin_access.league.results_type == 'one_pocket' %}
+            <a href="{% url 'admin:core_league_rank_review' request.user.league_admin_access.league.pk %}" style="display: inline-block; padding: 15px 25px; background-color: #6f42c1; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 1.1em; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📈 Rank Review</a>
+            {% endif %}
             {% if perms.core.view_pageview %}
             <a href="{% url 'admin:core_pageview_changelist' %}" style="display: inline-block; padding: 15px 25px; background-color: #6f42c1; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 1.1em; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📊 Site Traffic</a>
             {% endif %}

@@ -1,0 +1,101 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Rank review | {{ site_title|default:"Django site admin" }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='core' %}">Core</a>
+    &rsaquo; <a href="{% url 'admin:core_league_changelist' %}">Leagues</a>
+    &rsaquo; <a href="{% url 'admin:core_league_change' league.pk %}">{{ league.name }}</a>
+    &rsaquo; Rank review
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Rank review &mdash; {{ league.name }}</h1>
+<p style="color:#666;">
+    Who looks ready to move up a rank, and who may belong a rank lower, based on games won and lost
+    against each opponent's rank. "Giving weight" means the player was the higher rank and spotted
+    balls; "getting weight" means they received the spot. Flags are suggestions, not changes.
+</p>
+
+<form method="get" style="margin:12px 0 20px;">
+    <label for="season"><strong>Season:</strong></label>
+    <select id="season" name="season" onchange="this.form.submit()">
+        {% for s in season_options %}
+            <option value="{{ s.id }}" {% if s.id == season.id %}selected{% endif %}>
+                {{ s.name }} ({{ s.get_status_display }})
+            </option>
+        {% endfor %}
+    </select>
+</form>
+
+{% if rows %}
+<div class="module">
+    <table style="width:100%;">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Matches</th>
+                <th>Games</th>
+                <th>Game %</th>
+                <th title="Player was the higher rank">Giving weight</th>
+                <th>Even</th>
+                <th title="Player was the lower rank">Getting weight</th>
+                <th title="Average game margin per match, e.g. 3-1 is +2">Avg margin</th>
+                <th>Flag</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                <tr{% if row.signal == 'up' %} style="background:#e6f4ea;"{% elif row.signal == 'down' %} style="background:#fdecea;"{% endif %}>
+                    <td>{{ row.rank|default_if_none:"-" }}</td>
+                    <td><strong>{{ row.name }}</strong></td>
+                    <td>{{ row.matches_won }}-{{ row.matches_lost }}</td>
+                    <td>{{ row.games_won }}-{{ row.games_lost }}</td>
+                    <td>{% if row.game_pct is not None %}{{ row.game_pct|floatformat:"0%" }}{% else %}-{% endif %}</td>
+                    {% for split in row.split_cells %}
+                        <td>
+                            {% if split.games_played %}
+                                {{ split.games_won }}-{{ split.games_lost }}
+                                <span style="color:#666;">({{ split.game_pct|floatformat:"0%" }})</span>
+                            {% else %}
+                                <span style="color:#999;">&mdash;</span>
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                    <td>{% if row.avg_margin is not None %}{{ row.avg_margin|floatformat:1 }}{% else %}-{% endif %}</td>
+                    <td>
+                        {% if row.signal == 'up' %}
+                            <strong style="color:#1e7e34;">&#9650; Consider moving up</strong>
+                        {% elif row.signal == 'down' %}
+                            <strong style="color:#c0392b;">&#9660; Consider moving down</strong>
+                        {% endif %}
+                        {% if row.reason %}<div style="color:#666;font-size:0.9em;">{{ row.reason }}</div>{% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p>No players found for this league.</p>
+{% endif %}
+
+<div class="module" style="margin-top:20px;">
+    <h2>How the flags work</h2>
+    <div style="padding:10px 12px;">
+        <p>A player needs at least <strong>{{ thresholds.min_games }}</strong> games before anything is flagged.</p>
+        <ul>
+            <li><strong>Consider moving up</strong> &mdash; rank below {{ thresholds.max_rank }}, winning <strong>{{ thresholds.up_pct }}</strong> or more of games, and at least 50% of games when giving weight.</li>
+            <li><strong>Consider moving down</strong> &mdash; rank above {{ thresholds.min_rank }}, winning <strong>{{ thresholds.down_pct }}</strong> or less of games, and 50% or less even when getting weight.</li>
+        </ul>
+        <p style="color:#666;">
+            Once ball counts per game are recorded, this page will add spot-adjusted margins and a
+            "would they still have won at the next rank" test, which are much sharper signals than game counts.
+        </p>
+    </div>
+</div>
+{% endblock %}
