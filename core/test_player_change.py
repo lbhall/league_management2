@@ -74,6 +74,77 @@ class AttributionOnSaveTests(PlayerChangeBase):
         self.assertIsNone(result.home_player)
 
 
+class DuplicatePlayerNameTests(PlayerChangeBase):
+    """Hand renames used to leave a second, empty player with the new name."""
+
+    def test_team_save_tolerates_duplicate_player_names(self):
+        stray = Player.objects.create(league=self.league, name='Beau')  # empty duplicate
+        self.beau.team_rank = 3
+        self.beau.save()  # used to raise MultipleObjectsReturned
+        self.beau.refresh_from_db()
+        self.assertEqual(self.beau.captain, self.player_on_spot('Beau'))
+        self.assertNotEqual(self.beau.captain_id, stray.id)
+
+    def test_team_save_prefers_the_player_on_the_spot(self):
+        on_spot = self.player_on_spot('Beau')
+        Player.objects.create(league=self.league, name='beau')  # older-looking duplicate elsewhere
+        self.beau.save()
+        self.beau.refresh_from_db()
+        self.assertEqual(self.beau.captain_id, on_spot.id)
+
+    def test_record_change_removes_the_stray_duplicate(self):
+        # Spot already renamed by hand: a stray 'Sysco' with no matches exists next to the real one.
+        real = self.player_on_spot('Beau')
+        real.name = 'Sysco'
+        real.save()
+        self.beau.name = 'Sysco'
+        self.beau.save()
+        stray = Player.objects.create(league=self.league, name='Sysco')
+        self.play(self.beau, self.lupe, 3, 1, date(2026, 7, 5))
+
+        old, new, _ = record_player_change(self.beau, 'Sysco', date(2026, 8, 9), left='Beau')
+
+        self.assertEqual(new.pk, real.pk)
+        self.assertFalse(Player.objects.filter(pk=stray.pk).exists())
+        self.assertEqual(Player.objects.filter(league=self.league, name__iexact='Sysco').count(), 1)
+        # And the team saves cleanly afterwards.
+        self.beau.team_rank = 3
+        self.beau.save()
+
+    def test_record_change_keeps_duplicates_that_have_history(self):
+        real = self.player_on_spot('Beau')
+        real.name = 'Sysco'
+        real.save()
+        self.beau.name = 'Sysco'
+        self.beau.save()
+        other = Player.objects.create(league=self.league, name='Sysco')
+        # 'other' has a result credited to them, so they must survive.
+        result = self.play(self.beau, self.lupe, 3, 1, date(2026, 7, 5))
+        MatchResult.objects.filter(pk=result.pk).update(home_player=other)
+
+        record_player_change(self.beau, 'Sysco', date(2026, 8, 9), left='Beau')
+        self.assertTrue(Player.objects.filter(pk=other.pk).exists())
+
+    def test_record_change_keeps_duplicates_with_a_scoring_login(self):
+        from django.contrib.auth import get_user_model
+        from scoring.models import ScoringProfile
+        real = self.player_on_spot('Beau')
+        real.name = 'Sysco'
+        real.save()
+        self.beau.name = 'Sysco'
+        self.beau.save()
+        other = Player.objects.create(league=self.league, name='Sysco')
+        user = get_user_model().objects.create_user(username='sysco@example.com', password='pw')
+        ScoringProfile.objects.create(user=user, league=self.league, player=other, role=ScoringProfile.Role.CAPTAIN)
+
+        record_player_change(self.beau, 'Sysco', date(2026, 8, 9), left='Beau')
+        self.assertTrue(Player.objects.filter(pk=other.pk).exists())
+        self.assertTrue(ScoringProfile.objects.filter(player=other).exists())
+
+    def player_on_spot(self, team_name):
+        return Player.objects.filter(team=Team.objects.get(league=self.league, name=team_name)).order_by('id').first()
+
+
 class RecordPlayerChangeTests(PlayerChangeBase):
     def setUp(self):
         super().setUp()

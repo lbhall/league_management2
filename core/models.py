@@ -220,11 +220,15 @@ class Team(models.Model):
         super().save(*args, **kwargs)
 
         if self.league.results_type == League.ResultsType.ONE_POCKET:
-            player = Player.objects.get_or_create(
-                league=self.league,
-                name=self.name,
-                defaults={'male': True},  # You can set this based on your requirements
-            )[0]
+            # The spot's player shares its name. Prefer one already on this
+            # spot, then any with the name (leagues have accumulated
+            # duplicates from hand renames), and only then create one.
+            player = (
+                Player.objects.filter(league=self.league, team=self, name__iexact=self.name.strip()).order_by('id').first()
+                or Player.objects.filter(league=self.league, name__iexact=self.name.strip()).order_by('id').first()
+            )
+            if player is None:
+                player = Player.objects.create(league=self.league, name=self.name.strip(), male=True)
 
             if not self.captain_id and player.id != self.captain_id:
                 self.captain = player

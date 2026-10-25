@@ -25,6 +25,43 @@ def current_player(slot):
     return MatchResult.slot_player(slot)
 
 
+def _find_or_create_player(league, name):
+    """Like get_or_create by name, but tolerant of duplicates (oldest wins)."""
+    player = Player.objects.filter(league=league, name__iexact=name).order_by('id').first()
+    if player is None:
+        player = Player.objects.create(league=league, name=name, male=True)
+    return player
+
+
+def _is_unused(player):
+    """A player record nothing refers to: safe to delete as a stray duplicate."""
+    from scoring.models import ScoringProfile
+
+    if ScoringProfile.objects.filter(player=player).exists():
+        return False
+    return (
+        player.team_id is None
+        and not player.captained_teams.exists()
+        and not player.home_results.exists()
+        and not player.away_results.exists()
+        and not player.match_results.exists()
+        and not player.archived_stats.exists()
+        and not player.archived_match_results.exists()
+        and not player.scoring_lineup_slots.exists()
+    )
+
+
+def _prune_stray_duplicates(league, name, keep):
+    """Delete empty duplicate player records that share ``name`` with ``keep``.
+    Hand-renaming a spot used to leave one of these behind every time."""
+    removed = 0
+    for other in Player.objects.filter(league=league, name__iexact=name).exclude(pk=keep.pk):
+        if _is_unused(other):
+            other.delete()
+            removed += 1
+    return removed
+
+
 @transaction.atomic
 def record_player_change(slot, taking_over, took_over_on, left=''):
     """Apply a takeover of ``slot`` (a one-pocket Team).
@@ -50,7 +87,7 @@ def record_player_change(slot, taking_over, took_over_on, left=''):
     if taking_over.lower() != slot.name.strip().lower():
         # The spot still shows the departing player: rename it and swap the roster.
         old = occupant
-        new, _ = Player.objects.get_or_create(league=league, name=taking_over, defaults={'male': True})
+        new = _find_or_create_player(league, taking_over)
         if old is not None and old.id == new.id:
             raise PlayerChangeError(f'{taking_over} already holds this spot.')
         if old is not None:
@@ -72,13 +109,19 @@ def record_player_change(slot, taking_over, took_over_on, left=''):
             raise PlayerChangeError('The player who left and the player taking over are the same name.')
         new = occupant
         if new is None:
-            new, _ = Player.objects.get_or_create(league=league, name=taking_over, defaults={'male': True})
+            new = _find_or_create_player(league, taking_over)
             new.team = slot
             new.save(update_fields=['team'])
-        old, _ = Player.objects.get_or_create(league=league, name=left, defaults={'male': True})
+        old = _find_or_create_player(league, left)
         if old.team_id == slot.id and old.id != new.id:
             old.team = None
             old.save(update_fields=['team'])
+
+    # Hand renames left empty duplicates behind (a second "Sysco" with no
+    # matches); they break later team saves, so clear them while we're here.
+    _prune_stray_duplicates(league, new.name, new)
+    if old is not None:
+        _prune_stray_duplicates(league, old.name, old)
 
     reassigned = 0
     results = (
