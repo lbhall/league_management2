@@ -222,6 +222,55 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('no matches', marcus)
         self.assertIn('Win percentage by opponent rank', marcus)
 
+    def test_team_schedule_modal_extras(self):
+        from datetime import timedelta
+        from django.utils import timezone as tz
+        # An upcoming match for Marcus next week against Louie (rank 4).
+        future = Week.objects.create(season=self.season, date=tz.localdate() + timedelta(days=7), number=9)
+        Match.objects.create(week=future, home_team=self.team_a, away_team=self.team_b)
+
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+
+        # Form: one red dot, no streak text (needs two in a row).
+        self.assertIn('data-form-strip', html)
+        self.assertEqual(html.count('rounded-circle bg-danger'), 1)
+        self.assertNotIn('in a row', html)
+        # Marcus (2) lost to Louie (4): a "getting weight" loss; the other buckets empty.
+        self.assertIn('Getting weight', html)
+        self.assertIn('data-weight-split', html)
+        # Average margin of the 6-10 loss.
+        self.assertIn('avg margin -4.0', html)
+        # Next match card with the race for rank 2 vs rank 4 and the all-time record
+        # (this season 0-1 plus the archived 6-10 loss).
+        self.assertIn('Next match:', html)
+        self.assertIn('race 6/10', html)
+        self.assertIn('all-time 0-2', html)
+        # Past seasons from the archive: finish #1, rank 2, 5-2.
+        self.assertIn('Past Seasons', html)
+        self.assertIn('Archived Season 1', html)
+        self.assertIn('#1', html)
+        self.assertIn('5-2', html)
+
+    def test_team_schedule_modal_streak(self):
+        # Two more losses for Marcus -> "Lost 3 in a row".
+        w = Week.objects.create(season=self.season, date=date(2026, 1, 26), number=4)
+        MatchResult.objects.create(
+            match=Match.objects.create(week=w, home_team=self.team_a, away_team=self.team_c),
+            home_team_score=1, away_team_score=3,
+        )
+        w2 = Week.objects.create(season=self.season, date=date(2026, 2, 2), number=5)
+        MatchResult.objects.create(
+            match=Match.objects.create(week=w2, home_team=self.team_d, away_team=self.team_a),
+            home_team_score=3, away_team_score=0,
+        )
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+        self.assertIn('Lost 3 in a row', html)
+        self.assertEqual(html.count('rounded-circle bg-danger'), 3)
+        # Marcus (2) vs Beau (1) was giving weight; vs Danni (3) getting weight.
+        self.assertIn('Giving weight', html)
+
     def test_team_schedule_modal_headline_ignores_former_players(self):
         from results.models import MatchResult as MR
         # Credit match1 to a former holder of Marcus's spot: it must not count.
