@@ -337,6 +337,18 @@ class OnePocketViewsTests(ViewTestCase):
             response = self.client.get(reverse('one_pocket_full_schedule_modal'))
         self.assertEqual(response.status_code, 200)
 
+    def test_no_play_weeks_show_their_note_not_the_word_holiday(self):
+        Week.objects.create(season=self.season, date=date(2026, 11, 26), number=None, notes='Thanksgiving')
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            page = self.client.get(reverse('schedule')).content.decode()
+            modal = self.client.get(reverse('one_pocket_full_schedule_modal')).json()['html']
+        for html in (page, modal):
+            self.assertIn('Thanksgiving', html)
+            self.assertNotIn('Holiday - ', html)
+            self.assertNotIn('Notes:</strong> Thanksgiving', html)
+        # The heading is the note itself, not a generic label.
+        self.assertRegex(page, r'<strong>\s*Thanksgiving\s*</strong>')
+
     def test_full_schedule_marks_played_matches(self):
         # match1: Marcus (home) 6, Louie (away) 10 -> played, Louie won. match2 unplayed.
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):

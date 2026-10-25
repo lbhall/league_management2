@@ -20,11 +20,11 @@
                                             {% if week_data.week.number %}
                                                 Week {{ week_data.week.number }}
                                             {% else %}
-                                                Holiday
+                                                {{ week_data.week.notes|default:"No play" }}
                                             {% endif %}
                                         </strong>
                                         <div class="text-muted small">{{ week_data.week.date }}</div>
-                                        {% if week_data.week.notes %}
+                                        {% if week_data.week.number and week_data.week.notes %}
                                             <div class="small"><strong>Notes:</strong> {{ week_data.week.notes }}</div>
                                         {% endif %}
                                     </td>

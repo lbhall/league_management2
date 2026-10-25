@@ -13,7 +13,7 @@
                                 {% if week_block.week.number %}
                                     Week {{ week_block.week.number }}
                                 {% else %}
-                                    Holiday - {{ week_block.week.notes }}
+                                    {{ week_block.week.notes|default:"No play" }}
                                 {% endif %}
                                 <span class="text-muted">({{ week_block.week.date }})</span>
                             </h6>
