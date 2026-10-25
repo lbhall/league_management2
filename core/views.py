@@ -1323,8 +1323,12 @@ def team_schedule_modal(request, team_id):
         })
 
     from .player_page import build_player_extras
+    from .rank_review import player_outlook
 
     extras = build_player_extras(current_player, team, own_rows, results_rows, upcoming_rows)
+    rank_outlook = (
+        player_outlook(active_league, active_season, current_player.id) if current_player else None
+    )
 
     html = render_to_string(
         'team_schedule_modal.html',
@@ -1334,6 +1338,7 @@ def team_schedule_modal(request, team_id):
             'team_skill_rank': team.team_rank,
             'overall': overall,
             'by_rank': by_rank,
+            'rank_outlook': rank_outlook,
             **extras,
             'results_rows': results_rows,
             'former_players': sorted({r['played_by'] for r in results_rows if r['played_by']}),

@@ -253,6 +253,33 @@ class OnePocketViewsTests(ViewTestCase):
         self.assertIn('#1', html)
         self.assertIn('5-2', html)
 
+    def test_team_schedule_modal_rank_outlook(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+        # 6-10 is 16 games at 38%: holding, with the reason and the grey bar glyph.
+        self.assertIn('data-rank-outlook="hold"', html)
+        self.assertIn('Holding', html)
+        self.assertIn('Winning 38% of games', html)
+        self.assertIn('aria-label="Holding"', html)
+
+        # Give Louie (rank 4) a dominant season giving weight -> trending up with the green chevron.
+        for i in range(6):
+            w = Week.objects.create(season=self.season, date=date(2026, 3, 1 + i), number=20 + i)
+            MatchResult.objects.create(
+                match=Match.objects.create(week=w, home_team=self.team_b, away_team=self.team_a),
+                home_team_score=3, away_team_score=0,
+            )
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            louie = self.client.get(reverse('team_schedule_modal', args=[self.team_b.id])).json()['html']
+            marcus = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
+        self.assertIn('data-rank-outlook="up"', louie)
+        self.assertIn('aria-label="Trending up"', louie)
+        self.assertIn('stroke="#198754"', louie)
+        # Marcus (rank 2) lost them all -> trending down with the red chevron.
+        self.assertIn('data-rank-outlook="down"', marcus)
+        self.assertIn('aria-label="Trending down"', marcus)
+        self.assertIn('stroke="#dc3545"', marcus)
+
     def test_team_schedule_modal_streak(self):
         # Two more losses for Marcus -> "Lost 3 in a row".
         w = Week.objects.create(season=self.season, date=date(2026, 1, 26), number=4)

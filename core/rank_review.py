@@ -11,9 +11,11 @@ from results.models import MatchResult
 from scheduling.models import Match, Season
 
 # Flag rules. A player needs a reasonable sample before anything is said.
+# The bands are deliberately wide while only game counts are recorded;
+# ball counts per game (planned) will let them tighten.
 MIN_GAMES = 12
-UP_GAME_PCT = 0.65     # winning this share of games or more
-DOWN_GAME_PCT = 0.35   # winning this share of games or less
+UP_GAME_PCT = 0.75     # winning this share of games or more
+DOWN_GAME_PCT = 0.25   # winning this share of games or less
 MAX_RANK = 5
 MIN_RANK = 1
 
@@ -142,10 +144,13 @@ def build_rank_review(league, season):
 
 
 def _signal(row):
+    """Return (state, reason) with state one of 'up', 'hold', 'down'."""
     rank = row['rank']
     pct = row['game_pct']
-    if rank is None or pct is None or row['games_played'] < MIN_GAMES:
-        return '', 'Not enough games yet' if row['games_played'] < MIN_GAMES else ''
+    if row['games_played'] < MIN_GAMES:
+        return 'hold', f'Not enough games yet ({row["games_played"]} of {MIN_GAMES})'
+    if rank is None or pct is None:
+        return 'hold', 'No rank set'
 
     giving = row['splits']['giving']
     getting = row['splits']['getting']
@@ -156,7 +161,7 @@ def _signal(row):
                 f'Winning {pct:.0%} of games'
                 + (f' and {giving["game_pct"]:.0%} when giving weight' if giving['games_played'] else '')
             )
-        return '', f'Winning {pct:.0%} overall but only {giving["game_pct"]:.0%} when giving weight'
+        return 'hold', f'Winning {pct:.0%} overall but only {giving["game_pct"]:.0%} when giving weight'
 
     if rank > MIN_RANK and pct <= DOWN_GAME_PCT:
         if getting['games_played'] == 0 or getting['game_pct'] <= 0.5:
@@ -164,6 +169,20 @@ def _signal(row):
                 f'Winning only {pct:.0%} of games'
                 + (f', {getting["game_pct"]:.0%} even when getting weight' if getting['games_played'] else '')
             )
-        return '', f'Winning only {pct:.0%} overall but {getting["game_pct"]:.0%} when getting weight'
+        return 'hold', f'Winning only {pct:.0%} overall but {getting["game_pct"]:.0%} when getting weight'
 
-    return '', ''
+    if rank >= MAX_RANK and pct >= UP_GAME_PCT:
+        return 'hold', f'Winning {pct:.0%} of games at the top rank'
+    if rank <= MIN_RANK and pct <= DOWN_GAME_PCT:
+        return 'hold', f'Winning {pct:.0%} of games at the bottom rank'
+    return 'hold', f'Winning {pct:.0%} of games'
+
+
+def player_outlook(league, season, player_id):
+    """The rank-review verdict for one player: {'state', 'reason'} or None."""
+    if season is None:
+        return None
+    for row in build_rank_review(league, season):
+        if row['player_id'] == player_id:
+            return {'state': row['signal'], 'reason': row['reason']}
+    return None

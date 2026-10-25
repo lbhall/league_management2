@@ -6,7 +6,7 @@ from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 
-from core.models import League, LeagueAdminAccess, Team, Venue
+from core.models import League, LeagueAdminAccess, Player, Team, Venue
 from core.rank_review import MIN_GAMES, build_rank_review, season_choices, weight_category
 from results.models import MatchResult
 from scheduling.models import Match, Season, Week
@@ -94,12 +94,12 @@ class BuildRankReviewTests(RankReviewBase):
         self.assertIn('giving weight', red['reason'])
 
     def test_no_up_flag_when_losing_while_giving_weight(self):
-        for _ in range(5):
+        for _ in range(10):
             self.play('Red', 'Abel', 3, 0)   # getting weight, dominant
         for _ in range(4):
             self.play('Danni', 'Red', 3, 2)  # giving weight, losing
         red = self.row(build_rank_review(self.league, self.season), 'Red')
-        self.assertEqual(red['signal'], '')
+        self.assertEqual(red['signal'], 'hold')
         self.assertIn('when giving weight', red['reason'])
 
     def test_down_flag(self):
@@ -114,19 +114,32 @@ class BuildRankReviewTests(RankReviewBase):
             self.play('Abel', 'Jim', 3, 0)
             self.play('Danni', 'Red', 0, 3)
         rows = build_rank_review(self.league, self.season)
-        self.assertEqual(self.row(rows, 'Abel')['signal'], '')
-        self.assertEqual(self.row(rows, 'Danni')['signal'], '')
+        self.assertEqual(self.row(rows, 'Abel')['signal'], 'hold')
+        self.assertEqual(self.row(rows, 'Danni')['signal'], 'hold')
+        self.assertIn('top rank', self.row(rows, 'Abel')['reason'])
 
     def test_small_sample_is_not_flagged(self):
         self.play('Red', 'Abel', 3, 0)
         red = self.row(build_rank_review(self.league, self.season), 'Red')
-        self.assertEqual(red['signal'], '')
-        self.assertEqual(red['reason'], 'Not enough games yet')
+        self.assertEqual(red['signal'], 'hold')
+        self.assertEqual(red['reason'], f'Not enough games yet (3 of {MIN_GAMES})')
 
     def test_sorted_by_rank_then_game_pct(self):
         self.play('Jim', 'Mario', 3, 0)
         rows = build_rank_review(self.league, self.season)
         self.assertEqual([r['name'] for r in rows][:3], ['Abel', 'Jim', 'Mario'])
+
+    def test_player_outlook_for_one_player(self):
+        from core.rank_review import player_outlook
+        for _ in range(3):
+            self.play('Red', 'Abel', 3, 0)
+            self.play('Red', 'Danni', 3, 1)
+        red = Player.objects.get(league=self.league, name='Red')
+        outlook = player_outlook(self.league, self.season, red.id)
+        self.assertEqual(outlook['state'], 'up')
+        self.assertIn('Winning', outlook['reason'])
+        self.assertIsNone(player_outlook(self.league, None, red.id))
+        self.assertIsNone(player_outlook(self.league, self.season, 999999))
 
     def test_season_choices_order(self):
         old = Season.objects.create(league=self.league, name='Early 2026', status=Season.Status.ARCHIVED)
@@ -166,7 +179,8 @@ class RankReviewViewTests(RankReviewBase):
         self.client.force_login(self.superuser)
         response = self.client.get(self.url, {'season': old.pk})
         self.assertEqual(response.context['season'], old)
-        self.assertTrue(all(r['signal'] == '' for r in response.context['rows']))
+        self.assertTrue(all(r['signal'] == 'hold' for r in response.context['rows']))
+        self.assertContains(response, 'Hold')
 
     def test_non_one_pocket_league_is_refused(self):
         emc = make_league(name='EMC', results_type=League.ResultsType.EIGHT_BALL, team_size=5)
