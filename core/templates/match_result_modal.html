@@ -1,0 +1,49 @@
+<div class="modal fade" id="matchResultModal" tabindex="-1" aria-labelledby="matchResultModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="matchResultModalLabel">
+                    {{ home.name }} vs {{ away.name }}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-muted small mb-3">
+                    Week {{ match.week.number }} &middot; scheduled {{ match.week.date }}
+                    {% if entered %}&middot; entered {{ entered }}{% endif %}
+                    {% if race_label %}&middot; race {{ race_label }}{% endif %}
+                </div>
+
+                <div class="row g-2 text-center mb-3" data-match-score>
+                    <div class="col-5">
+                        <div class="card h-100{% if winner == 'home' %} border-success{% endif %}">
+                            <div class="card-body p-2">
+                                <div class="fw-semibold">{{ home.name }}{% if home.rank %} ({{ home.rank }}){% endif %}</div>
+                                {% if home.played_by %}<div class="small text-muted">played by {{ home.played_by }}</div>{% endif %}
+                                <div class="display-6 fw-bold{% if winner == 'home' %} text-success{% endif %}">{{ home.score }}</div>
+                                {% if winner == 'home' %}<span class="badge bg-success">Won</span>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-2 d-flex align-items-center justify-content-center text-muted">vs</div>
+                    <div class="col-5">
+                        <div class="card h-100{% if winner == 'away' %} border-success{% endif %}">
+                            <div class="card-body p-2">
+                                <div class="fw-semibold">{{ away.name }}{% if away.rank %} ({{ away.rank }}){% endif %}</div>
+                                {% if away.played_by %}<div class="small text-muted">played by {{ away.played_by }}</div>{% endif %}
+                                <div class="display-6 fw-bold{% if winner == 'away' %} text-success{% endif %}">{{ away.score }}</div>
+                                {% if winner == 'away' %}<span class="badge bg-success">Won</span>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if not complete %}
+                    <p class="text-muted small mb-0">This match hasn't been finished yet.</p>
+                {% endif %}
+
+                {# Per-game ball counts will appear here once they are recorded. #}
+            </div>
+        </div>
+    </div>
+</div>

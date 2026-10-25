@@ -1,0 +1,34 @@
+<div class="modal fade" id="makeupMatchesModal" tabindex="-1" aria-labelledby="makeupMatchesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="makeupMatchesModalLabel">Makeup Matches</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if makeups %}
+                    <p class="text-muted small">Matches that were due before today and still need a final score.</p>
+                    <ul class="list-group">
+                        {% for entry in makeups %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="fw-semibold">
+                                        {{ entry.home_team.name }}{% if entry.home_team.team_rank %} ({{ entry.home_team.team_rank }}){% endif %}
+                                        vs
+                                        {{ entry.away_team.name }}{% if entry.away_team.team_rank %} ({{ entry.away_team.team_rank }}){% endif %}
+                                    </span>
+                                    {% if entry.race_label %}
+                                        <span class="text-muted"> {{ entry.race_label }}</span>
+                                    {% endif %}
+                                </div>
+                                <span class="text-muted small text-nowrap ms-2">Week {{ entry.week.number }} &middot; {{ entry.week.date|date:"M j" }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted mb-0">No makeup matches. Everything due so far has been played.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
