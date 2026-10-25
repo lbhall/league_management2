@@ -79,6 +79,49 @@ class MatchResultAdminQuerysetTests(ResultsAdminTestCase):
         self.assertNotContains(response, str(other_match))
 
 
+class MatchResultAdminFilterTests(ResultsAdminTestCase):
+    def setUp(self):
+        super().setUp()
+        MatchResult.objects.create(match=self.match)
+        self.other_league = make_league(name='Other League')
+        other_venue = make_venue(self.other_league, name='Other Venue')
+        other_home = Team.objects.create(league=self.other_league, venue=other_venue, name='OHome')
+        other_away = Team.objects.create(league=self.other_league, venue=other_venue, name='OAway')
+        self.other_season = Season.objects.create(league=self.other_league, name='OS', status=Season.Status.ACTIVE)
+        other_week = Week.objects.create(season=self.other_season, date=date(2026, 2, 1), number=1)
+        self.other_match = Match.objects.create(week=other_week, home_team=other_home, away_team=other_away)
+        MatchResult.objects.create(match=self.other_match)
+        self.url = reverse('admin:results_matchresult_changelist')
+
+    def test_superuser_can_filter_by_league(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, 'By league')
+        self.assertContains(response, 'By season')
+        # League and week columns are shown.
+        self.assertContains(response, 'Other League')
+        self.assertContains(response, 'Week 1 — 2026-01-05')
+
+        response = self.client.get(self.url, {'match__week__season__league__id__exact': self.other_league.pk})
+        self.assertContains(response, str(self.other_match))
+        self.assertNotContains(response, str(self.match))
+
+    def test_superuser_can_filter_by_season(self):
+        response = self.client.get(self.url, {'season': self.season.pk})
+        self.assertContains(response, str(self.match))
+        self.assertNotContains(response, str(self.other_match))
+
+    def test_scoped_staff_get_season_filter_for_their_league_only(self):
+        self.make_scoped_staff()
+        response = self.client.get(self.url)
+        self.assertNotContains(response, 'By league')
+        self.assertContains(response, 'By season')
+        self.assertContains(response, str(self.season))
+        self.assertNotContains(response, str(self.other_season))
+        # Asking for the other league's season just yields nothing of theirs.
+        response = self.client.get(self.url, {'season': self.other_season.pk})
+        self.assertNotContains(response, str(self.other_match))
+
+
 class CreatePlayerViewTests(ResultsAdminTestCase):
     def test_requires_post(self):
         response = self.client.get(
