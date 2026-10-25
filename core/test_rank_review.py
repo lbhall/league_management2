@@ -94,7 +94,7 @@ class BuildRankReviewTests(RankReviewBase):
         self.assertIn('giving weight', red['reason'])
 
     def test_no_up_flag_when_losing_while_giving_weight(self):
-        for _ in range(5):
+        for _ in range(10):
             self.play('Red', 'Abel', 3, 0)   # getting weight, dominant
         for _ in range(4):
             self.play('Danni', 'Red', 3, 2)  # giving weight, losing

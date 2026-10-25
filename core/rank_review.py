@@ -11,9 +11,11 @@ from results.models import MatchResult
 from scheduling.models import Match, Season
 
 # Flag rules. A player needs a reasonable sample before anything is said.
+# The bands are deliberately wide while only game counts are recorded;
+# ball counts per game (planned) will let them tighten.
 MIN_GAMES = 12
-UP_GAME_PCT = 0.65     # winning this share of games or more
-DOWN_GAME_PCT = 0.35   # winning this share of games or less
+UP_GAME_PCT = 0.75     # winning this share of games or more
+DOWN_GAME_PCT = 0.25   # winning this share of games or less
 MAX_RANK = 5
 MIN_RANK = 1
 
