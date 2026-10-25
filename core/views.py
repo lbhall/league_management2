@@ -1173,6 +1173,26 @@ def build_player_vs_team_stats(player, active_season, through_week=None):
     return sorted(rows, key=lambda row: row['week_date'])
 
 
+def build_player_season_totals(matchup_rows):
+    """Headline numbers for a pool player's popup, summed from the per-match rows."""
+    wins = sum(row['wins'] for row in matchup_rows)
+    losses = sum(row['losses'] for row in matchup_rows)
+    games = wins + losses
+    pct = (wins / games) if games else None
+    ring_circumference = 2 * 3.14159 * 45  # r=45 in the SVG
+    return {
+        'wins': wins,
+        'losses': losses,
+        'runs': sum(row['runs'] for row in matchup_rows),
+        'sweeps': sum(row['sweeps'] for row in matchup_rows),
+        'eights': sum(row['eights'] for row in matchup_rows),
+        'pct': pct,
+        'pct_label': f'{round(pct * 100)}%' if pct is not None else '-',
+        'ring_filled': round(ring_circumference * (pct or 0), 1),
+        'ring_total': round(ring_circumference, 1),
+    }
+
+
 def player_scores_modal(request, player_id):
     active_league = get_active_league(request)
     active_season = get_active_season(active_league)
@@ -1206,10 +1226,12 @@ def player_scores_modal(request, player_id):
     is_darts = active_league.results_type == League.ResultsType.DARTS
     season_history = []
     career_totals = None
+    season_totals = None
     if not is_darts:
         from scheduling.services import build_player_season_history
 
         season_history, career_totals = build_player_season_history(player)
+        season_totals = build_player_season_totals(matchup_rows)
 
     html = render_to_string(
         'player_scores_modal.html',
@@ -1221,6 +1243,7 @@ def player_scores_modal(request, player_id):
             'is_darts': is_darts,
             'season_history': season_history,
             'career_totals': career_totals,
+            'season_totals': season_totals,
             'team_size': active_league.team_size,
         },
         request=request,

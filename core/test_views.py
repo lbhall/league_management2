@@ -554,6 +554,31 @@ class EightBallViewsTests(ViewTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('Past Seasons', response.json()['html'])
 
+    def test_player_scores_modal_header_totals(self):
+        # Match 1 is 3-0 (auto-flagged as a 3/0); a second match at 1-2 makes 4-2 (67%), 1 run, 1 eight.
+        week2 = Week.objects.create(season=self.season, date=date(2026, 1, 12), number=2)
+        match2 = Match.objects.create(week=week2, home_team=self.away_team, away_team=self.home_team)
+        result2 = MatchResult.objects.create(match=match2)
+        PlayerMatchResult.objects.create(
+            match_result=result2, player=self.home_player, represented_team=self.home_team, wins=1, losses=2,
+        )
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('player_scores_modal', args=[self.home_player.id])).json()['html']
+        self.assertIn('data-win-ring', html)
+        self.assertIn('>67%<', html)
+        self.assertIn('font-size:2rem', html)  # big name
+        self.assertNotIn('Player Scores:', html)
+        for label, value in (('Wins', 4), ('Losses', 2), ('3/0s', 1), ('8 on break', 1), ('Run outs', 1)):
+            self.assertRegex(html, rf'{label}</div>\s*<div[^>]*>{value}<')
+
+    def test_player_scores_modal_without_games_shows_dash(self):
+        newcomer = Player.objects.create(league=self.league, name='Cara', team=self.away_team, male=False)
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('player_scores_modal', args=[newcomer.id])).json()['html']
+        # No games yet -> no percentage, but the cards still render with zeros.
+        self.assertIn('>-<', html)
+        self.assertIn('data-win-ring', html)
+
     def test_player_scores_modal_shows_linked_past_seasons(self):
         old = ArchivedSeason.objects.create(
             league=self.league, name='2025 Spring', results_type=League.ResultsType.EIGHT_BALL, team_size=3,
@@ -757,6 +782,12 @@ class DartsViewsTests(ViewTestCase):
         )
         self.assertEqual(entry['result_label'], '6-3')
         self.assertContains(response, '6-3')
+
+    def test_player_scores_modal_keeps_the_plain_darts_header(self):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('player_scores_modal', args=[self.home_player.id])).json()['html']
+        self.assertIn('Player Scores:', html)
+        self.assertNotIn('data-win-ring', html)
 
     def test_player_scores_modal_shows_darts_columns(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
