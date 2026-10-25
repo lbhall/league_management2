@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from core.models import League, LeagueAdminAccess, Player, Team, Venue
-from core.rank_review import MIN_GAMES, build_rank_review, season_choices, weight_category
+from core.rank_review import MIN_MATCHES, build_rank_review, season_choices, weight_category
 from results.models import MatchResult
 from scheduling.models import Match, Season, Week
 
@@ -83,18 +83,18 @@ class BuildRankReviewTests(RankReviewBase):
         self.assertEqual(self.row(rows, 'Mario')['games_played'], 0)
 
     def test_up_flag_needs_sample_and_holding_when_giving(self):
-        # Red (2) wins big against everyone, including when giving weight to Danni (1).
-        for _ in range(3):
+        # Red (2) wins against everyone, including when giving weight to Danni (1).
+        for _ in range(4):
             self.play('Red', 'Abel', 3, 0)
             self.play('Red', 'Danni', 3, 1)
         rows = build_rank_review(self.league, self.season)
         red = self.row(rows, 'Red')
-        self.assertGreaterEqual(red['games_played'], MIN_GAMES)
+        self.assertGreaterEqual(red['matches_played'], MIN_MATCHES)
         self.assertEqual(red['signal'], 'up')
         self.assertIn('giving weight', red['reason'])
 
     def test_no_up_flag_when_losing_while_giving_weight(self):
-        for _ in range(10):
+        for _ in range(13):
             self.play('Red', 'Abel', 3, 0)   # getting weight, dominant
         for _ in range(4):
             self.play('Danni', 'Red', 3, 2)  # giving weight, losing
@@ -110,7 +110,7 @@ class BuildRankReviewTests(RankReviewBase):
         self.assertEqual(abel['signal'], 'down')
 
     def test_top_rank_never_flagged_up_and_bottom_never_down(self):
-        for _ in range(4):
+        for _ in range(8):
             self.play('Abel', 'Jim', 3, 0)
             self.play('Danni', 'Red', 0, 3)
         rows = build_rank_review(self.league, self.season)
@@ -122,7 +122,7 @@ class BuildRankReviewTests(RankReviewBase):
         self.play('Red', 'Abel', 3, 0)
         red = self.row(build_rank_review(self.league, self.season), 'Red')
         self.assertEqual(red['signal'], 'hold')
-        self.assertEqual(red['reason'], f'Not enough games yet (3 of {MIN_GAMES})')
+        self.assertEqual(red['reason'], f'Not enough matches yet (1 of {MIN_MATCHES})')
 
     def test_sorted_by_rank_then_game_pct(self):
         self.play('Jim', 'Mario', 3, 0)
@@ -131,7 +131,7 @@ class BuildRankReviewTests(RankReviewBase):
 
     def test_player_outlook_for_one_player(self):
         from core.rank_review import player_outlook
-        for _ in range(3):
+        for _ in range(4):
             self.play('Red', 'Abel', 3, 0)
             self.play('Red', 'Danni', 3, 1)
         red = Player.objects.get(league=self.league, name='Red')
@@ -154,7 +154,7 @@ class RankReviewViewTests(RankReviewBase):
         super().setUp()
         User = get_user_model()
         self.superuser = User.objects.create_superuser(username='root', password='pw', email='r@example.com')
-        for _ in range(3):
+        for _ in range(4):
             self.play('Red', 'Abel', 3, 0)
             self.play('Red', 'Danni', 3, 1)
         self.url = reverse('admin:core_league_rank_review', args=[self.league.pk])
@@ -165,8 +165,10 @@ class RankReviewViewTests(RankReviewBase):
         self.assertEqual(response.status_code, 200)
         red = next(r for r in response.context['rows'] if r['name'] == 'Red')
         self.assertEqual(red['signal'], 'up')
+        self.assertEqual(red['match_pct_label'], '100%')
         self.assertEqual(red['game_pct_label'], '86%')
         self.assertContains(response, '<td>86%</td>', html=True)
+        self.assertContains(response, 'Match %')
         self.assertContains(response, 'Red')
         # The admin base prints the title once; the template must not repeat it.
         self.assertEqual(response.content.decode().count('Rank review — Bogies'), 1)

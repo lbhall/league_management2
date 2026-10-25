@@ -256,14 +256,14 @@ class OnePocketViewsTests(ViewTestCase):
     def test_team_schedule_modal_rank_outlook(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             html = self.client.get(reverse('team_schedule_modal', args=[self.team_a.id])).json()['html']
-        # 6-10 is 16 games at 38%: holding, with the reason and the grey bar glyph.
+        # One match played: holding, with the sample-size reason and the grey bar glyph.
         self.assertIn('data-rank-outlook="hold"', html)
         self.assertIn('Holding', html)
-        self.assertIn('Winning 38% of games', html)
+        self.assertIn('Not enough matches yet (1 of 8)', html)
         self.assertIn('aria-label="Holding"', html)
 
         # Give Louie (rank 4) a dominant season giving weight -> trending up with the green chevron.
-        for i in range(6):
+        for i in range(7):
             w = Week.objects.create(season=self.season, date=date(2026, 3, 1 + i), number=20 + i)
             MatchResult.objects.create(
                 match=Match.objects.create(week=w, home_team=self.team_b, away_team=self.team_a),
