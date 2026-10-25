@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Record a player change | {{ site_title|default:"Django site admin" }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='core' %}">Core</a>
+    &rsaquo; <a href="{% url 'admin:core_team_changelist' %}">Teams</a>
+    &rsaquo; <a href="{% url 'admin:core_team_change' team.pk %}">{{ team.name }}</a>
+    &rsaquo; Record a player change
+</div>
+{% endblock %}
+
+{% block content %}
+<p style="max-width:720px;">
+    Use this when a player can't finish the season and someone else takes over their spot.
+    Matches before the takeover date stay credited to the player who left; matches from that
+    date on go to the new player. The spot keeps its place in the schedule and standings.
+</p>
+<p style="max-width:720px;color:#666;">
+    Currently in this spot: <strong>{{ current_player|default:"nobody" }}</strong>.
+    If you already typed the new name over the old one, enter the new name as "taking over"
+    and the old name as "player who left".
+</p>
+
+<form method="post">
+    {% csrf_token %}
+    <fieldset class="module aligned">
+        <div class="form-row">
+            <label for="id_taking_over">Player taking over:</label>
+            <input type="text" id="id_taking_over" name="taking_over" value="{{ form_data.taking_over }}" required>
+        </div>
+        <div class="form-row">
+            <label for="id_left">Player who left:</label>
+            <input type="text" id="id_left" name="left" value="{{ form_data.left }}">
+            <div class="help">Only needed if the spot already shows the new player's name.</div>
+        </div>
+        <div class="form-row">
+            <label for="id_took_over_on">Took over on:</label>
+            <input type="date" id="id_took_over_on" name="took_over_on" value="{{ form_data.took_over_on }}" required>
+            <div class="help">Matches on or after this date count for the new player.</div>
+        </div>
+    </fieldset>
+    <div class="submit-row">
+        <input type="submit" class="default" value="Record change">
+        <a class="button" href="{% url 'admin:core_team_change' team.pk %}" style="margin-left:10px;">Cancel</a>
+    </div>
+</form>
+{% endblock %}

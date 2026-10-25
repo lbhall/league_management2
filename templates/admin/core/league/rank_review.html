@@ -61,7 +61,7 @@
             {% for row in rows %}
                 <tr class="{% if row.signal == 'up' %}rr-up{% elif row.signal == 'down' %}rr-down{% endif %}">
                     <td>{{ row.rank|default_if_none:"-" }}</td>
-                    <td><strong>{{ row.name }}</strong></td>
+                    <td><strong>{{ row.name }}</strong>{% if not row.active %} <span class="rr-muted">(left the league)</span>{% endif %}</td>
                     <td>{{ row.matches_won }}-{{ row.matches_lost }}</td>
                     <td>{{ row.games_won }}-{{ row.games_lost }}</td>
                     <td>{{ row.game_pct_label }}</td>

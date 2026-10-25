@@ -555,6 +555,7 @@ class VenueAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
 @admin.register(Team)
 class TeamAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
     form = TeamAdminForm
+    change_form_template = 'admin/core/team/change_form.html'
     inlines = [TeamPlayerInline]
     list_display = ('name', 'league', 'venue', 'captain', 'team_rank')
     search_fields = ('name',)
@@ -575,8 +576,73 @@ class TeamAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 self.admin_site.admin_view(self.league_options_view),
                 name='core_team_league_options',
             ),
+            path(
+                '<path:object_id>/player-change/',
+                self.admin_site.admin_view(self.player_change_view),
+                name='core_team_player_change',
+            ),
         ]
         return custom_urls + urls
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        if object_id:
+            team = self.get_queryset(request).filter(pk=object_id).first()
+            if team is not None and team.league.results_type == League.ResultsType.ONE_POCKET:
+                extra_context['show_player_change'] = True
+                extra_context['player_change_url'] = reverse('admin:core_team_player_change', args=[team.pk])
+        return super().changeform_view(request, object_id=object_id, form_url=form_url, extra_context=extra_context)
+
+    def player_change_view(self, request, object_id):
+        """One-pocket: record that someone else took over this spot."""
+        from datetime import date as date_type
+
+        from django.contrib import messages
+        from django.http import HttpResponseRedirect
+
+        from .player_change import PlayerChangeError, current_player, record_player_change
+
+        team = get_object_or_404(self.get_queryset(request), pk=object_id)
+        if team.league.results_type != League.ResultsType.ONE_POCKET:
+            messages.error(request, 'Player changes are only recorded for one-pocket leagues.')
+            return HttpResponseRedirect(reverse('admin:core_team_change', args=[team.pk]))
+
+        form_data = {'taking_over': '', 'left': '', 'took_over_on': ''}
+        if request.method == 'POST':
+            form_data = {
+                'taking_over': request.POST.get('taking_over', '').strip(),
+                'left': request.POST.get('left', '').strip(),
+                'took_over_on': request.POST.get('took_over_on', '').strip(),
+            }
+            try:
+                took_over_on = date_type.fromisoformat(form_data['took_over_on'])
+            except ValueError:
+                messages.error(request, 'Enter the takeover date.')
+            else:
+                try:
+                    old, new, reassigned = record_player_change(
+                        team, form_data['taking_over'], took_over_on, left=form_data['left'],
+                    )
+                except PlayerChangeError as exc:
+                    messages.error(request, str(exc))
+                else:
+                    who = f'{old.name} → {new.name}' if old else new.name
+                    messages.success(
+                        request,
+                        f'Recorded {who} from {took_over_on}; {reassigned} match result(s) re-credited.',
+                    )
+                    return HttpResponseRedirect(reverse('admin:core_team_change', args=[team.pk]))
+
+        occupant = current_player(team)
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'title': f'Record a player change — {team.name}',
+            'team': team,
+            'current_player': occupant.name if occupant else '',
+            'form_data': form_data,
+        }
+        return TemplateResponse(request, 'admin/core/team/player_change.html', context)
 
     def league_options_view(self, request):
         league_id = request.GET.get('league_id')

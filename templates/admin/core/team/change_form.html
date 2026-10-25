@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    {% if show_player_change and player_change_url %}
+      <li>
+        <a href="{{ player_change_url }}" class="historylink" style="background-color: #6f42c1; color: white !important;">🔁 Record a player change</a>
+      </li>
+    {% endif %}
+{% endblock %}
