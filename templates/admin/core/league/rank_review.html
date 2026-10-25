@@ -24,7 +24,7 @@
 
 {% block content %}
 <p style="color:#666;">
-    Who looks ready to move up a rank, and who may belong a rank lower, based on games won and lost
+    Who looks ready to move up a rank, and who may belong a rank lower, based on matches won and lost
     against each opponent's rank. "Giving weight" means the player was the higher rank and spotted
     balls; "getting weight" means they received the spot. Flags are suggestions, not changes.
 </p>
@@ -48,6 +48,7 @@
                 <th>Rank</th>
                 <th>Player</th>
                 <th>Matches</th>
+                <th>Match %</th>
                 <th>Games</th>
                 <th>Game %</th>
                 <th title="Player was the higher rank">Giving weight</th>
@@ -63,13 +64,14 @@
                     <td>{{ row.rank|default_if_none:"-" }}</td>
                     <td><strong>{{ row.name }}</strong>{% if not row.active %} <span class="rr-muted">(left the league)</span>{% endif %}</td>
                     <td>{{ row.matches_won }}-{{ row.matches_lost }}</td>
+                    <td><strong>{{ row.match_pct_label }}</strong></td>
                     <td>{{ row.games_won }}-{{ row.games_lost }}</td>
                     <td>{{ row.game_pct_label }}</td>
                     {% for split in row.split_cells %}
                         <td>
-                            {% if split.games_played %}
-                                {{ split.games_won }}-{{ split.games_lost }}
-                                <span class="rr-muted">({{ split.game_pct_label }})</span>
+                            {% if split.matches_played %}
+                                {{ split.matches_won }}-{{ split.matches_lost }}
+                                <span class="rr-muted">({{ split.match_pct_label }})</span>
                             {% else %}
                                 <span style="color:#999;">&mdash;</span>
                             {% endif %}
@@ -98,10 +100,10 @@
 <div class="module" style="margin-top:20px;">
     <h2>How the flags work</h2>
     <div style="padding:10px 12px;">
-        <p>A player needs at least <strong>{{ thresholds.min_games }}</strong> games before anything is flagged.</p>
+        <p>A player needs at least <strong>{{ thresholds.min_matches }}</strong> matches before anything is flagged. Verdicts use match results, which is what the standings rank on; in a race to 3 a dominant player still drops games.</p>
         <ul>
-            <li><strong>Consider moving up</strong> &mdash; rank below {{ thresholds.max_rank }}, winning <strong>{{ thresholds.up_pct }}</strong> or more of games, and at least 50% of games when giving weight.</li>
-            <li><strong>Consider moving down</strong> &mdash; rank above {{ thresholds.min_rank }}, winning <strong>{{ thresholds.down_pct }}</strong> or less of games, and 50% or less even when getting weight.</li>
+            <li><strong>Consider moving up</strong> &mdash; rank below {{ thresholds.max_rank }}, winning <strong>{{ thresholds.up_pct }}</strong> or more of matches, and at least half their matches when giving weight.</li>
+            <li><strong>Consider moving down</strong> &mdash; rank above {{ thresholds.min_rank }}, winning <strong>{{ thresholds.down_pct }}</strong> or less of matches, and half or fewer even when getting weight.</li>
         </ul>
         <p style="color:#666;">
             Once ball counts per game are recorded, this page will add spot-adjusted margins and a

@@ -10,12 +10,14 @@ shown on the page so they can be tuned by eye.
 from results.models import MatchResult
 from scheduling.models import Match, Season
 
-# Flag rules. A player needs a reasonable sample before anything is said.
-# The bands are deliberately wide while only game counts are recorded;
-# ball counts per game (planned) will let them tighten.
-MIN_GAMES = 12
-UP_GAME_PCT = 0.75     # winning this share of games or more
-DOWN_GAME_PCT = 0.25   # winning this share of games or less
+# Flag rules, judged on matches (what the standings rank on). In a race to
+# 3 a dominant player still drops games, so game percentage undersells them.
+# A player needs a reasonable sample before anything is said, and the bands
+# are deliberately wide while only game counts are recorded; ball counts
+# per game (planned) will let them tighten.
+MIN_MATCHES = 8
+UP_MATCH_PCT = 0.75     # winning this share of matches or more
+DOWN_MATCH_PCT = 0.25   # winning this share of matches or less
 MAX_RANK = 5
 MIN_RANK = 1
 
@@ -124,12 +126,17 @@ def build_rank_review(league, season):
         row['games_played'] = games
         row['matches_played'] = matches_played
         row['game_pct'] = _pct(row['games_won'], row['games_lost'])
+        row['match_pct'] = _pct(row['matches_won'], row['matches_lost'])
+        row['match_pct_label'] = _pct_label(row['match_pct'])
         row['avg_margin'] = (row['margin_total'] / matches_played) if matches_played else None
         row['game_pct_label'] = _pct_label(row['game_pct'])
         for split in row['splits'].values():
             split['games_played'] = split['games_won'] + split['games_lost']
             split['game_pct'] = _pct(split['games_won'], split['games_lost'])
             split['game_pct_label'] = _pct_label(split['game_pct'])
+            split['matches_played'] = split['matches_won'] + split['matches_lost']
+            split['match_pct'] = _pct(split['matches_won'], split['matches_lost'])
+            split['match_pct_label'] = _pct_label(split['match_pct'])
         row['split_cells'] = [row['splits'][key] for key in ('giving', 'even', 'getting')]
         row['signal'], row['reason'] = _signal(row)
         out.append(row)
@@ -137,7 +144,7 @@ def build_rank_review(league, season):
     out.sort(key=lambda r: (
         -(r['rank'] or 0),
         0 if r['active'] else 1,
-        -(r['game_pct'] if r['game_pct'] is not None else -1),
+        -(r['match_pct'] if r['match_pct'] is not None else -1),
         r['name'],
     ))
     return out
@@ -146,36 +153,37 @@ def build_rank_review(league, season):
 def _signal(row):
     """Return (state, reason) with state one of 'up', 'hold', 'down'."""
     rank = row['rank']
-    pct = row['game_pct']
-    if row['games_played'] < MIN_GAMES:
-        return 'hold', f'Not enough games yet ({row["games_played"]} of {MIN_GAMES})'
+    pct = row['match_pct']
+    played = row['matches_played']
+    if played < MIN_MATCHES:
+        return 'hold', f'Not enough matches yet ({played} of {MIN_MATCHES})'
     if rank is None or pct is None:
         return 'hold', 'No rank set'
 
     giving = row['splits']['giving']
     getting = row['splits']['getting']
 
-    if rank < MAX_RANK and pct >= UP_GAME_PCT:
-        if giving['games_played'] == 0 or giving['game_pct'] >= 0.5:
+    if rank < MAX_RANK and pct >= UP_MATCH_PCT:
+        if giving['matches_played'] == 0 or giving['match_pct'] >= 0.5:
             return 'up', (
-                f'Winning {pct:.0%} of games'
-                + (f' and {giving["game_pct"]:.0%} when giving weight' if giving['games_played'] else '')
+                f'Winning {pct:.0%} of matches'
+                + (f' and {giving["match_pct"]:.0%} when giving weight' if giving['matches_played'] else '')
             )
-        return 'hold', f'Winning {pct:.0%} overall but only {giving["game_pct"]:.0%} when giving weight'
+        return 'hold', f'Winning {pct:.0%} overall but only {giving["match_pct"]:.0%} when giving weight'
 
-    if rank > MIN_RANK and pct <= DOWN_GAME_PCT:
-        if getting['games_played'] == 0 or getting['game_pct'] <= 0.5:
+    if rank > MIN_RANK and pct <= DOWN_MATCH_PCT:
+        if getting['matches_played'] == 0 or getting['match_pct'] <= 0.5:
             return 'down', (
-                f'Winning only {pct:.0%} of games'
-                + (f', {getting["game_pct"]:.0%} even when getting weight' if getting['games_played'] else '')
+                f'Winning only {pct:.0%} of matches'
+                + (f', {getting["match_pct"]:.0%} even when getting weight' if getting['matches_played'] else '')
             )
-        return 'hold', f'Winning only {pct:.0%} overall but {getting["game_pct"]:.0%} when getting weight'
+        return 'hold', f'Winning only {pct:.0%} overall but {getting["match_pct"]:.0%} when getting weight'
 
-    if rank >= MAX_RANK and pct >= UP_GAME_PCT:
-        return 'hold', f'Winning {pct:.0%} of games at the top rank'
-    if rank <= MIN_RANK and pct <= DOWN_GAME_PCT:
-        return 'hold', f'Winning {pct:.0%} of games at the bottom rank'
-    return 'hold', f'Winning {pct:.0%} of games'
+    if rank >= MAX_RANK and pct >= UP_MATCH_PCT:
+        return 'hold', f'Winning {pct:.0%} of matches at the top rank'
+    if rank <= MIN_RANK and pct <= DOWN_MATCH_PCT:
+        return 'hold', f'Winning {pct:.0%} of matches at the bottom rank'
+    return 'hold', f'Winning {pct:.0%} of matches'
 
 
 def player_outlook(league, season, player_id):
