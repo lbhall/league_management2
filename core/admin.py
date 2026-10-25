@@ -253,6 +253,11 @@ class LeagueAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.financial_breakdown_view),
                 name='core_league_financial_breakdown',
             ),
+            path(
+                '<path:object_id>/rank-review/',
+                self.admin_site.admin_view(self.rank_review_view),
+                name='core_league_rank_review',
+            ),
         ]
         return custom_urls + urls
 
@@ -271,6 +276,9 @@ class LeagueAdmin(admin.ModelAdmin):
             extra_context['tournament_players_url'] = reverse('tournament_players')
             extra_context['show_tournament_players'] = not is_darts
 
+            extra_context['rank_review_url'] = reverse('admin:core_league_rank_review', args=[league.pk])
+            extra_context['show_rank_review'] = league.results_type == League.ResultsType.ONE_POCKET
+
         return super().changeform_view(
             request,
             object_id=object_id,
@@ -278,6 +286,49 @@ class LeagueAdmin(admin.ModelAdmin):
             extra_context=extra_context,
         )
 
+
+    def rank_review_view(self, request, object_id):
+        """One-pocket only: who looks ready to move up or down a rank."""
+        from django.contrib import messages
+        from django.http import HttpResponseRedirect
+
+        from .rank_review import (
+            DOWN_GAME_PCT, MAX_RANK, MIN_GAMES, MIN_RANK, UP_GAME_PCT,
+            build_rank_review, season_choices,
+        )
+
+        league = get_object_or_404(self.get_queryset(request), pk=object_id)
+        if league.results_type != League.ResultsType.ONE_POCKET:
+            messages.error(request, 'Rank review is only available for one-pocket leagues.')
+            return HttpResponseRedirect(reverse('admin:core_league_change', args=[league.pk]))
+
+        options = season_choices(league)
+        season = None
+        requested = request.GET.get('season')
+        if requested:
+            season = next((s for s in options if str(s.pk) == requested), None)
+        if season is None and options:
+            season = options[0]
+
+        rows = build_rank_review(league, season) if season else []
+
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'title': f'Rank review — {league.name}',
+            'league': league,
+            'season': season,
+            'season_options': options,
+            'rows': rows,
+            'thresholds': {
+                'min_games': MIN_GAMES,
+                'up_pct': f'{UP_GAME_PCT:.0%}',
+                'down_pct': f'{DOWN_GAME_PCT:.0%}',
+                'max_rank': MAX_RANK,
+                'min_rank': MIN_RANK,
+            },
+        }
+        return TemplateResponse(request, 'admin/core/league/rank_review.html', context)
 
     def financial_breakdown_view(self, request, object_id):
         league = get_object_or_404(League, pk=object_id)

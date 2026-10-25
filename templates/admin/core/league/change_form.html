@@ -12,4 +12,9 @@
         <a href="{{ tournament_players_url }}" class="historylink" style="background-color: #ffc107; color: black !important;">🏆 Tournament Players</a>
       </li>
     {% endif %}
+    {% if show_rank_review and rank_review_url %}
+      <li>
+        <a href="{{ rank_review_url }}" class="historylink" style="background-color: #6f42c1; color: white !important;">📈 Rank Review</a>
+      </li>
+    {% endif %}
 {% endblock %}
