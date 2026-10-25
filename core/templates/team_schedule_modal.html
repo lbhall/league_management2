@@ -15,12 +15,12 @@
             </div>
             <div class="modal-body">
                 {# --- headline: three equal cards --- #}
-                <div class="row g-3 mb-3">
-                    <div class="col-md-4">
+                <div class="row g-2 mb-3">
+                    <div class="col-4">
                         <div class="card h-100 text-center">
-                            <div class="card-body py-3" data-win-ring>
-                                <div class="small text-muted mb-1">Match win rate</div>
-                                <svg width="104" height="104" viewBox="0 0 120 120" role="img" aria-label="Win percentage {{ overall.pct_label }}">
+                            <div class="card-body p-2" data-win-ring>
+                                <div class="text-muted" style="font-size:0.75rem;">Win rate</div>
+                                <svg width="64" height="64" viewBox="0 0 120 120" role="img" aria-label="Win percentage {{ overall.pct_label }}">
                                     <circle cx="60" cy="60" r="45" fill="none" stroke="#e9ecef" stroke-width="12"></circle>
                                     {% if overall.pct %}
                                     <circle cx="60" cy="60" r="45" fill="none" stroke="#198754" stroke-width="12"
@@ -29,59 +29,60 @@
                                             transform="rotate(-90 60 60)"></circle>
                                     {% endif %}
                                     <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
-                                          font-size="26" font-weight="700" fill="#198754">{{ overall.pct_label }}</text>
+                                          font-size="30" font-weight="700" fill="#198754">{{ overall.pct_label }}</text>
                                 </svg>
-                                <div class="fw-semibold">{{ overall.wins }}-{{ overall.losses }} matches</div>
+                                <div class="fw-semibold" style="font-size:0.85rem;">{{ overall.wins }}-{{ overall.losses }}</div>
                                 {% if avg_margin %}
-                                    <div class="small text-muted" data-avg-margin>avg margin {{ avg_margin.label }} games</div>
+                                    <div class="text-muted" style="font-size:0.7rem;" data-avg-margin>margin {{ avg_margin.label }}</div>
                                 {% endif %}
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-4">
                         <div class="card h-100 text-center">
-                            <div class="card-body py-3 d-flex flex-column justify-content-center"
-                                 {% if rank_outlook %}data-rank-outlook="{{ rank_outlook.state }}"{% endif %}>
-                                <div class="small text-muted mb-1">Rank outlook</div>
+                            <div class="card-body p-2 d-flex flex-column justify-content-center"
+                                 {% if rank_outlook %}data-rank-outlook="{{ rank_outlook.state }}" title="{{ rank_outlook.reason }}"{% endif %}>
+                                <div class="text-muted" style="font-size:0.75rem;">Rank outlook</div>
                                 {% if rank_outlook %}
                                     {% if rank_outlook.state == 'up' %}
-                                        <svg width="56" height="56" viewBox="0 0 36 36" role="img" aria-label="Trending up" class="mx-auto">
+                                        <svg width="40" height="40" viewBox="0 0 36 36" role="img" aria-label="Trending up" class="mx-auto">
                                             <polyline points="8,24 18,12 28,24" fill="none" stroke="#198754" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
                                         </svg>
-                                        <div class="fw-semibold" style="color:#198754;">Trending up</div>
+                                        <div class="fw-semibold" style="color:#198754;font-size:0.85rem;">Trending up</div>
                                     {% elif rank_outlook.state == 'down' %}
-                                        <svg width="56" height="56" viewBox="0 0 36 36" role="img" aria-label="Trending down" class="mx-auto">
+                                        <svg width="40" height="40" viewBox="0 0 36 36" role="img" aria-label="Trending down" class="mx-auto">
                                             <polyline points="8,12 18,24 28,12" fill="none" stroke="#dc3545" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
                                         </svg>
-                                        <div class="fw-semibold" style="color:#dc3545;">Trending down</div>
+                                        <div class="fw-semibold" style="color:#dc3545;font-size:0.85rem;">Trending down</div>
                                     {% else %}
-                                        <svg width="56" height="56" viewBox="0 0 36 36" role="img" aria-label="Holding" class="mx-auto">
+                                        <svg width="40" height="40" viewBox="0 0 36 36" role="img" aria-label="Holding" class="mx-auto">
                                             <line x1="8" y1="18" x2="28" y2="18" stroke="#adb5bd" stroke-width="5" stroke-linecap="round"></line>
                                         </svg>
-                                        <div class="fw-semibold text-muted">Holding</div>
+                                        <div class="fw-semibold text-muted" style="font-size:0.85rem;">Holding</div>
                                     {% endif %}
-                                    <div class="small text-muted mt-1">{{ rank_outlook.reason }}</div>
+                                    {# The reason is too long for a phone-width card; show it from tablet up, keep it in the tooltip. #}
+                                    <div class="text-muted d-none d-md-block" style="font-size:0.7rem;">{{ rank_outlook.reason }}</div>
                                 {% else %}
-                                    <div class="text-muted">No active season</div>
+                                    <div class="text-muted" style="font-size:0.85rem;">No active season</div>
                                 {% endif %}
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-4">
                         <div class="card h-100 text-center">
-                            <div class="card-body py-3 d-flex flex-column justify-content-center" {% if next_match %}data-next-match{% endif %}>
-                                <div class="small text-muted mb-1">Next match</div>
+                            <div class="card-body p-2 d-flex flex-column justify-content-center" {% if next_match %}data-next-match{% endif %}>
+                                <div class="text-muted" style="font-size:0.75rem;">Next match</div>
                                 {% if next_match %}
-                                    <div class="fw-semibold">{{ next_match.date|date:"D M j" }}</div>
-                                    <div class="fs-5">vs {{ next_match.opponent }}{% if next_match.opponent_rank %} ({{ next_match.opponent_rank }}){% endif %}</div>
-                                    <div class="small text-muted">
+                                    <div class="fw-semibold" style="font-size:0.85rem;">{{ next_match.date|date:"M j" }}</div>
+                                    <div class="fw-semibold">vs {{ next_match.opponent }}{% if next_match.opponent_rank %} ({{ next_match.opponent_rank }}){% endif %}</div>
+                                    <div class="text-muted" style="font-size:0.7rem;">
                                         {% if next_match.race_label %}race {{ next_match.race_label }}{% endif %}
                                         {% if next_match.h2h %}{% if next_match.race_label %}&middot;{% endif %} all-time {{ next_match.h2h }}{% endif %}
                                     </div>
                                 {% else %}
-                                    <div class="text-muted">Nothing scheduled</div>
+                                    <div class="text-muted" style="font-size:0.85rem;">Nothing scheduled</div>
                                 {% endif %}
                             </div>
                         </div>
