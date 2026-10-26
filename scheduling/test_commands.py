@@ -154,3 +154,62 @@ class RestoreSeasonFromBackupCommandTests(TestCase):
             call_command('restore_season_from_backup', db=self.db_path, league=self.league.name, season_id=99)
         with self.assertRaises(CommandError):
             call_command('restore_season_from_backup', db=self.db_path + '.nope', league=self.league.name, season_id=12)
+
+
+class LinkArchivedPlayersCommandTests(TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from core.models import Player
+        from scheduling.models import ArchivedPlayer, ArchivedSeason
+
+        self.league = make_league(name='Link League', results_type='8_ball', team_size=5)
+        self.venue = make_venue(self.league)
+        self.team, = make_teams(self.league, self.venue, 1)
+        self.wayman = Player.objects.create(league=self.league, name='Wayman', team=self.team)
+        self.other = Player.objects.create(league=self.league, name='Todd', team=self.team)
+        self.old = ArchivedSeason.objects.create(league=self.league, name='2023', results_type='8_ball', team_size=5)
+        self.older = ArchivedSeason.objects.create(league=self.league, name='2024', results_type='8_ball', team_size=5)
+        self.row1 = ArchivedPlayer.objects.create(archived_season=self.old, player_name='Wayman Biles', games_won=30, games_lost=10)
+        self.row2 = ArchivedPlayer.objects.create(archived_season=self.older, player_name='Wayman Biles', games_won=20, games_lost=20)
+        self.sub = ArchivedPlayer.objects.create(archived_season=self.older, player_name='Wayman (SUB)', games_won=5, games_lost=5)
+        self.unrelated = ArchivedPlayer.objects.create(archived_season=self.old, player_name='Todd Gurka', games_won=1)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.csv_path = str(Path(self.tmp.name) / 'links.csv')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write(self, text):
+        with open(self.csv_path, 'w', encoding='utf-8', newline='') as fh:
+            fh.write(text)
+
+    def test_dry_run_links_nothing(self):
+        self._write('archived_name,live_name,apply,note\nWayman Biles,Wayman,yes,\n')
+        call_command('link_archived_players', league=self.league.name, csv=self.csv_path)
+        self.row1.refresh_from_db()
+        self.assertIsNone(self.row1.player)
+
+    def test_apply_links_every_archive_row_with_that_name(self):
+        self._write('archived_name,live_name,apply,note\nWayman Biles,Wayman,yes,\nWayman (SUB),Wayman,yes,\nTodd Gurka,Todd,no,CHECK\n')
+        call_command('link_archived_players', league=self.league.name, csv=self.csv_path, apply=True)
+        for row in (self.row1, self.row2, self.sub):
+            row.refresh_from_db()
+            self.assertEqual(row.player, self.wayman)
+        self.unrelated.refresh_from_db()
+        self.assertIsNone(self.unrelated.player)  # apply=no is skipped
+        rows, totals = __import__('scheduling.services', fromlist=['x']).build_player_season_history(self.wayman)
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(totals['games_won'], 55)
+
+    def test_errors_for_unknown_or_ambiguous_live_name(self):
+        from core.models import Player
+        self._write('archived_name,live_name,apply,note\nWayman Biles,Nobody,yes,\n')
+        with self.assertRaises(CommandError):
+            call_command('link_archived_players', league=self.league.name, csv=self.csv_path, apply=True)
+        Player.objects.create(league=self.league, name='Wayman', team=self.team)
+        self._write('archived_name,live_name,apply,note\nWayman Biles,Wayman,yes,\n')
+        with self.assertRaises(CommandError):
+            call_command('link_archived_players', league=self.league.name, csv=self.csv_path, apply=True)
+        self.row1.refresh_from_db()
+        self.assertIsNone(self.row1.player)
