@@ -1185,6 +1185,25 @@ def build_player_vs_team_stats(player, active_season, through_week=None):
     return sorted(rows, key=lambda row: row['week_date'])
 
 
+def player_league_rank(all_player_stats, player):
+    """Where ``player`` stands this season among players of the same gender
+    who have played, ranked like the home page's Top 5 lists (wins, then
+    tie-breaker, then percentage) with equal records sharing a rank."""
+    group = [s for s in all_player_stats if s['male'] == player.male and s['games_played'] > 0]
+    if not any(s['player_id'] == player.id for s in group):
+        return None
+    rank = 0
+    prev_record = None
+    for index, stat in enumerate(group, start=1):
+        record = (stat['wins'], stat['losses'])
+        if record != prev_record:
+            rank = index
+            prev_record = record
+        if stat['player_id'] == player.id:
+            return {'rank': rank, 'of': len(group), 'group': 'men' if player.male else 'women'}
+    return None
+
+
 def build_player_season_totals(matchup_rows):
     """Headline numbers for a pool player's popup, summed from the per-match rows."""
     wins = sum(row['wins'] for row in matchup_rows)
@@ -1244,6 +1263,10 @@ def player_scores_modal(request, player_id):
 
         season_history, career_totals = build_player_season_history(player)
         season_totals = build_player_season_totals(matchup_rows)
+        if active_season:
+            season_totals['league_rank'] = player_league_rank(
+                build_player_stats(active_league, active_season, through_week=through_week), player,
+            )
 
     html = render_to_string(
         'player_scores_modal.html',

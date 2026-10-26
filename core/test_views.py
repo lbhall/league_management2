@@ -583,13 +583,37 @@ class EightBallViewsTests(ViewTestCase):
         for label, value in (('Wins', 4), ('Losses', 2), ('3/0s', 1), ('8 on break', 1), ('Run outs', 1)):
             self.assertRegex(html, rf'{label}</div>\s*<div[^>]*>{value}<')
 
+    def test_player_scores_modal_shows_league_rank_within_gender(self):
+        # Women: Alice 3-0 and Cara 1-2 -> Alice #1 of 2, Cara #2 of 2. Men: Bob 0-3 -> #1 of 1.
+        cara = Player.objects.create(league=self.league, name='Cara', team=self.away_team, male=False)
+        PlayerMatchResult.objects.create(
+            match_result=self.match_result, player=cara, represented_team=self.away_team, wins=1,
+        )
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            alice = self.client.get(reverse('player_scores_modal', args=[self.home_player.id])).json()['html']
+            cara_html = self.client.get(reverse('player_scores_modal', args=[cara.id])).json()['html']
+            bob = self.client.get(reverse('player_scores_modal', args=[self.away_player.id])).json()['html']
+        self.assertRegex(alice, r'#1</div>\s*<div[^>]*>of 2 women')
+        self.assertRegex(cara_html, r'#2</div>\s*<div[^>]*>of 2 women')
+        self.assertRegex(bob, r'#1</div>\s*<div[^>]*>of 1 men')
+
+    def test_player_scores_modal_ties_share_a_rank(self):
+        dana = Player.objects.create(league=self.league, name='Dana', team=self.away_team, male=False)
+        PlayerMatchResult.objects.create(
+            match_result=self.match_result, player=dana, represented_team=self.away_team, wins=3,
+        )
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            html = self.client.get(reverse('player_scores_modal', args=[dana.id])).json()['html']
+        self.assertRegex(html, r'#1</div>\s*<div[^>]*>of 2 women')
+
     def test_player_scores_modal_without_games_shows_dash(self):
         newcomer = Player.objects.create(league=self.league, name='Cara', team=self.away_team, male=False)
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             html = self.client.get(reverse('player_scores_modal', args=[newcomer.id])).json()['html']
-        # No games yet -> no percentage, but the cards still render with zeros.
+        # No games yet -> no percentage and no rank, but the cards still render with zeros.
         self.assertIn('>-<', html)
         self.assertIn('data-win-ring', html)
+        self.assertNotIn('>#1<', html)
 
     def test_player_scores_modal_shows_linked_past_seasons(self):
         old = ArchivedSeason.objects.create(
