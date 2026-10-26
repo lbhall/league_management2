@@ -191,16 +191,18 @@ class LinkArchivedPlayersCommandTests(TestCase):
         self.assertIsNone(self.row1.player)
 
     def test_apply_links_every_archive_row_with_that_name(self):
-        self._write('archived_name,live_name,apply,note\nWayman Biles,Wayman,yes,\nWayman (SUB),Wayman,yes,\nTodd Gurka,Todd,no,CHECK\n')
+        self._write('archived_name,live_name,apply,note\nWayman Biles,Wayman,yes,\nTodd Gurka,Todd,no,CHECK\n')
         call_command('link_archived_players', league=self.league.name, csv=self.csv_path, apply=True)
-        for row in (self.row1, self.row2, self.sub):
+        for row in (self.row1, self.row2):
             row.refresh_from_db()
             self.assertEqual(row.player, self.wayman)
+        self.sub.refresh_from_db()
+        self.assertIsNone(self.sub.player)  # the sub record is a different player
         self.unrelated.refresh_from_db()
         self.assertIsNone(self.unrelated.player)  # apply=no is skipped
         rows, totals = __import__('scheduling.services', fromlist=['x']).build_player_season_history(self.wayman)
-        self.assertEqual(len(rows), 3)
-        self.assertEqual(totals['games_won'], 55)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(totals['games_won'], 50)
 
     def test_refuses_to_cross_the_sub_line(self):
         from core.models import Player
