@@ -9,6 +9,8 @@ archive of the league, gets linked.
 CSV columns: archived_name, live_name, apply, note
   - apply must be "yes" for a row to be used; anything else is skipped so
     uncertain matches can be kept in the file for later review.
+  - A sub record ("Wayman (SUB)") is a separate player from the regular
+    one ("Wayman"), so a mapping may never cross that line.
 
 Dry run (reports, changes nothing):
     python manage.py link_archived_players --league "EMC Fun Pool League" \\
@@ -18,12 +20,17 @@ Apply:
         --csv data/emc_archived_player_links.csv --apply
 """
 import csv
+import re
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from core.models import League, Player
 from scheduling.models import ArchivedPlayer
+
+
+def is_sub(name):
+    return bool(re.search(r'\(\s*sub\s*\)', name, re.I))
 
 
 class Command(BaseCommand):
@@ -64,6 +71,11 @@ class Command(BaseCommand):
                 continue
             if (row['apply'] or '').strip().lower() != 'yes':
                 skipped.append(archived_name)
+                continue
+            if is_sub(archived_name) != is_sub(live_name):
+                problems.append(
+                    f'"{archived_name}" -> "{live_name}": a (SUB) record and a regular player are kept separate'
+                )
                 continue
             matches = players_by_name.get(live_name, [])
             if len(matches) != 1:

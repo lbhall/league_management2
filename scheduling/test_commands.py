@@ -202,6 +202,19 @@ class LinkArchivedPlayersCommandTests(TestCase):
         self.assertEqual(len(rows), 3)
         self.assertEqual(totals['games_won'], 55)
 
+    def test_refuses_to_cross_the_sub_line(self):
+        from core.models import Player
+        Player.objects.create(league=self.league, name='Wayman (SUB)', team=None)
+        self._write('archived_name,live_name,apply,note\nWayman Biles,Wayman,yes,\nWayman (SUB),Wayman,yes,\n')
+        with self.assertRaises(CommandError):
+            call_command('link_archived_players', league=self.league.name, csv=self.csv_path, apply=True)
+        self.row1.refresh_from_db()
+        self.assertIsNone(self.row1.player)  # nothing applied when any row is refused
+        self._write('archived_name,live_name,apply,note\nWayman (SUB),Wayman (SUB),yes,\n')
+        call_command('link_archived_players', league=self.league.name, csv=self.csv_path, apply=True)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.player.name, 'Wayman (SUB)')
+
     def test_errors_for_unknown_or_ambiguous_live_name(self):
         from core.models import Player
         self._write('archived_name,live_name,apply,note\nWayman Biles,Nobody,yes,\n')
