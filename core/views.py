@@ -1039,6 +1039,8 @@ def team_detail(request, team_id):
                 opponent = week_match.away_team if is_home else week_match.home_team
 
                 result_label = ''
+                outcome = ''
+                team_games_won = opponent_games_won = None
                 match_detail_rows = []
 
                 if hasattr(week_match, 'result'):
@@ -1084,6 +1086,12 @@ def team_detail(request, team_id):
                         result_label = ''
                     else:
                         result_label = f'{team_games_won}-{opponent_games_won}'
+                        if team_games_won > opponent_games_won:
+                            outcome = 'won'
+                        elif team_games_won < opponent_games_won:
+                            outcome = 'lost'
+                        else:
+                            outcome = 'tied'
 
                 team_schedule.append({
                     'match_id': week_match.id,
@@ -1092,6 +1100,9 @@ def team_detail(request, team_id):
                     'opponent': opponent,
                     'location': week_match.location,
                     'result_label': result_label,
+                    'outcome': outcome,
+                    'team_score': team_games_won,
+                    'opponent_score': opponent_games_won,
                     'match_detail_rows': match_detail_rows,
                     'is_bye': False,
                     'is_holiday': False,
@@ -1104,6 +1115,7 @@ def team_detail(request, team_id):
                     'opponent': 'Bye',
                     'location': '',
                     'result_label': '',
+                    'outcome': '',
                     'match_detail_rows': [],
                     'is_bye': True,
                     'is_holiday': is_holiday_week,

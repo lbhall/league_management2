@@ -542,6 +542,18 @@ class EightBallViewsTests(ViewTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Alice')
 
+    def test_team_detail_spells_out_the_result_from_each_side(self):
+        # Alice (home) won 3-0 for Home Team; Bob lost 0-3 for Away Team.
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
+            home_page = self.client.get(reverse('team_detail', args=[self.home_team.id])).content.decode()
+            away_page = self.client.get(reverse('team_detail', args=[self.away_team.id])).content.decode()
+        self.assertIn('Home Team 3, Away Team 0', home_page)
+        self.assertIn('>Won<', home_page)
+        self.assertNotIn('>Lost<', home_page)
+        self.assertIn('Away Team 0, Home Team 3', away_page)
+        self.assertIn('>Lost<', away_page)
+        self.assertNotIn('>Won<', away_page)
+
     def test_player_stats_page_includes_runouts_and_eights(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('player_stats'))

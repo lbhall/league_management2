@@ -181,6 +181,13 @@
                                                     >
                                                         {{ entry.result_label }}
                                                     </a>
+                                                    {% if entry.outcome == 'won' %}
+                                                        <span class="badge bg-success ms-1">Won</span>
+                                                    {% elif entry.outcome == 'lost' %}
+                                                        <span class="badge bg-danger ms-1">Lost</span>
+                                                    {% elif entry.outcome == 'tied' %}
+                                                        <span class="badge bg-secondary ms-1">Tied</span>
+                                                    {% endif %}
                                                 {% else %}
                                                     No Result
                                                 {% endif %}
@@ -217,7 +224,21 @@
                     <div class="modal-body">
                         <p><strong>Week:</strong> {{ entry.week }}</p>
                         <p><strong>Location:</strong> {{ entry.location }}</p>
-                        <p><strong>Result:</strong> {{ entry.result_label }}</p>
+                        <p>
+                            <strong>Result:</strong>
+                            {% if entry.result_label %}
+                                {{ team.name }} {{ entry.team_score }}, {{ entry.opponent.name }} {{ entry.opponent_score }}
+                                {% if entry.outcome == 'won' %}
+                                    <span class="badge bg-success ms-1">Won</span>
+                                {% elif entry.outcome == 'lost' %}
+                                    <span class="badge bg-danger ms-1">Lost</span>
+                                {% elif entry.outcome == 'tied' %}
+                                    <span class="badge bg-secondary ms-1">Tied</span>
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </p>
 
                         {% if entry.match_detail_rows %}
                             {% regroup entry.match_detail_rows by is_home as team_results %}
