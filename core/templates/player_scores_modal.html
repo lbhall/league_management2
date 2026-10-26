@@ -26,7 +26,7 @@
                     {% endif %}
                 {% elif season_totals %}
                     {# --- headline: this season's totals --- #}
-                    <div class="row row-cols-3 row-cols-sm-6 g-2 mb-3 text-center">
+                    <div class="row row-cols-4 row-cols-md-7 g-2 mb-3 text-center">
                         <div class="col">
                             <div class="card h-100">
                                 <div class="card-body p-2" data-win-ring>
@@ -42,6 +42,19 @@
                                         <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
                                               font-size="30" font-weight="700" fill="#198754">{{ season_totals.pct_label }}</text>
                                     </svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card h-100">
+                                <div class="card-body p-2 d-flex flex-column justify-content-center" data-league-rank>
+                                    <div class="text-muted" style="font-size:0.75rem;">Rank</div>
+                                    {% if season_totals.league_rank %}
+                                        <div class="fw-bold" style="font-size:1.6rem;line-height:1.1;">#{{ season_totals.league_rank.rank }}</div>
+                                        <div class="text-muted" style="font-size:0.7rem;">of {{ season_totals.league_rank.of }} {{ season_totals.league_rank.group }}</div>
+                                    {% else %}
+                                        <div class="fw-bold" style="font-size:1.6rem;line-height:1.1;">-</div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
