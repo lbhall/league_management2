@@ -1,0 +1,60 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Clean up subs | {{ site_title|default:"Django site admin" }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='core' %}">Core</a>
+    &rsaquo; <a href="{% url 'admin:core_league_changelist' %}">Leagues</a>
+    &rsaquo; <a href="{{ change_url }}">{{ league.name }}</a>
+    &rsaquo; Clean up subs
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <p>
+        This removes player records whose name contains <strong>(SUB)</strong>, in any mix of
+        upper and lower case, from <strong>{{ league.name }}</strong>.
+        A sub is only removed when it is off every team roster and has no match scores,
+        tournament entries or scoring records, so no results are lost.
+        Past-season archive rows keep the sub's name but lose the link to the removed player.
+    </p>
+
+    <h2>Will be removed ({{ removable|length }})</h2>
+    {% if removable %}
+        <ul data-sub-removable>
+            {% for entry in removable %}
+                <li>{{ entry.player.name }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No sub players can be removed.</p>
+    {% endif %}
+
+    {% if kept %}
+        <h2>Kept ({{ kept|length }})</h2>
+        <ul data-sub-kept>
+            {% for entry in kept %}
+                <li>{{ entry.player.name }}: {{ entry.reasons|join:", " }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if removable %}
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="confirm" value="yes">
+            <p>This can't be undone.</p>
+            <div class="submit-row">
+                <input type="submit" class="button" style="background-color: #dc3545; color: white;"
+                       value="Yes, remove {{ removable|length }} sub player{{ removable|length|pluralize }}">
+                <a href="{{ change_url }}" class="button cancel-link">No, take me back</a>
+            </div>
+        </form>
+    {% else %}
+        <p><a href="{{ change_url }}" class="button cancel-link">Back to {{ league.name }}</a></p>
+    {% endif %}
+</div>
+{% endblock %}

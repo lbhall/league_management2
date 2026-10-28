@@ -17,4 +17,9 @@
         <a href="{{ rank_review_url }}" class="historylink" style="background-color: #6f42c1; color: white !important;">📈 Rank Review</a>
       </li>
     {% endif %}
+    {% if show_cleanup_subs and cleanup_subs_url %}
+      <li>
+        <a href="{{ cleanup_subs_url }}" class="historylink" style="background-color: #dc3545; color: white !important;">🧹 Clean Up Subs</a>
+      </li>
+    {% endif %}
 {% endblock %}
