@@ -338,3 +338,91 @@ class FailedLoginAdminTests(CoreAdminTestCase):
         response = self.client.get(reverse('admin:core_failedlogin_changelist'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'baduser')
+
+
+class SubCleanupTests(CoreAdminTestCase):
+    def setUp(self):
+        super().setUp()
+        self.regular = Player.objects.create(league=self.league, name='Wayman', team=self.team)
+        # Leftover subs: off every roster, no scores -> removable. Name variants all count.
+        self.loose = [
+            Player.objects.create(league=self.league, name=name)
+            for name in ('Adam (SUB)', 'Beth (sub)', 'Cal (Sub)', 'Wendell(SUB)', 'Dee ( sub )')
+        ]
+        # Still on a roster -> kept.
+        self.rostered = Player.objects.create(league=self.league, name='Eve (SUB)', team=self.team)
+        # Has a match score (deleting would delete it) -> kept.
+        self.scored = Player.objects.create(league=self.league, name='Fay (SUB)')
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ACTIVE)
+        week = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        other_home = Team.objects.create(league=self.league, venue=self.venue, name='Team C')
+        match = Match.objects.create(week=week, home_team=other_home, away_team=self.team)
+        result = MatchResult.objects.create(match=match)
+        PlayerMatchResult.objects.create(match_result=result, player=self.scored, represented_team=self.team, wins=2)
+        # Another league's sub is never touched.
+        self.other_sub = Player.objects.create(league=self.other_league, name='Gus (SUB)')
+        # Names that merely contain "sub" are not subs.
+        self.lookalike = Player.objects.create(league=self.league, name='Subaru Sam')
+        self.url = reverse('admin:core_league_cleanup_subs', args=[self.league.pk])
+
+    def test_is_sub_matches_any_case_and_spacing(self):
+        from core.sub_cleanup import is_sub
+        for name in ('Adam (SUB)', 'Adam (sub)', 'Adam (Sub)', 'Adam(SUB)', 'Adam ( sub )'):
+            self.assertTrue(is_sub(name), name)
+        for name in ('Adam', 'Subaru Sam', 'Adam SUB', 'Adam [sub]'):
+            self.assertFalse(is_sub(name), name)
+
+    def test_button_on_league_page(self):
+        self.login_as_superuser()
+        response = self.client.get(reverse('admin:core_league_change', args=[self.league.pk]))
+        self.assertContains(response, 'Clean Up Subs')
+        self.assertContains(response, self.url)
+
+    def test_confirmation_page_lists_but_deletes_nothing(self):
+        self.login_as_superuser()
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        for player in self.loose:
+            self.assertIn(player.name, html)
+        self.assertIn('Eve (SUB): on the Team A roster', html)
+        self.assertRegex(html, r'Fay \(SUB\): 1 player match results')
+        self.assertNotIn('Gus (SUB)', html)
+        self.assertNotIn('Subaru Sam', html)
+        self.assertIn('Yes, remove 5 sub players', html)
+        self.assertEqual(Player.objects.filter(league=self.league).count(), 9)
+
+    def test_confirmed_post_removes_only_the_safe_subs(self):
+        self.login_as_superuser()
+        response = self.client.post(self.url, {'confirm': 'yes'}, follow=True)
+        self.assertContains(response, 'Removed 5 sub player(s)')
+        remaining = set(Player.objects.filter(league=self.league).values_list('name', flat=True))
+        self.assertEqual(remaining, {'Wayman', 'Eve (SUB)', 'Fay (SUB)', 'Subaru Sam'})
+        self.assertTrue(Player.objects.filter(pk=self.other_sub.pk).exists())
+        self.assertEqual(PlayerMatchResult.objects.filter(player=self.scored).count(), 1)
+
+    def test_post_without_confirmation_removes_nothing(self):
+        self.login_as_superuser()
+        self.client.post(self.url, {})
+        self.assertEqual(Player.objects.filter(league=self.league).count(), 9)
+
+    def test_scoped_staff_can_clean_only_their_own_league(self):
+        self.make_scoped_staff()
+        response = self.client.post(self.url, {'confirm': 'yes'})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Player.objects.filter(pk=self.loose[0].pk).exists())
+
+        other_url = reverse('admin:core_league_cleanup_subs', args=[self.other_league.pk])
+        response = self.client.post(other_url, {'confirm': 'yes'})
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Player.objects.filter(pk=self.other_sub.pk).exists())
+
+    def test_staff_without_delete_permission_is_refused(self):
+        from django.contrib.auth.models import Permission
+        staff = self.make_scoped_staff()
+        staff.user_permissions.remove(Permission.objects.get(codename='delete_player'))
+        response = self.client.post(self.url, {'confirm': 'yes'})
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Player.objects.filter(pk=self.loose[0].pk).exists())
+        page = self.client.get(reverse('admin:core_league_change', args=[self.league.pk]))
+        self.assertNotContains(page, 'Clean Up Subs')

@@ -258,6 +258,11 @@ class LeagueAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.rank_review_view),
                 name='core_league_rank_review',
             ),
+            path(
+                '<path:object_id>/cleanup-subs/',
+                self.admin_site.admin_view(self.cleanup_subs_view),
+                name='core_league_cleanup_subs',
+            ),
         ]
         return custom_urls + urls
 
@@ -279,6 +284,9 @@ class LeagueAdmin(admin.ModelAdmin):
             extra_context['rank_review_url'] = reverse('admin:core_league_rank_review', args=[league.pk])
             extra_context['show_rank_review'] = league.results_type == League.ResultsType.ONE_POCKET
 
+            extra_context['cleanup_subs_url'] = reverse('admin:core_league_cleanup_subs', args=[league.pk])
+            extra_context['show_cleanup_subs'] = request.user.has_perm('core.delete_player')
+
         return super().changeform_view(
             request,
             object_id=object_id,
@@ -286,6 +294,48 @@ class LeagueAdmin(admin.ModelAdmin):
             extra_context=extra_context,
         )
 
+
+    def cleanup_subs_view(self, request, object_id):
+        """Remove leftover (SUB) players from a league, after a confirmation page.
+
+        GET shows what would be removed and what is kept (and why); only a POST
+        from that page deletes anything.
+        """
+        from django.contrib import messages
+        from django.core.exceptions import PermissionDenied
+        from django.http import HttpResponseRedirect
+
+        from .sub_cleanup import plan_sub_cleanup, remove_subs
+
+        league = get_object_or_404(self.get_queryset(request), pk=object_id)
+        if not request.user.has_perm('core.delete_player'):
+            raise PermissionDenied
+        change_url = reverse('admin:core_league_change', args=[league.pk])
+
+        if request.method == 'POST':
+            if request.POST.get('confirm') != 'yes':
+                return HttpResponseRedirect(change_url)
+            names = remove_subs(league)
+            if names:
+                messages.success(
+                    request,
+                    f'Removed {len(names)} sub player(s) from {league.name}: {", ".join(names)}.',
+                )
+            else:
+                messages.info(request, f'No sub players needed removing from {league.name}.')
+            return HttpResponseRedirect(change_url)
+
+        removable, kept = plan_sub_cleanup(league)
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'title': f'Clean up subs — {league.name}',
+            'league': league,
+            'removable': removable,
+            'kept': kept,
+            'change_url': change_url,
+        }
+        return TemplateResponse(request, 'admin/core/league/cleanup_subs.html', context)
 
     def rank_review_view(self, request, object_id):
         """One-pocket only: who looks ready to move up or down a rank."""
