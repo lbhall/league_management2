@@ -388,6 +388,13 @@ FLAT_PAYOUTS = {
     7: 20,
     8: 20,
 }
+# One-pocket singles pay the top 4 only, with no flat places.
+SINGLES_PAYOUT_PERCENTAGES = {
+    1: 0.40,
+    2: 0.30,
+    3: 0.20,
+    4: 0.10,
+}
 LEAGUE_TOURNAMENT_CONTRIBUTION = 300
 PER_PLAYER_TOURNAMENT_CONTRIBUTION = 8
 
