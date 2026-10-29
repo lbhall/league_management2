@@ -165,6 +165,15 @@ class SinglesTournamentTests(TestCase):
         self.assertEqual(payload['teams'], [{'name': 'Jim'}, {'name': 'Abel'}, {'name': 'Lupe'}])
         self.assertEqual(payload['entry_fee'], '20')
 
+        # Pays the top 4 only, 40/30/20/10, with no flat places.
+        payouts = [json.loads(c.args[0].data) for c in mock_urlopen.call_args_list[2:]]
+        self.assertEqual(payouts, [
+            {'place': 1, 'payout_type': 'percentage', 'amount': '40'},
+            {'place': 2, 'payout_type': 'percentage', 'amount': '30'},
+            {'place': 3, 'payout_type': 'percentage', 'amount': '20'},
+            {'place': 4, 'payout_type': 'percentage', 'amount': '10'},
+        ])
+
     @patch('tournaments.views.urllib.request.urlopen')
     def test_blank_fees_default_to_twenty_entry_and_nothing_added(self, mock_urlopen):
         self.enter('Jim', 'Abel')

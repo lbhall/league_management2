@@ -27,6 +27,7 @@ from .bracket import (
     _sync_tournament_completion,
     PAYOUT_PERCENTAGES,
     FLAT_PAYOUTS,
+    SINGLES_PAYOUT_PERCENTAGES,
 )
 from core.views import ONE_POCKET_COMPLETE_SCORE, get_active_league, get_active_season
 
@@ -707,16 +708,21 @@ def create_readysettourney_tournament(request):
     tournament_url = data.get('url')
     tournament_id = data.get('id')
 
+    if singles:
+        percentages, flat_payouts = SINGLES_PAYOUT_PERCENTAGES, {}
+    else:
+        percentages, flat_payouts = PAYOUT_PERCENTAGES, FLAT_PAYOUTS
+
     payout_errors = []
     if tournament_id:
-        for place, pct in PAYOUT_PERCENTAGES.items():
+        for place, pct in percentages.items():
             try:
                 _post_readysettourney_payout(api_token, tournament_id, place, 'percentage', str(round(pct * 100)))
             except urllib.error.HTTPError as e:
                 payout_errors.append(f"place {place}: {e.code}")
             except urllib.error.URLError as e:
                 payout_errors.append(f"place {place}: {e.reason}")
-        for place, amount in FLAT_PAYOUTS.items():
+        for place, amount in flat_payouts.items():
             try:
                 _post_readysettourney_payout(api_token, tournament_id, place, 'flat', str(amount))
             except urllib.error.HTTPError as e:
