@@ -63,6 +63,15 @@ def _is_singles(league):
     return league.results_type == League.ResultsType.ONE_POCKET
 
 
+def _default_fees(league):
+    """(entry fee, added money) the ReadySetTourney form starts with, as strings.
+    One-pocket singles are $20 to enter with nothing added; 8-ball doubles
+    are $16 a team plus the league's tournament target."""
+    if _is_singles(league):
+        return '20', '0'
+    return '16', str(league.tournament_target)
+
+
 def _players_url(league):
     return f"{reverse('tournament_players')}?league={league.pk}"
 
@@ -278,8 +287,8 @@ def tournament_players(request):
         'paid_player_ids': paid_player_ids,
         'today': timezone.localdate(),
         'default_tournament_name': default_tournament_name,
-        'default_added_money': active_league.tournament_target,
     }
+    context['default_entry_fee'], context['default_added_money'] = _default_fees(active_league)
 
     if singles:
         records = _one_pocket_records(active_season)
@@ -656,14 +665,9 @@ def create_readysettourney_tournament(request):
         if value:
             payload[field] = value
 
-    entry_fee = (request.POST.get('entry_fee') or '').strip() or '16'
-    payload['entry_fee'] = entry_fee
-
-    added_money = (request.POST.get('added_money') or '').strip()
-    if added_money:
-        payload['added_money'] = added_money
-    else:
-        payload['added_money'] = str(active_league.tournament_target)
+    default_entry_fee, default_added_money = _default_fees(active_league)
+    payload['entry_fee'] = (request.POST.get('entry_fee') or '').strip() or default_entry_fee
+    payload['added_money'] = (request.POST.get('added_money') or '').strip() or default_added_money
 
     venue_id = (request.POST.get('venue_id') or '').strip()
     if venue_id:

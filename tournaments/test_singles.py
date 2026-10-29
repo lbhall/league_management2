@@ -122,6 +122,8 @@ class SinglesTournamentTests(TestCase):
         self.assertEqual((entrants[3].total_wins, entrants[3].total_losses), (0, 2))
         self.assertContains(response, 'Create on ReadySetTourney')
         self.assertContains(response, 'One Pocket')
+        self.assertContains(response, 'name="entry_fee" class="form-control" step="0.01" min="0" value="20"')
+        self.assertContains(response, 'name="added_money" class="form-control" step="0.01" min="0" value="0"')
 
     def test_adds_only_this_leagues_players(self):
         other = make_league(name='Other', team_size=5, results_type=League.ResultsType.EIGHT_BALL)
@@ -162,3 +164,16 @@ class SinglesTournamentTests(TestCase):
         self.assertEqual(payload['format'], 'double_elim')
         self.assertEqual(payload['teams'], [{'name': 'Jim'}, {'name': 'Abel'}, {'name': 'Lupe'}])
         self.assertEqual(payload['entry_fee'], '20')
+
+    @patch('tournaments.views.urllib.request.urlopen')
+    def test_blank_fees_default_to_twenty_entry_and_nothing_added(self, mock_urlopen):
+        self.enter('Jim', 'Abel')
+        mock_urlopen.side_effect = [
+            make_response({'token': 'abc123'}),
+            make_response({'id': 7, 'url': 'http://readysettourney.example/t/7'}),
+        ] + [make_response({}) for _ in range(8)]
+
+        with self.settings(ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret'):
+            self.client.post(self.send_url, {'entry_fee': '', 'added_money': ''})
+        payload = json.loads(mock_urlopen.call_args_list[1].args[0].data)
+        self.assertEqual((payload['entry_fee'], payload['added_money']), ('20', '0'))
