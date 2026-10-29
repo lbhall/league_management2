@@ -190,8 +190,24 @@
             margin: 0 0 20px;
         }
 
+        /* The stock admin pins each li to 1rem tall, so the taller
+           start-date dropdown pushed Recreate Schedule below the rest. */
         .object-tools li {
+            display: flex;
+            align-items: center;
+            height: auto;
             margin-left: 0;
+        }
+
+        .object-tools form {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+        }
+
+        .object-tools .button {
+            margin: 0;
         }
 
         .schedule-filter-bar {
@@ -232,7 +248,7 @@
     <ul class="object-tools">
         {% if start_date_choices and recreate_schedule_url %}
             <li>
-                <form action="{{ recreate_schedule_url }}" method="post" style="display: inline-flex; gap: 8px; align-items: center; margin-right: 8px;">
+                <form action="{{ recreate_schedule_url }}" method="post">
                     {% csrf_token %}
                     <select name="start_date" required>
                         {% for choice in start_date_choices %}
@@ -247,7 +263,7 @@
 
         {% if rebalance_schedule_url %}
             <li>
-                <form action="{{ rebalance_schedule_url }}" method="post" style="display: inline;">
+                <form action="{{ rebalance_schedule_url }}" method="post">
                     {% csrf_token %}
                     <button type="submit" class="button">Rebalance Schedule</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -257,7 +273,7 @@
 
         {% if renumber_weeks_url %}
             <li>
-                <form action="{{ renumber_weeks_url }}" method="post" style="display: inline;">
+                <form action="{{ renumber_weeks_url }}" method="post">
                     {% csrf_token %}
                     <button type="submit" class="button">Renumber Weeks</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -267,7 +283,7 @@
 
         {% if mirror_schedule_url %}
             <li>
-                <form action="{{ mirror_schedule_url }}" method="post" style="display: inline;">
+                <form action="{{ mirror_schedule_url }}" method="post">
                     {% csrf_token %}
                     <button type="submit" class="button">Create Mirrored Season</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -277,7 +293,7 @@
 
         {% if compress_schedule_url %}
             <li>
-                <form action="{{ compress_schedule_url }}" method="post" style="display: inline;">
+                <form action="{{ compress_schedule_url }}" method="post">
                     {% csrf_token %}
                     <button type="submit" class="button">Compress Schedule</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -287,7 +303,7 @@
 
         {% if move_live_url %}
             <li>
-                <form action="{{ move_live_url }}" method="post" style="display: inline;">
+                <form action="{{ move_live_url }}" method="post">
                     {% csrf_token %}
                     <button type="submit" class="button">Move Season Live</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -297,7 +313,7 @@
 
         {% if archive_season_url %}
             <li>
-                <form action="{{ archive_season_url }}" method="post" style="display: inline;">
+                <form action="{{ archive_season_url }}" method="post">
                     {% csrf_token %}
                     <button type="submit" class="button">{{ archive_button_label|default:"Archive Season" }}</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
