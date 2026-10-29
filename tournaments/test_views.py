@@ -17,8 +17,8 @@ from tournaments.models import BracketMatch, Tournament, TournamentPlayer, Tourn
 def make_league(**kwargs):
     defaults = {
         'name': 'Tournament League',
-        'team_size': 1,
-        'results_type': League.ResultsType.ONE_POCKET,
+        'team_size': 5,
+        'results_type': League.ResultsType.EIGHT_BALL,
         'day_of_week': League.DayOfWeek.MONDAY,
         'tournament_target': 300,
     }
@@ -60,6 +60,8 @@ class TournamentViewTestCase(TestCase):
             username='admin', password='password123', email='admin@example.com',
         )
         self.client.login(username='admin', password='password123')
+        self.players_url = f"{reverse('tournament_players')}?league={self.league.pk}"
+        self.bracket_url = f"{reverse('tournament_bracket')}?league={self.league.pk}"
 
     def make_eligible_players(self, count):
         """Players need >=2 PlayerMatchResult appearances to show up in tournament_players."""
@@ -112,7 +114,7 @@ class TournamentPlayersViewTests(TournamentViewTestCase):
             self.assertEqual(TournamentPlayer.objects.count(), 4)
 
             response = self.client.post(reverse('tournament_players'), {'make_teams': '1'})
-            self.assertRedirects(response, reverse('tournament_players'))
+            self.assertRedirects(response, self.players_url)
         self.assertEqual(TournamentTeam.objects.count(), 2)
 
     def test_toggle_paid(self):
@@ -193,18 +195,18 @@ class TournamentBracketViewTests(TournamentViewTestCase):
         self.tournament.delete()
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.get(reverse('tournament_bracket'))
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     def test_generate_requires_teams(self):
         TournamentTeam.objects.all().delete()
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.post(reverse('tournament_bracket'), {'generate': '1'})
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     def test_full_bracket_flow(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.post(reverse('tournament_bracket'), {'generate': '1'})
-            self.assertRedirects(response, reverse('tournament_bracket'))
+            self.assertRedirects(response, self.bracket_url)
 
             response = self.client.get(reverse('tournament_bracket'))
             self.assertEqual(response.status_code, 200)
@@ -215,13 +217,13 @@ class TournamentBracketViewTests(TournamentViewTestCase):
             response = self.client.post(reverse('tournament_bracket'), {
                 'match_id': ready_match.id, 'winner_id': ready_match.team1_id,
             })
-            self.assertRedirects(response, reverse('tournament_bracket'))
+            self.assertRedirects(response, self.bracket_url)
 
             ready_match.refresh_from_db()
             self.assertEqual(ready_match.status, BracketMatch.STATUS_COMPLETE)
 
             response = self.client.post(reverse('tournament_bracket'), {'undo_match_id': ready_match.id})
-            self.assertRedirects(response, reverse('tournament_bracket'))
+            self.assertRedirects(response, self.bracket_url)
             ready_match.refresh_from_db()
             self.assertEqual(ready_match.status, BracketMatch.STATUS_READY)
 
@@ -245,7 +247,7 @@ class TournamentBracketViewTests(TournamentViewTestCase):
             response = self.client.post(reverse('tournament_bracket'), {
                 'match_id': ready_match.id, 'winner_id': 999999,
             })
-        self.assertRedirects(response, reverse('tournament_bracket'))
+        self.assertRedirects(response, self.bracket_url)
         ready_match.refresh_from_db()
         self.assertNotEqual(ready_match.status, BracketMatch.STATUS_COMPLETE)
 
@@ -260,7 +262,7 @@ class TournamentBracketViewTests(TournamentViewTestCase):
             response = self.client.post(reverse('tournament_bracket'), {
                 'match_id': ready_match.id, 'winner_id': ready_match.team1_id,
             })
-        self.assertRedirects(response, reverse('tournament_bracket'))
+        self.assertRedirects(response, self.bracket_url)
 
 
 class EndOfSeasonTournamentViewTests(TournamentViewTestCase):
@@ -305,12 +307,12 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
         TournamentTeam.objects.all().delete()
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id):
             response = self.client.post(reverse('create_readysettourney_tournament'))
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     def test_missing_credentials(self):
         with self.settings(FRONTEND_LEAGUE_ID=self.league.id, ONTHEHILL_USERNAME='', ONTHEHILL_PASSWORD=''):
             response = self.client.post(reverse('create_readysettourney_tournament'))
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_successful_creation_with_payouts(self, mock_urlopen):
@@ -326,7 +328,7 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
             response = self.client.post(reverse('create_readysettourney_tournament'), {
                 'name': 'Test Tournament', 'entry_fee': '20',
             })
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
         self.assertEqual(mock_urlopen.call_count, 10)
 
     @patch('tournaments.views.urllib.request.urlopen')
@@ -338,7 +340,7 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='wrong',
         ):
             response = self.client.post(reverse('create_readysettourney_tournament'))
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_token_fetch_url_error(self, mock_urlopen):
@@ -349,7 +351,7 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
             response = self.client.post(reverse('create_readysettourney_tournament'))
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_tournament_creation_http_error(self, mock_urlopen):
@@ -363,7 +365,7 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
             response = self.client.post(reverse('create_readysettourney_tournament'), {'venue_id': '7'})
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_invalid_venue_id(self, mock_urlopen):
@@ -374,7 +376,7 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
             response = self.client.post(reverse('create_readysettourney_tournament'), {'venue_id': 'not-a-number'})
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_payout_post_errors_are_collected_but_dont_fail_request(self, mock_urlopen):
@@ -388,7 +390,7 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
             response = self.client.post(reverse('create_readysettourney_tournament'))
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_missing_tournament_id_in_response(self, mock_urlopen):
@@ -402,7 +404,7 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
             response = self.client.post(reverse('create_readysettourney_tournament'))
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)
 
     @patch('tournaments.views.urllib.request.urlopen')
     def test_missing_token_in_response(self, mock_urlopen):
@@ -413,4 +415,4 @@ class CreateReadySetTourneyTournamentViewTests(TournamentViewTestCase):
             ONTHEHILL_USERNAME='svc', ONTHEHILL_PASSWORD='secret',
         ):
             response = self.client.post(reverse('create_readysettourney_tournament'))
-        self.assertRedirects(response, reverse('tournament_players'))
+        self.assertRedirects(response, self.players_url)

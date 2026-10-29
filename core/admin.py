@@ -205,7 +205,7 @@ class LeagueAdmin(admin.ModelAdmin):
     def tournament_players_link(self, obj):
         if obj.results_type == League.ResultsType.DARTS:
             return '—'
-        url = reverse('tournament_players')
+        url = reverse('tournament_players') + f'?league={obj.pk}'
         return format_html('<a href="{}">Tournament Players</a>', url)
     tournament_players_link.short_description = 'Tournaments'
 
@@ -278,7 +278,7 @@ class LeagueAdmin(admin.ModelAdmin):
             )
             extra_context['show_financial_breakdown'] = not is_darts
 
-            extra_context['tournament_players_url'] = reverse('tournament_players')
+            extra_context['tournament_players_url'] = reverse('tournament_players') + f'?league={league.pk}'
             extra_context['show_tournament_players'] = not is_darts
 
             extra_context['rank_review_url'] = reverse('admin:core_league_rank_review', args=[league.pk])

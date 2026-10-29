@@ -1,0 +1,42 @@
+{# ReadySetTourney create form; the including page sets entry_count. #}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-info text-white py-3">
+        <h5 class="mb-0">Create Tournament on ReadySetTourney</h5>
+    </div>
+    <div class="card-body">
+        <form method="post" action="{% url 'create_readysettourney_tournament' %}?league={{ active_league.pk }}" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-6">
+                <label class="form-label">Tournament Name</label>
+                <input type="text" name="name" class="form-control" placeholder="{{ default_tournament_name }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Date</label>
+                <input type="date" name="date" class="form-control" value="{{ today|date:'Y-m-d' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Venue ID</label>
+                <input type="number" name="venue_id" class="form-control" min="1" placeholder="optional">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Entry Fee</label>
+                <input type="number" name="entry_fee" class="form-control" step="0.01" min="0" value="16">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Added Money</label>
+                <input type="number" name="added_money" class="form-control" step="0.01" min="0" value="{{ default_added_money }}">
+            </div>
+            <div class="col-md-12">
+                <label class="form-label">Notes</label>
+                <input type="text" name="notes" class="form-control" placeholder="optional">
+            </div>
+            <div class="col-12">
+                <div class="text-muted small mb-2">
+                    Game type: <strong>{% if singles %}One Pocket{% else %}8-Ball{% endif %}</strong> · Format: <strong>Double Elimination</strong>
+                </div>
+                <button type="submit" class="btn btn-info text-white px-4">Create on ReadySetTourney</button>
+                <span class="text-muted ms-2">Sends the {{ entry_count }} {% if singles %}player{{ entry_count|pluralize }}{% else %}team{{ entry_count|pluralize }}{% endif %} above as seeded entries.</span>
+            </div>
+        </form>
+    </div>
+</div>
