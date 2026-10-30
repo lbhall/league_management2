@@ -4,6 +4,8 @@ Whole weeks move: every matchup, home/away assignment and location is kept,
 so venue counts and byes per week don't change. Week dates, holiday weeks,
 the weeks given with --keep and any week that already has scores stay put.
 The search is seeded, so a dry run and the --apply run give the same order.
+Applying saves an undo point in Schedule History. The Space Out Rematches
+button on Manage Schedule does the same from the browser.
 
 Dry run (shows the new order, changes nothing):
     python manage.py space_rematches --league "EMC Fun Pool League" --keep 1 6
@@ -14,7 +16,12 @@ from django.core.management.base import BaseCommand, CommandError
 
 from core.models import League, Team
 from scheduling.models import Season
-from scheduling.services import apply_rematch_spacing, plan_rematch_spacing
+from scheduling.services import (
+    apply_rematch_spacing,
+    capture_schedule,
+    plan_rematch_spacing,
+    record_schedule_snapshot,
+)
 
 
 class Command(BaseCommand):
@@ -79,8 +86,11 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('Dry run: nothing changed. Re-run with --apply to reorder.'))
             return
 
+        before = capture_schedule(season)
         moved = apply_rematch_spacing(plan)
-        self.stdout.write(self.style.SUCCESS(f'Reordered {moved} week(s).'))
+        record_schedule_snapshot(season, 'Before Space Out Rematches (command)', before)
+        self.stdout.write(self.style.SUCCESS(
+            f'Reordered {moved} week(s). Undo it from Schedule History on the Manage Schedule page.'))
 
     def _summary(self, label, stats, weeks, names, min_gap):
         close = [r for r in stats['rematches'] if r[0] < min_gap]

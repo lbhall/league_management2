@@ -14,6 +14,7 @@ from scheduling.models import (
     ArchivedTeam,
     Holiday,
     Match,
+    ScheduleSnapshot,
     Season,
     Week,
 )
@@ -541,6 +542,13 @@ def create_mirrored_season_schedule(season):
     # can leave gaps — repack to the fewest possible weeks (falls back to the
     # greedy compressor internally if no optimal packing is found).
     pack_season_schedule(season)
+
+    # Packing only cares about fitting the matches into as few weeks as the
+    # venues allow, which can put a pairing's return match the very next
+    # week. Reorder the weeks so rematches are spread out.
+    spacing = plan_rematch_spacing(season)
+    if spacing['improved']:
+        apply_rematch_spacing(spacing)
 
     surviving_ids = set(season.weeks.values_list('id', flat=True))
     return [week for week in created_weeks if week.id in surviving_ids]
@@ -1198,28 +1206,67 @@ def move_week_down(week):
     return week
 
 
+def _is_bye_placeholder(name):
+    """Darts uses a team literally named "BYE"; a match against it is a bye."""
+    return name.strip().upper() == 'BYE'
+
+
+def _scored_match_ids(season):
+    """Ids of the season's matches with anything scored: a saved result, or a
+    scoresheet being entered, played or scanned."""
+    from scoring.models import GameResult, MatchEntry, ScoresheetScan
+
+    ids = set()
+    for model in (MatchResult, GameResult, MatchEntry, ScoresheetScan):
+        ids.update(model.objects.filter(match__week__season=season).values_list('match_id', flat=True))
+    ids.discard(None)
+    return ids
+
+
+def _play_week_pairs(season, weeks):
+    """(week_pairs, team_ids, team_names) for the given play weeks, leaving
+    out matches against the BYE placeholder team."""
+    names = dict(Team.objects.filter(league=season.league).values_list('id', 'name'))
+    bye_ids = {team_id for team_id, name in names.items() if _is_bye_placeholder(name)}
+    pairs_by_week = {week.id: [] for week in weeks}
+    for home_id, away_id, week_id in (
+        Match.objects.filter(week__in=weeks)
+        .order_by('sort_order', 'id')
+        .values_list('home_team_id', 'away_team_id', 'week_id')
+    ):
+        if home_id not in bye_ids and away_id not in bye_ids:
+            pairs_by_week[week_id].append((home_id, away_id))
+    week_pairs = [pairs_by_week[week.id] for week in weeks]
+    team_ids = sorted({team_id for pairs in week_pairs for pair in pairs for team_id in pair})
+    return week_pairs, team_ids, names
+
+
 def _week_order_stats(week_pairs, team_ids):
     """Spacing stats for play weeks in order; week_pairs[i] is a list of
     (home_id, away_id) for the i-th play week.
 
-    Returns rematches (gap, team_a, team_b, first_index, second_index) for
-    each repeat meeting, the longest home/away run per team (byes don't break
-    a run), and how many times a team has byes two weeks running.
+    Returns:
+      rematches: (gap, team_a, team_b, first_index, second_index) for each
+        repeat meeting, closest first.
+      runs: (length, team_id, side, first_index, last_index) for every home
+        ('H') or away ('A') run of 3 or more. Byes don't break a run.
+      longest_runs: {team_id: longest run}.
+      byes: {team_id: [indexes of weeks the team sits out]}.
+      back_to_back_byes: how many times a team has byes two weeks running.
     """
     meetings = {}
     sides = {team_id: [] for team_id in team_ids}
-    back_to_back_byes = 0
-    previous_idle = set()
+    byes = {team_id: [] for team_id in team_ids}
     for index, pairs in enumerate(week_pairs):
         playing = set()
         for home_id, away_id in pairs:
             meetings.setdefault(frozenset((home_id, away_id)), []).append(index)
-            sides.setdefault(home_id, []).append('H')
-            sides.setdefault(away_id, []).append('A')
+            sides.setdefault(home_id, []).append((index, 'H'))
+            sides.setdefault(away_id, []).append((index, 'A'))
             playing.update((home_id, away_id))
-        idle = set(team_ids) - playing
-        back_to_back_byes += len(idle & previous_idle)
-        previous_idle = idle
+        for team_id in team_ids:
+            if team_id not in playing:
+                byes[team_id].append(index)
 
     rematches = []
     for pair, indexes in meetings.items():
@@ -1228,34 +1275,67 @@ def _week_order_stats(week_pairs, team_ids):
             rematches.append((second - first, team_a, team_b, first, second))
     rematches.sort()
 
+    runs = []
     longest_runs = {}
     for team_id, sequence in sides.items():
-        longest = run = 0
-        previous = None
-        for side in sequence:
-            run = run + 1 if side == previous else 1
-            previous = side
-            longest = max(longest, run)
-        longest_runs[team_id] = longest
+        longest_runs[team_id] = 0
+        start = 0
+        for end in range(1, len(sequence) + 1):
+            if end == len(sequence) or sequence[end][1] != sequence[start][1]:
+                length = end - start
+                longest_runs[team_id] = max(longest_runs[team_id], length)
+                if length >= 3:
+                    runs.append((length, team_id, sequence[start][1], sequence[start][0], sequence[end - 1][0]))
+                start = end
+
+    back_to_back_byes = sum(
+        1 for indexes in byes.values() for a, b in zip(indexes, indexes[1:]) if b == a + 1
+    )
     return {
         'rematches': rematches,
+        'runs': runs,
         'longest_runs': longest_runs,
+        'byes': byes,
         'back_to_back_byes': back_to_back_byes,
     }
 
 
 def _week_order_penalty(week_pairs, team_ids, min_gap):
-    """Rematches closer than min_gap dominate; long home/away runs and back
-    to back byes only break ties so the reorder doesn't make them worse."""
+    """Rematches closer than min_gap dominate. Long home/away runs, back to
+    back byes and short weeks at the start or end only break ties, so a
+    reorder doesn't make them worse."""
     stats = _week_order_stats(week_pairs, team_ids)
     penalty = sum(1000 * (min_gap - gap) ** 2 for gap, *_ in stats['rematches'] if gap < min_gap)
-    penalty += sum(max(0, run - 2) ** 2 for run in stats['longest_runs'].values())
+    penalty += sum((length - 2) ** 2 for length, *_ in stats['runs'])
     penalty += 20 * stats['back_to_back_byes']
+    sizes = [len(pairs) for pairs in week_pairs]
+    if sizes:
+        largest = max(sizes)
+        penalty += 5 * (sizes[0] != largest) + 5 * (sizes[-1] != largest)
+        penalty += sum(3 for x, y in zip(sizes, sizes[1:]) if x < largest and y < largest)
     return penalty
 
 
+def scored_week_numbers(season):
+    """Numbers of the play weeks that have a scored match."""
+    return set(
+        Match.objects.filter(pk__in=_scored_match_ids(season), week__number__isnull=False)
+        .values_list('week__number', flat=True)
+    )
+
+
+def _locked_week_numbers(season, weeks, keep_week_numbers):
+    """Week numbers a reorder must leave alone: the ones asked for and any
+    week with a scored match."""
+    scored = scored_week_numbers(season)
+    return [
+        week.number for week in weeks
+        if week.number in keep_week_numbers or week.number in scored
+    ]
+
+
 def plan_rematch_spacing(season, keep_week_numbers=(), min_gap=4, random_seed=1,
-                         restarts=10, iterations=20000):
+                         restarts=10, iterations=None):
     """Reorder whole play weeks so teams don't meet again too soon.
 
     Only which date each week's set of matches is played on changes, so every
@@ -1263,35 +1343,27 @@ def plan_rematch_spacing(season, keep_week_numbers=(), min_gap=4, random_seed=1,
     weeks in keep_week_numbers and any week with scores stay where they are.
     The search is seeded, so the same inputs give the same plan.
 
-    Returns {'weeks', 'order', 'locked', 'before', 'after', 'improved'}:
-    order[i] is the index (into weeks) of the week whose matches move to
-    weeks[i].
+    Returns {'weeks', 'order', 'locked', 'before', 'after', 'improved',
+    'team_names'}: order[i] is the index (into weeks) of the week whose
+    matches move to weeks[i].
     """
-    from scoring.models import GameResult, MatchEntry, ScoresheetScan
-
     weeks = list(season.weeks.filter(number__isnull=False).order_by('date'))
-    week_numbers = {week.number for week in weeks}
-    missing = sorted(set(keep_week_numbers) - week_numbers)
+    missing = sorted(set(keep_week_numbers) - {week.number for week in weeks})
     if missing:
         raise ValueError(f'Week {", ".join(map(str, missing))} is not a play week in {season.name}.')
 
-    matches_by_week = {week.id: [] for week in weeks}
-    for match in Match.objects.filter(week__in=weeks).order_by('sort_order', 'id'):
-        matches_by_week[match.week_id].append((match.home_team_id, match.away_team_id))
-    week_pairs = [matches_by_week[week.id] for week in weeks]
-    team_ids = sorted({team_id for pairs in week_pairs for pair in pairs for team_id in pair})
-
-    scored_week_ids = set(MatchResult.objects.filter(match__week__in=weeks).values_list('match__week_id', flat=True))
-    for model in (GameResult, MatchEntry, ScoresheetScan):
-        scored_week_ids.update(model.objects.filter(match__week__in=weeks).values_list('match__week_id', flat=True))
-    locked = [
-        week.number for week in weeks
-        if week.number in keep_week_numbers or week.id in scored_week_ids
-    ]
+    week_pairs, team_ids, names = _play_week_pairs(season, weeks)
+    locked = _locked_week_numbers(season, weeks, keep_week_numbers)
     movable = [index for index, week in enumerate(weeks) if week.number not in locked]
+    if iterations is None:
+        iterations = min(20000, 1000 * len(movable))
 
     def penalty(order):
-        return _week_order_penalty([week_pairs[i] for i in order], team_ids, min_gap)
+        # Each week that moves costs a point, so the search prefers the
+        # smallest change: no reshuffling the whole season to shave a
+        # single home/away run once the rematches are fine.
+        moved = sum(1 for position, index in enumerate(order) if position != index)
+        return _week_order_penalty([week_pairs[i] for i in order], team_ids, min_gap) + moved
 
     current = list(range(len(weeks)))
     best, best_penalty = current, penalty(current)
@@ -1325,7 +1397,25 @@ def plan_rematch_spacing(season, keep_week_numbers=(), min_gap=4, random_seed=1,
         'before': _week_order_stats(week_pairs, team_ids),
         'after': _week_order_stats([week_pairs[i] for i in best], team_ids),
         'improved': best != current,
+        'team_names': names,
     }
+
+
+def week_order_from_ids(season, week_ids, keep_week_numbers=()):
+    """Turn a previewed order (the week id whose matches each play week gets,
+    in date order) back into a plan apply_rematch_spacing can use, refusing
+    it if the weeks changed since the preview or a locked week would move."""
+    weeks = list(season.weeks.filter(number__isnull=False).order_by('date'))
+    ids = [week.id for week in weeks]
+    if sorted(week_ids) != sorted(ids):
+        raise ValueError('The schedule changed since the preview. Preview it again.')
+    position = {week_id: index for index, week_id in enumerate(ids)}
+    order = [position[week_id] for week_id in week_ids]
+    locked = _locked_week_numbers(season, weeks, keep_week_numbers)
+    for index, week in enumerate(weeks):
+        if week.number in locked and order[index] != index:
+            raise ValueError(f'Week {week.number} is locked and can\'t move. Preview it again.')
+    return {'weeks': weeks, 'order': order}
 
 
 @transaction.atomic
@@ -1344,3 +1434,230 @@ def apply_rematch_spacing(plan):
             Match.objects.filter(pk__in=match_ids[source.id]).update(week=target)
             moved += 1
     return moved
+
+
+def schedule_health(season, min_gap=4, long_run=4):
+    """Fairness problems in a season's schedule, for the Manage Schedule
+    page: rematches closer than min_gap weeks, home or away runs of
+    long_run or more, byes two weeks running, uneven bye counts and home
+    matches played somewhere other than the home team's venue."""
+    weeks = [
+        week for week in season.weeks.filter(number__isnull=False).order_by('date')
+        if week.matches.exists()
+    ]
+    week_pairs, team_ids, names = _play_week_pairs(season, weeks)
+    stats = _week_order_stats(week_pairs, team_ids)
+
+    close_rematches = [
+        {'teams': (names[a], names[b]), 'first_week': weeks[i], 'second_week': weeks[j], 'gap': gap}
+        for gap, a, b, i, j in stats['rematches'] if gap < min_gap
+    ]
+    long_runs = sorted(
+        (
+            {'team': names[team_id], 'side': 'home' if side == 'H' else 'away', 'length': length,
+             'first_week': weeks[i], 'last_week': weeks[j]}
+            for length, team_id, side, i, j in stats['runs'] if length >= long_run
+        ),
+        key=lambda run: (-run['length'], run['team']),
+    )
+    back_to_back_byes = sorted(
+        (
+            {'team': names[team_id], 'first_week': weeks[a], 'second_week': weeks[b]}
+            for team_id, indexes in stats['byes'].items()
+            for a, b in zip(indexes, indexes[1:]) if b == a + 1
+        ),
+        key=lambda bye: (bye['first_week'].date, bye['team']),
+    )
+    bye_counts = sorted(
+        ((names[team_id], len(indexes)) for team_id, indexes in stats['byes'].items()),
+        key=lambda item: (-item[1], item[0]),
+    )
+    uneven_byes = bye_counts if len({count for _, count in bye_counts}) > 1 else []
+
+    relocated = []
+    for match in (
+        Match.objects.filter(week__in=weeks)
+        .select_related('week', 'home_team__venue', 'away_team')
+        .order_by('week__date', 'sort_order', 'id')
+    ):
+        if _is_bye_placeholder(match.home_team.name) or _is_bye_placeholder(match.away_team.name):
+            continue
+        venue = match.home_team.venue
+        if venue and match.location.strip() and match.location.strip() != venue.name.strip():
+            relocated.append({'match': match, 'week': match.week, 'home_venue': venue.name})
+
+    return {
+        'min_gap': min_gap,
+        'long_run': long_run,
+        'close_rematches': close_rematches,
+        'long_runs': long_runs,
+        'back_to_back_byes': back_to_back_byes,
+        'uneven_byes': uneven_byes,
+        'relocated': relocated,
+        'issue_count': (
+            len(close_rematches) + len(long_runs) + len(back_to_back_byes)
+            + bool(uneven_byes) + len(relocated)
+        ),
+    }
+
+
+SCHEDULE_SNAPSHOTS_KEPT = 30
+
+
+def capture_schedule(season):
+    """The season's weeks and matches as plain data for a ScheduleSnapshot."""
+    return {
+        'weeks': [
+            {'id': week.id, 'date': week.date.isoformat(), 'number': week.number, 'notes': week.notes}
+            for week in season.weeks.order_by('date', 'id')
+        ],
+        'matches': [
+            {
+                'id': match.id, 'week_id': match.week_id,
+                'home_team_id': match.home_team_id, 'away_team_id': match.away_team_id,
+                'location': match.location, 'sort_order': match.sort_order,
+            }
+            for match in Match.objects.filter(week__season=season).order_by('week__date', 'sort_order', 'id')
+        ],
+    }
+
+
+def record_schedule_snapshot(season, label, data, user=None):
+    """Keep ``data`` (captured just before a change) as an undo point, unless
+    the change turned out to leave the schedule as it was. Only the newest
+    SCHEDULE_SNAPSHOTS_KEPT snapshots per season are kept."""
+    if data == capture_schedule(season):
+        return None
+    snapshot = ScheduleSnapshot.objects.create(
+        season=season,
+        label=label[:255],
+        data=data,
+        created_by=user if user is not None and user.is_authenticated else None,
+    )
+    stale = list(season.schedule_snapshots.values_list('id', flat=True)[SCHEDULE_SNAPSHOTS_KEPT:])
+    if stale:
+        ScheduleSnapshot.objects.filter(pk__in=stale).delete()
+    return snapshot
+
+
+def plan_schedule_restore(snapshot):
+    """What restoring a snapshot would change, and whether it's allowed.
+
+    A restore is refused when a match that already has scores would move to
+    another date, change teams or be removed, or when a team in the
+    snapshot no longer exists.
+    """
+    season = snapshot.season
+    data = snapshot.data
+    snapshot_weeks = {item['id']: item for item in data['weeks']}
+    current_weeks = {week.id: week for week in season.weeks.all()}
+    current_matches = {
+        match.id: match
+        for match in Match.objects.filter(week__season=season).select_related('home_team', 'away_team')
+    }
+    scored = _scored_match_ids(season)
+
+    def week_state(week):
+        return (week.date.isoformat(), week.number, week.notes)
+
+    weeks_changed = sum(
+        1 for item in data['weeks']
+        if item['id'] in current_weeks
+        and week_state(current_weeks[item['id']]) != (item['date'], item['number'], item['notes'])
+    )
+    weeks_created = sum(1 for item in data['weeks'] if item['id'] not in current_weeks)
+    weeks_deleted = sum(1 for week_id in current_weeks if week_id not in snapshot_weeks)
+
+    matches_changed = matches_created = 0
+    blocked = []
+    for item in data['matches']:
+        match = current_matches.get(item['id'])
+        if match is None:
+            matches_created += 1
+            continue
+        moves = (
+            current_weeks[match.week_id].date.isoformat(), match.home_team_id, match.away_team_id,
+        ) != (snapshot_weeks[item['week_id']]['date'], item['home_team_id'], item['away_team_id'])
+        if moves or match.location != item['location'] or match.sort_order != item['sort_order']:
+            matches_changed += 1
+        if moves and match.id in scored:
+            blocked.append(match)
+    snapshot_match_ids = {item['id'] for item in data['matches']}
+    removed = [match for match_id, match in current_matches.items() if match_id not in snapshot_match_ids]
+    blocked += [match for match in removed if match.id in scored]
+
+    team_ids = {item[key] for item in data['matches'] for key in ('home_team_id', 'away_team_id')}
+    missing_teams = team_ids - set(Team.objects.filter(pk__in=team_ids).values_list('id', flat=True))
+
+    changes = {
+        'weeks_changed': weeks_changed,
+        'weeks_created': weeks_created,
+        'weeks_deleted': weeks_deleted,
+        'matches_changed': matches_changed,
+        'matches_created': matches_created,
+        'matches_deleted': len(removed),
+    }
+    reason = None
+    if season.status == Season.Status.ARCHIVED:
+        reason = 'An archived season\'s schedule can\'t be restored.'
+    elif missing_teams:
+        reason = 'A team in this snapshot has since been deleted.'
+    elif blocked:
+        reason = (
+            f'{len(blocked)} match(es) that would move or be removed already have scores: '
+            + ', '.join(str(match) for match in blocked[:5])
+        )
+    elif not any(changes.values()):
+        reason = 'The schedule already matches this snapshot.'
+    return {'allowed': reason is None, 'reason': reason, **changes}
+
+
+def restore_schedule_snapshot(snapshot, user=None):
+    """Put the season's weeks and matches back the way the snapshot has them.
+    Matches keep their ids (and so their scores) wherever they still exist.
+    The current schedule is kept as a snapshot first, so a restore can
+    itself be undone."""
+    with transaction.atomic():
+        season = Season.objects.select_for_update().get(pk=snapshot.season_id)
+        plan = plan_schedule_restore(snapshot)
+        if not plan['allowed']:
+            raise ValueError(plan['reason'])
+        before = capture_schedule(season)
+        data = snapshot.data
+
+        # Park every week on a placeholder date with no number first, so the
+        # unique date and number constraints can't trip while reassigning.
+        current_weeks = {week.id: week for week in season.weeks.all()}
+        for offset, week in enumerate(current_weeks.values()):
+            week.date = date(1, 1, 1) + timedelta(days=offset)
+            week.number = None
+            week.save(update_fields=['date', 'number'])
+
+        week_ids = {}
+        for item in data['weeks']:
+            week = current_weeks.get(item['id']) or Week(season=season)
+            week.date = date.fromisoformat(item['date'])
+            week.number = item['number']
+            week.notes = item['notes']
+            week.save()
+            week_ids[item['id']] = week.id
+
+        current_match_ids = set(Match.objects.filter(week__season=season).values_list('id', flat=True))
+        for item in data['matches']:
+            fields = {
+                'week_id': week_ids[item['week_id']],
+                'home_team_id': item['home_team_id'],
+                'away_team_id': item['away_team_id'],
+                'location': item['location'],
+                'sort_order': item['sort_order'],
+            }
+            if item['id'] in current_match_ids:
+                Match.objects.filter(pk=item['id']).update(**fields)
+            else:
+                Match.objects.create(**fields)
+        snapshot_match_ids = {item['id'] for item in data['matches']}
+        Match.objects.filter(pk__in=current_match_ids - snapshot_match_ids).delete()
+        Week.objects.filter(pk__in=set(current_weeks) - set(week_ids.values())).delete()
+
+        change = snapshot.label[len('Before '):] if snapshot.label.startswith('Before ') else snapshot.label
+        record_schedule_snapshot(season, f'Before undoing {change}', before, user)

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -343,3 +344,34 @@ class ArchivedPlayerMatchResult(models.Model):
 
     def __str__(self):
         return f'{self.player_name} ({self.team_name})'
+
+
+class ScheduleSnapshot(models.Model):
+    """A season's weeks and matches as they were just before a schedule
+    tool changed them, so the change can be undone from Schedule History.
+
+    ``data`` holds {'weeks': [{id, date, number, notes}], 'matches': [{id,
+    week_id, home_team_id, away_team_id, location, sort_order}]}.
+    """
+
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.CASCADE,
+        related_name='schedule_snapshots',
+    )
+    label = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    data = models.JSONField()
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f'{self.season} - {self.label}'
