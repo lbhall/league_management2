@@ -228,3 +228,72 @@ class LinkArchivedPlayersCommandTests(TestCase):
             call_command('link_archived_players', league=self.league.name, csv=self.csv_path, apply=True)
         self.row1.refresh_from_db()
         self.assertIsNone(self.row1.player)
+
+
+class SpaceRematchesCommandTests(TestCase):
+    def setUp(self):
+        self.league = make_league(name='Spacing League')
+        self.venue = make_venue(self.league, max_home_teams=4)
+        a, b, c, d = make_teams(self.league, self.venue, 4)
+        self.season = Season.objects.create(league=self.league, name='S1', status=Season.Status.ACTIVE)
+        # Every pairing's return match is the very next week.
+        rounds = [
+            [(a, b), (c, d)], [(b, a), (d, c)],
+            [(a, c), (b, d)], [(c, a), (d, b)],
+            [(a, d), (b, c)], [(d, a), (c, b)],
+        ]
+        self.weeks = []
+        week_date = date(2026, 1, 5)
+        for number, pairs in enumerate(rounds, start=1):
+            if number == 4:
+                Week.objects.create(season=self.season, date=week_date, notes='Holiday')
+                week_date = date.fromordinal(week_date.toordinal() + 7)
+            week = Week.objects.create(season=self.season, date=week_date, number=number)
+            for home, away in pairs:
+                Match.objects.create(week=week, home_team=home, away_team=away, location=self.venue.name)
+            self.weeks.append(week)
+            week_date = date.fromordinal(week_date.toordinal() + 7)
+
+    def _matchups(self, week):
+        return sorted((m.home_team_id, m.away_team_id) for m in week.matches.all())
+
+    def _closest_rematch(self):
+        meetings = {}
+        for index, week in enumerate(self.weeks):
+            for m in week.matches.all():
+                meetings.setdefault(frozenset((m.home_team_id, m.away_team_id)), []).append(index)
+        return min(second - first for first, second in meetings.values())
+
+    def test_dry_run_changes_nothing(self):
+        before = [self._matchups(week) for week in self.weeks]
+        call_command('space_rematches', league=self.league.name, min_gap=3)
+        self.assertEqual([self._matchups(week) for week in self.weeks], before)
+
+    def test_apply_spreads_rematches_and_keeps_dates_and_holidays(self):
+        self.assertEqual(self._closest_rematch(), 1)
+        call_command('space_rematches', league=self.league.name, min_gap=3, apply=True)
+        self.assertEqual(self._closest_rematch(), 3)
+        self.assertEqual(Match.objects.filter(week__season=self.season).count(), 12)
+        for week in self.weeks:
+            self.assertEqual(week.matches.count(), 2)
+        self.assertFalse(Match.objects.filter(week__season=self.season, week__number__isnull=True).exists())
+        self.assertEqual(
+            list(self.season.weeks.filter(number__isnull=False).order_by('date').values_list('number', flat=True)),
+            [1, 2, 3, 4, 5, 6],
+        )
+
+    def test_kept_weeks_and_scored_weeks_stay_put(self):
+        from results.models import MatchResult
+        MatchResult.objects.create(match=self.weeks[2].matches.first(), home_team_score=3, away_team_score=1)
+        before = {i: self._matchups(self.weeks[i]) for i in (0, 2, 5)}
+        call_command('space_rematches', league=self.league.name, keep=[1, 6], min_gap=3, apply=True)
+        for i, matchups in before.items():
+            self.assertEqual(self._matchups(self.weeks[i]), matchups)
+
+    def test_errors_for_unknown_week_or_missing_season(self):
+        with self.assertRaises(CommandError):
+            call_command('space_rematches', league=self.league.name, keep=[9])
+        with self.assertRaises(CommandError):
+            call_command('space_rematches', league=self.league.name, working=True)
+        with self.assertRaises(CommandError):
+            call_command('space_rematches', league='Nope League')
