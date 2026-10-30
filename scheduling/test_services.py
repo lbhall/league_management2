@@ -238,6 +238,41 @@ class CreateMirroredSeasonScheduleTests(TestCase):
         self.assertEqual(matches.filter(home_team=team_b, away_team=team_a).count(), 1)
 
 
+class IsScheduleMirroredTests(TestCase):
+    def setUp(self):
+        league = make_league()
+        self.venue = make_venue(league, max_home_teams=4)
+        self.teams = make_teams(league, self.venue, 4)
+        self.season = Season.objects.create(league=league, name='S1', status=Season.Status.WORKING)
+
+    def test_empty_season_is_not_mirrored(self):
+        self.assertFalse(services.is_schedule_mirrored(self.season))
+
+    def test_single_round_is_not_mirrored_until_mirror_runs(self):
+        services.recreate_season_schedule(self.season, date(2026, 1, 5), random_seed=1)
+        self.assertFalse(services.is_schedule_mirrored(self.season))
+
+        services.create_mirrored_season_schedule(self.season)
+        self.assertTrue(services.is_schedule_mirrored(self.season))
+
+    def test_still_mirrored_after_a_home_away_swap(self):
+        services.recreate_season_schedule(self.season, date(2026, 1, 5), random_seed=1)
+        services.create_mirrored_season_schedule(self.season)
+        match = Match.objects.filter(week__season=self.season).first()
+        match.home_team, match.away_team = match.away_team, match.home_team
+        match.save()
+        self.assertTrue(services.is_schedule_mirrored(self.season))
+
+    def test_one_unreturned_pairing_is_not_mirrored(self):
+        team_a, team_b, team_c, _ = self.teams
+        week1 = Week.objects.create(season=self.season, date=date(2026, 1, 5), number=1)
+        week2 = Week.objects.create(season=self.season, date=date(2026, 1, 12), number=2)
+        Match.objects.create(week=week1, home_team=team_a, away_team=team_b, location=self.venue.name)
+        Match.objects.create(week=week2, home_team=team_b, away_team=team_a, location=self.venue.name)
+        Match.objects.create(week=week2, home_team=team_c, away_team=team_a, location=self.venue.name)
+        self.assertFalse(services.is_schedule_mirrored(self.season))
+
+
 class GetValidDestinationWeeksTests(TestCase):
     def test_excludes_full_venue_weeks_and_holidays(self):
         league = make_league()
