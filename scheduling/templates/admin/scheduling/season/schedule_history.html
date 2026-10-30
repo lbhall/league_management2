@@ -1,0 +1,45 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Schedule history | {{ site_title|default:"Django site admin" }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='scheduling' %}">Scheduling</a>
+    &rsaquo; <a href="{% url 'admin:scheduling_season_changelist' %}">Seasons</a>
+    &rsaquo; <a href="{% url 'admin:scheduling_season_change' season.pk %}">{{ season.name }}</a>
+    &rsaquo; <a href="{{ manage_url }}">Manage Schedule</a>
+    &rsaquo; Schedule history
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Schedule history: {{ season.league.name }} &ndash; {{ season.name }}</h1>
+    <p>
+        Each change made with the schedule tools keeps a copy of the schedule as it was just before.
+        Restoring one puts the weeks and matches back that way. The schedule as it is now is kept first,
+        so a restore can be undone too. The newest 30 are kept.
+    </p>
+
+    {% if snapshots %}
+        <table data-schedule-history>
+            <thead><tr><th>When</th><th>Change</th><th>By</th><th></th></tr></thead>
+            <tbody>
+                {% for snapshot in snapshots %}
+                    <tr>
+                        <td>{{ snapshot.created_at|date:"M j, Y g:i a" }}</td>
+                        <td>{{ snapshot.label }}</td>
+                        <td>{{ snapshot.created_by.username|default:"command line" }}</td>
+                        <td><a href="{% url 'admin:scheduling_season_restore_snapshot' season.pk snapshot.pk %}">Restore&hellip;</a></td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No changes recorded yet.</p>
+    {% endif %}
+
+    <p style="margin-top: 16px;"><a href="{{ manage_url }}" class="button cancel-link">Back to the schedule</a></p>
+</div>
+{% endblock %}

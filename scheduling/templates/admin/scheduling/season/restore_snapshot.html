@@ -1,0 +1,49 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Restore schedule | {{ site_title|default:"Django site admin" }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='scheduling' %}">Scheduling</a>
+    &rsaquo; <a href="{% url 'admin:scheduling_season_changelist' %}">Seasons</a>
+    &rsaquo; <a href="{% url 'admin:scheduling_season_change' season.pk %}">{{ season.name }}</a>
+    &rsaquo; <a href="{{ manage_url }}">Manage Schedule</a>
+    &rsaquo; <a href="{{ history_url }}">Schedule history</a>
+    &rsaquo; Restore
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Restore {{ season.name }}'s schedule?</h1>
+    <p>
+        This puts the schedule back the way it was <strong>{{ snapshot.label|lower }}</strong>
+        ({{ snapshot.created_at|date:"M j, Y g:i a" }}{% if snapshot.created_by %}, by {{ snapshot.created_by.username }}{% endif %}).
+    </p>
+
+    {% if not plan.allowed %}
+        <p class="errornote" data-restore-blocked>{{ plan.reason }}</p>
+        <p><a href="{{ history_url }}" class="button cancel-link">Back to Schedule history</a></p>
+    {% else %}
+        <ul data-restore-changes>
+            {% if plan.matches_changed %}<li>{{ plan.matches_changed }} match{{ plan.matches_changed|pluralize:"es" }} go{{ plan.matches_changed|pluralize:"es," }} back to {{ plan.matches_changed|pluralize:"its,their" }} earlier week, teams or location</li>{% endif %}
+            {% if plan.matches_created %}<li>{{ plan.matches_created }} match{{ plan.matches_created|pluralize:"es" }} put back</li>{% endif %}
+            {% if plan.matches_deleted %}<li>{{ plan.matches_deleted }} match{{ plan.matches_deleted|pluralize:"es" }} added since then removed</li>{% endif %}
+            {% if plan.weeks_changed %}<li>{{ plan.weeks_changed }} week{{ plan.weeks_changed|pluralize }} get{{ plan.weeks_changed|pluralize:"s," }} {{ plan.weeks_changed|pluralize:"its,their" }} earlier date, number or notes back</li>{% endif %}
+            {% if plan.weeks_created %}<li>{{ plan.weeks_created }} week{{ plan.weeks_created|pluralize }} put back</li>{% endif %}
+            {% if plan.weeks_deleted %}<li>{{ plan.weeks_deleted }} week{{ plan.weeks_deleted|pluralize }} added since then removed</li>{% endif %}
+        </ul>
+        <p>The schedule as it is now is kept in Schedule history first, so you can undo this too.</p>
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="confirm" value="yes">
+            <div class="submit-row">
+                <input type="submit" class="default" value="Yes, restore it" data-restore-confirm>
+                <a href="{{ manage_url }}" class="button cancel-link">No, take me back</a>
+            </div>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

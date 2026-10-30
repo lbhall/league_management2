@@ -291,6 +291,31 @@
             </li>
         {% endif %}
 
+        {% if space_rematches_url %}
+            <li>
+                <form action="{{ space_rematches_url }}" method="get">
+                    <button type="submit" class="button" data-space-rematches>Space Out Rematches</button>
+                </form>
+            </li>
+        {% endif %}
+
+        {% if schedule_history_url %}
+            <li>
+                <form action="{{ schedule_history_url }}" method="get">
+                    <button type="submit" class="button" data-schedule-history-link>Schedule History</button>
+                </form>
+            </li>
+        {% endif %}
+
+        {% if undo_url %}
+            <li>
+                {# Opens a confirmation page showing what will change. #}
+                <form action="{{ undo_url }}" method="get">
+                    <button type="submit" class="button" data-undo-last title="{{ latest_snapshot.label }} ({{ latest_snapshot.created_at|date:'M j, g:i a' }})">Undo Last Change</button>
+                </form>
+            </li>
+        {% endif %}
+
         {% if mirror_schedule_url %}
             <li>
                 <form action="{{ mirror_schedule_url }}" method="post">
@@ -369,6 +394,8 @@
         </ul>
     </div>
     {% endif %}
+
+    {% include "admin/scheduling/season/_schedule_health.html" %}
 
     <div class="module aligned">
         <h2>Schedule for {{ season.name }} ({{ season.league.name }})</h2>

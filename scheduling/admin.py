@@ -17,11 +17,14 @@ from .models import (
     ArchivedTeam,
     Holiday,
     Match,
+    ScheduleSnapshot,
     Season,
     Week,
 )
 from .services import (
+    apply_rematch_spacing,
     archive_season,
+    capture_schedule,
     create_mirrored_season_schedule,
     create_new_playable_week_at_end,
     delete_week,
@@ -37,9 +40,16 @@ from .services import (
     move_week_down,
     move_week_up,
     pack_season_schedule,
+    plan_rematch_spacing,
+    plan_schedule_restore,
     rebalance_season_matches,
+    record_schedule_snapshot,
     recreate_season_schedule,
     renumber_weeks,
+    restore_schedule_snapshot,
+    schedule_health,
+    scored_week_numbers,
+    week_order_from_ids,
 )
 
 
@@ -265,6 +275,21 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 self.admin_site.admin_view(self.renumber_weeks_view),
                 name='scheduling_season_renumber_weeks',
             ),
+            path(
+                '<path:object_id>/space-rematches/',
+                self.admin_site.admin_view(self.space_rematches_view),
+                name='scheduling_season_space_rematches',
+            ),
+            path(
+                '<path:object_id>/schedule-history/',
+                self.admin_site.admin_view(self.schedule_history_view),
+                name='scheduling_season_schedule_history',
+            ),
+            path(
+                '<path:object_id>/schedule-history/<int:snapshot_id>/restore/',
+                self.admin_site.admin_view(self.restore_snapshot_view),
+                name='scheduling_season_restore_snapshot',
+            ),
         ]
         return custom_urls + urls
 
@@ -412,6 +437,14 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             context['schedule_mirrored'] = is_schedule_mirrored(season)
             context['rebalance_schedule_url'] = reverse('admin:scheduling_season_rebalance_schedule', args=[season.pk])
             context['renumber_weeks_url'] = reverse('admin:scheduling_season_renumber_weeks', args=[season.pk])
+            context['space_rematches_url'] = reverse('admin:scheduling_season_space_rematches', args=[season.pk])
+            context['schedule_history_url'] = reverse('admin:scheduling_season_schedule_history', args=[season.pk])
+            context['health'] = schedule_health(season)
+            latest_snapshot = season.schedule_snapshots.first()
+            if latest_snapshot:
+                context['latest_snapshot'] = latest_snapshot
+                context['undo_url'] = reverse(
+                    'admin:scheduling_season_restore_snapshot', args=[season.pk, latest_snapshot.pk])
 
         if season.status == Season.Status.WORKING:
             context['recreate_schedule_url'] = reverse('admin:scheduling_season_recreate_schedule', args=[season.pk])
@@ -435,6 +468,16 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             context
         )
 
+    def _record_undo(self, request, season, label, before):
+        """Keep the schedule as it was before a tool changed it, for Schedule
+        History. ``before`` comes from capture_schedule() just before the
+        change; nothing is kept when the schedule didn't actually change."""
+        record_schedule_snapshot(season, label, before, request.user)
+
+    @staticmethod
+    def _week_label(week):
+        return f'week {week.number}' if week.number is not None else f'the {week.date} holiday week'
+
     def move_week_up_view(self, request, object_id, week_id):
         season = self._get_league_scoped_object(request, object_id)
 
@@ -442,6 +485,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             return self._get_redirect_url(request, season)
 
         week = get_object_or_404(Week, pk=week_id, season=season)
+        before, label = capture_schedule(season), f'Before moving {self._week_label(week)} up'
 
         try:
             move_week_up(week)
@@ -449,6 +493,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             self.message_user(request, str(exc), level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
+        self._record_undo(request, season, label, before)
         self.message_user(request, 'Week moved up successfully.', level=messages.SUCCESS)
         return self._get_redirect_url(request, season)
 
@@ -459,12 +504,15 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             return self._get_redirect_url(request, season)
 
         week = get_object_or_404(Week, pk=week_id, season=season)
+        before, label = capture_schedule(season), f'Before moving {self._week_label(week)} down'
 
         try:
             move_week_down(week)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
             return self._get_redirect_url(request, season)
+
+        self._record_undo(request, season, label, before)
 
         self.message_user(request, 'Week moved down successfully.', level=messages.SUCCESS)
         return self._get_redirect_url(request, season)
@@ -476,12 +524,15 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             return self._get_redirect_url(request, season)
 
         week = get_object_or_404(Week, pk=week_id, season=season)
+        before, label = capture_schedule(season), f'Before deleting {self._week_label(week)}'
 
         try:
             delete_week(week)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
             return self._get_redirect_url(request, season)
+
+        self._record_undo(request, season, label, before)
 
         self.message_user(request, 'Week deleted successfully.', level=messages.SUCCESS)
         return self._get_redirect_url(request, season)
@@ -492,7 +543,9 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         if request.method != 'POST':
             return self._get_redirect_url(request, season)
 
+        before = capture_schedule(season)
         count = renumber_weeks(season)
+        self._record_undo(request, season, 'Before Renumber Weeks', before)
         self.message_user(
             request,
             f'Renumbered {count} week(s).',
@@ -564,7 +617,9 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             self.message_user(request, 'Invalid start date selected.', level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
+        before = capture_schedule(season)
         created_weeks = recreate_season_schedule(season, start_date=start_date)
+        self._record_undo(request, season, 'Before Recreate Schedule', before)
 
         self.message_user(
             request,
@@ -591,7 +646,9 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             )
             return self._get_redirect_url(request, season)
 
+        before = capture_schedule(season)
         created_weeks = create_mirrored_season_schedule(season)
+        self._record_undo(request, season, 'Before Create Mirrored Season', before)
 
         self.message_user(
             request,
@@ -680,12 +737,14 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             return self._get_redirect_url(request, season)
 
         before = season.weeks.filter(number__isnull=False).count()
+        schedule_before = capture_schedule(season)
         try:
             result = pack_season_schedule(season, random_seed=1, attempts=20000)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
+        self._record_undo(request, season, 'Before Compress Schedule', schedule_before)
         after = season.weeks.filter(number__isnull=False).count()
         if result['deleted_weeks']:
             self.message_user(
@@ -712,7 +771,9 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             self.message_user(request, 'Cannot rebalance the schedule of an archived season.', level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
+        before = capture_schedule(season)
         moved_matches = rebalance_season_matches(season)
+        self._record_undo(request, season, 'Before Rebalance Schedule', before)
 
         self.message_user(
             request,
@@ -749,6 +810,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             )
             return self._get_redirect_url(request, season)
 
+        before = capture_schedule(season)
         match.home_team = original_away
         match.away_team = original_home
 
@@ -757,6 +819,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
 
         match.full_clean()
         match.save()
+        self._record_undo(request, season, f'Before swapping home/away: {original_home} vs {original_away}', before)
 
         self.message_user(request, 'Match home and away teams were swapped.', level=messages.SUCCESS)
         return self._get_redirect_url(request, season)
@@ -773,9 +836,11 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             week__season=season,
         )
 
+        before = capture_schedule(season)
         match.location = request.POST.get('location', '').strip()
         match.full_clean()
         match.save(update_fields=['location'])
+        self._record_undo(request, season, f'Before changing the location of {match}', before)
 
         self.message_user(request, 'Match location updated.', level=messages.SUCCESS)
         return self._get_redirect_url(request, season)
@@ -797,6 +862,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             self.message_user(request, 'Please choose a destination week.', level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
+        before, label = capture_schedule(season), f'Before moving {match} from {self._week_label(match.week)}'
         try:
             if target_week_id == 'new':
                 target_week = create_new_playable_week_at_end(season)
@@ -809,11 +875,153 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
 
             move_match_to_week(match, target_week)
         except ValueError as exc:
+            # "Add to a new week" may have created the week before the move failed.
+            self._record_undo(request, season, label, before)
             self.message_user(request, str(exc), level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
+        self._record_undo(request, season, label, before)
         self.message_user(request, 'Match moved successfully.', level=messages.SUCCESS)
         return self._get_redirect_url(request, season)
+
+    @staticmethod
+    def _spacing_summary(stats, weeks, names, min_gap):
+        close = [rematch for rematch in stats['rematches'] if rematch[0] < min_gap]
+        return {
+            'closest': stats['rematches'][0][0] if stats['rematches'] else None,
+            'close': [
+                {'teams': f'{names[a]} v {names[b]}', 'first': weeks[i].number,
+                 'second': weeks[j].number, 'gap': gap}
+                for gap, a, b, i, j in close
+            ],
+            'longest_run': max(stats['longest_runs'].values(), default=0),
+            'back_to_back_byes': stats['back_to_back_byes'],
+        }
+
+    def space_rematches_view(self, request, object_id):
+        """Reorder whole weeks so the same teams don't meet again too soon.
+        GET shows the options; "Preview" (still a GET) shows the new order;
+        the Apply button POSTs exactly that previewed order."""
+        season = self._get_league_scoped_object(request, object_id)
+        manage_url = reverse('admin:scheduling_season_manage_schedule', args=[season.pk])
+        if season.status == Season.Status.ARCHIVED:
+            self.message_user(request, 'An archived season\'s schedule can\'t be changed.', level=messages.ERROR)
+            return HttpResponseRedirect(manage_url)
+
+        params = request.POST if request.method == 'POST' else request.GET
+        keep = sorted({int(n) for n in params.getlist('keep') if n.isdigit()})
+        try:
+            min_gap = min(max(int(params.get('min_gap', 4)), 1), 20)
+        except ValueError:
+            min_gap = 4
+
+        if request.method == 'POST':
+            try:
+                week_ids = [int(week_id) for week_id in request.POST.get('order', '').split(',') if week_id]
+                plan = week_order_from_ids(season, week_ids, keep)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return HttpResponseRedirect(request.path)
+            before = capture_schedule(season)
+            moved = apply_rematch_spacing(plan)
+            self._record_undo(request, season, 'Before Space Out Rematches', before)
+            self.message_user(
+                request,
+                f'Reordered {moved} week(s). Use Undo Last Change if you want the old order back.',
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(manage_url)
+
+        weeks = list(season.weeks.filter(number__isnull=False).order_by('date'))
+        scored = scored_week_numbers(season)
+        week_rows = [
+            {'week': week, 'scored': week.number in scored, 'kept': week.number in keep}
+            for week in weeks
+        ]
+        preview = None
+        if params.get('preview'):
+            try:
+                plan = plan_rematch_spacing(season, keep_week_numbers=keep, min_gap=min_gap)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+            else:
+                names = plan['team_names']
+                weeks = plan['weeks']
+                matches = {
+                    week.id: [
+                        f'{match.home_team.name} v {match.away_team.name}'
+                        for match in week.matches.select_related('home_team', 'away_team').order_by('sort_order', 'id')
+                    ]
+                    for week in weeks
+                }
+                preview = {
+                    'improved': plan['improved'],
+                    'locked': plan['locked'],
+                    'before': self._spacing_summary(plan['before'], weeks, names, min_gap),
+                    'after': self._spacing_summary(plan['after'], weeks, names, min_gap),
+                    'rows': [
+                        {'week': target, 'source': weeks[index], 'stays': weeks[index].id == target.id,
+                         'matches': matches[weeks[index].id]}
+                        for target, index in zip(weeks, plan['order'])
+                    ],
+                    'order': ','.join(str(weeks[index].id) for index in plan['order']),
+                }
+
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'season': season,
+            'manage_url': manage_url,
+            'week_rows': week_rows,
+            'keep': keep,
+            'min_gap': min_gap,
+            'preview': preview,
+        }
+        return TemplateResponse(request, 'admin/scheduling/season/space_rematches.html', context)
+
+    def schedule_history_view(self, request, object_id):
+        season = self._get_league_scoped_object(request, object_id)
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'season': season,
+            'manage_url': reverse('admin:scheduling_season_manage_schedule', args=[season.pk]),
+            'snapshots': season.schedule_snapshots.select_related('created_by'),
+        }
+        return TemplateResponse(request, 'admin/scheduling/season/schedule_history.html', context)
+
+    def restore_snapshot_view(self, request, object_id, snapshot_id):
+        """Put the schedule back the way it was before an earlier change.
+        GET shows what will change; nothing happens until it's confirmed."""
+        season = self._get_league_scoped_object(request, object_id)
+        snapshot = get_object_or_404(ScheduleSnapshot, pk=snapshot_id, season=season)
+        manage_url = reverse('admin:scheduling_season_manage_schedule', args=[season.pk])
+
+        if request.method == 'POST':
+            if request.POST.get('confirm') != 'yes':
+                return HttpResponseRedirect(manage_url)
+            try:
+                restore_schedule_snapshot(snapshot, request.user)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return HttpResponseRedirect(manage_url)
+            self.message_user(
+                request,
+                f'Schedule restored to how it was {snapshot.label[0].lower()}{snapshot.label[1:]}.',
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(manage_url)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'season': season,
+            'snapshot': snapshot,
+            'plan': plan_schedule_restore(snapshot),
+            'manage_url': manage_url,
+            'history_url': reverse('admin:scheduling_season_schedule_history', args=[season.pk]),
+        }
+        return TemplateResponse(request, 'admin/scheduling/season/restore_snapshot.html', context)
 
 @admin.register(Week)
 class WeekAdmin(admin.ModelAdmin):

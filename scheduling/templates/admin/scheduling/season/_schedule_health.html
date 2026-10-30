@@ -1,0 +1,83 @@
+{% if health %}
+    <style>
+        .schedule-health { border-radius: 4px; padding: 12px 16px; margin-bottom: 16px; }
+        .schedule-health.ok { background: #e8f5e9; border: 1px solid #81c784; color: #1b5e20; }
+        .schedule-health.has-issues { background: #fff3cd; border: 1px solid #ffc107; color: #856404; }
+        .schedule-health details { margin-top: 8px; }
+        .schedule-health summary { cursor: pointer; font-weight: 600; }
+        .schedule-health ul { margin: 6px 0 0; padding-left: 20px; }
+        .schedule-health a { color: inherit; font-weight: 600; }
+    </style>
+    <div class="schedule-health {% if health.issue_count %}has-issues{% else %}ok{% endif %}" data-schedule-health>
+        {% if not health.issue_count %}
+            <strong>Schedule check: no problems found.</strong>
+            Every rematch is at least {{ health.min_gap }} weeks apart, no team plays {{ health.long_run }} home or
+            away matches in a row, and byes are even and never two weeks running.
+        {% else %}
+            <strong>Schedule check: {{ health.issue_count }} thing{{ health.issue_count|pluralize }} to look at</strong>
+
+            {% if health.close_rematches %}
+                <details open data-health-rematches>
+                    <summary>Rematches less than {{ health.min_gap }} weeks apart ({{ health.close_rematches|length }})</summary>
+                    <ul>
+                        {% for rematch in health.close_rematches %}
+                            <li>{{ rematch.teams.0 }} v {{ rematch.teams.1 }}:
+                                <a href="#week-{{ rematch.first_week.pk }}">week {{ rematch.first_week.number }}</a> and
+                                <a href="#week-{{ rematch.second_week.pk }}">week {{ rematch.second_week.number }}</a>
+                                ({{ rematch.gap }} week{{ rematch.gap|pluralize }} apart)</li>
+                        {% endfor %}
+                    </ul>
+                    {% if space_rematches_url %}<p style="margin: 6px 0 0;"><a href="{{ space_rematches_url }}">Space out rematches&hellip;</a></p>{% endif %}
+                </details>
+            {% endif %}
+
+            {% if health.long_runs %}
+                <details open data-health-runs>
+                    <summary>{{ health.long_run }} or more home or away matches in a row ({{ health.long_runs|length }})</summary>
+                    <ul>
+                        {% for run in health.long_runs %}
+                            <li>{{ run.team }}: {{ run.length }} {{ run.side }} matches in a row,
+                                <a href="#week-{{ run.first_week.pk }}">week {{ run.first_week.number }}</a> to
+                                <a href="#week-{{ run.last_week.pk }}">week {{ run.last_week.number }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+
+            {% if health.back_to_back_byes %}
+                <details open data-health-byes>
+                    <summary>Byes two weeks running ({{ health.back_to_back_byes|length }})</summary>
+                    <ul>
+                        {% for bye in health.back_to_back_byes %}
+                            <li>{{ bye.team }}: weeks {{ bye.first_week.number }} and {{ bye.second_week.number }}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+
+            {% if health.uneven_byes %}
+                <details open data-health-uneven-byes>
+                    <summary>Teams don't all get the same number of byes</summary>
+                    <ul>
+                        {% for team, count in health.uneven_byes %}
+                            <li>{{ team }}: {{ count }} bye{{ count|pluralize }}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+
+            {% if health.relocated %}
+                <details data-health-relocated>
+                    <summary>Home matches away from the home team's venue ({{ health.relocated|length }})</summary>
+                    <ul>
+                        {% for item in health.relocated %}
+                            <li><a href="#week-{{ item.week.pk }}">Week {{ item.week.number }}</a>:
+                                {{ item.match.home_team.name }} v {{ item.match.away_team.name }} is at
+                                {{ item.match.location }}, not {{ item.home_venue }}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+        {% endif %}
+    </div>
+{% endif %}

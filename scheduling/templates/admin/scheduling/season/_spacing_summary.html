@@ -1,0 +1,13 @@
+<ul>
+    <li>Closest rematch: {% if summary.closest is None %}none{% else %}{{ summary.closest }} week{{ summary.closest|pluralize }} apart{% endif %}</li>
+    <li>Rematches under {{ min_gap }} weeks apart: {{ summary.close|length }}</li>
+    <li>Longest home or away run: {{ summary.longest_run }}</li>
+    <li>Byes two weeks running: {{ summary.back_to_back_byes }}</li>
+</ul>
+{% if summary.close %}
+    <ul>
+        {% for rematch in summary.close %}
+            <li>{{ rematch.teams }}: weeks {{ rematch.first }} and {{ rematch.second }} ({{ rematch.gap }} apart)</li>
+        {% endfor %}
+    </ul>
+{% endif %}
