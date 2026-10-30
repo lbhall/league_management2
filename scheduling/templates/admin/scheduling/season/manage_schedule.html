@@ -13,14 +13,24 @@
 
         #content {
             width: 100%;
+            box-sizing: border-box;
         }
 
         #content.colMS {
             margin-left: 0;
         }
 
-        #nav-sidebar {
+        /* The nav sidebar is hidden here, but when it was left open on
+           another admin page Django still caps the content at
+           100% - 299px, leaving an empty strip on the right. */
+        #nav-sidebar,
+        #toggle-nav-sidebar {
             display: none;
+        }
+
+        .main > #nav-sidebar + .content,
+        .main.shifted > #nav-sidebar + .content {
+            max-width: 100%;
         }
 
         .schedule-week-card {
