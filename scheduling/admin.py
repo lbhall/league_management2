@@ -29,6 +29,7 @@ from .services import (
     link_archived_season_by_name,
     get_valid_destination_weeks,
     get_venue_violations,
+    is_schedule_mirrored,
     move_match_to_week,
     move_week_down,
     move_week_up,
@@ -400,6 +401,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         if season.status != Season.Status.ARCHIVED:
             # Schedule-shaping tools only make sense before the season is archived.
             context['mirror_schedule_url'] = reverse('admin:scheduling_season_mirror_schedule', args=[season.pk])
+            context['schedule_mirrored'] = is_schedule_mirrored(season)
             context['rebalance_schedule_url'] = reverse('admin:scheduling_season_rebalance_schedule', args=[season.pk])
             context['renumber_weeks_url'] = reverse('admin:scheduling_season_renumber_weeks', args=[season.pk])
 
@@ -567,6 +569,14 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
 
         if season.status == Season.Status.ARCHIVED:
             self.message_user(request, 'Cannot mirror the schedule of an archived season.', level=messages.ERROR)
+            return self._get_redirect_url(request, season)
+
+        if is_schedule_mirrored(season):
+            self.message_user(
+                request,
+                'This schedule has already been mirrored: every pairing already has its return match.',
+                level=messages.ERROR,
+            )
             return self._get_redirect_url(request, season)
 
         created_weeks = create_mirrored_season_schedule(season)
