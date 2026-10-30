@@ -387,6 +387,96 @@ class MoveLiveViewTests(SeasonAdminTestCase):
         self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
 
 
+class MoveToWorkingViewTests(SeasonAdminTestCase):
+    def setUp(self):
+        super().setUp()
+        self.live = self.make_season('Late 2026', Season.Status.ACTIVE)
+        self.url = reverse('admin:scheduling_season_move_to_working', args=[self.live.pk])
+        self.manage_url = reverse('admin:scheduling_season_manage_schedule', args=[self.live.pk])
+
+    def make_season(self, name, status):
+        season = Season.objects.create(league=self.league, name=name, status=status)
+        week = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        self.last_match = Match.objects.create(week=week, home_team=self.home, away_team=self.away)
+        return season
+
+    def score(self, season):
+        from results.models import MatchResult
+        MatchResult.objects.create(
+            match=Match.objects.filter(week__season=season).first(), home_team_score=3, away_team_score=1,
+        )
+
+    def test_button_only_for_a_live_season_without_scores(self):
+        response = self.client.get(self.manage_url)
+        self.assertContains(response, 'data-move-to-working')
+
+        self.score(self.live)
+        response = self.client.get(self.manage_url)
+        self.assertNotContains(response, 'data-move-to-working')
+
+        working = self.make_season('Next', Season.Status.WORKING)
+        response = self.client.get(reverse('admin:scheduling_season_manage_schedule', args=[working.pk]))
+        self.assertNotContains(response, 'data-move-to-working')
+
+    def test_confirmation_page_changes_nothing(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Yes, move Late 2026 back to working')
+        self.assertNotContains(response, 'data-working-season-warning')
+        self.live.refresh_from_db()
+        self.assertEqual(self.live.status, Season.Status.ACTIVE)
+
+    def test_confirmed_moves_back_to_working(self):
+        response = self.client.post(self.url, {'confirm': 'yes'})
+        self.assertRedirects(response, self.manage_url)
+        self.live.refresh_from_db()
+        self.assertEqual(self.live.status, Season.Status.WORKING)
+        self.assertEqual(Match.objects.filter(week__season=self.live).count(), 1)
+
+    def test_post_without_confirmation_changes_nothing(self):
+        self.client.post(self.url)
+        self.live.refresh_from_db()
+        self.assertEqual(self.live.status, Season.Status.ACTIVE)
+
+    def test_warns_about_and_deletes_existing_working_season(self):
+        working = self.make_season('Draft', Season.Status.WORKING)
+        response = self.client.get(self.url)
+        self.assertContains(response, 'data-working-season-warning')
+        self.assertContains(response, 'Draft: 1 play week, 1 match')
+        self.assertContains(response, 'Yes, delete the working schedule and move Late 2026 back')
+        self.assertTrue(Season.objects.filter(pk=working.pk).exists())
+
+        response = self.client.post(self.url, {'confirm': 'yes'}, follow=True)
+        self.assertContains(response, 'Deleted the previous working season: Draft.')
+        self.assertFalse(Season.objects.filter(pk=working.pk).exists())
+        self.live.refresh_from_db()
+        self.assertEqual(self.live.status, Season.Status.WORKING)
+
+    def test_working_season_with_scores_blocks_the_move(self):
+        working = self.make_season('Old Season', Season.Status.WORKING)
+        self.score(working)
+        response = self.client.get(self.url)
+        self.assertContains(response, 'data-move-to-working-blocked')
+        self.assertNotContains(response, 'name="confirm"')
+
+        self.client.post(self.url, {'confirm': 'yes'})
+        self.assertTrue(Season.objects.filter(pk=working.pk).exists())
+        self.live.refresh_from_db()
+        self.assertEqual(self.live.status, Season.Status.ACTIVE)
+
+    def test_scored_live_season_is_refused(self):
+        self.score(self.live)
+        response = self.client.post(self.url, {'confirm': 'yes'}, follow=True)
+        self.assertContains(response, 'already has match results')
+        self.live.refresh_from_db()
+        self.assertEqual(self.live.status, Season.Status.ACTIVE)
+
+    def test_other_leagues_working_season_is_left_alone(self):
+        other_league = make_league(name='Other League')
+        other = Season.objects.create(league=other_league, name='Their Draft', status=Season.Status.WORKING)
+        self.client.post(self.url, {'confirm': 'yes'})
+        self.assertTrue(Season.objects.filter(pk=other.pk).exists())
+
+
 
 class RebalanceScheduleViewTests(SeasonAdminTestCase):
     def test_success(self):

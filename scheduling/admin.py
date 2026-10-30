@@ -30,6 +30,9 @@ from .services import (
     get_valid_destination_weeks,
     get_venue_violations,
     move_match_to_week,
+    move_season_to_working,
+    plan_move_season_to_working,
+    season_has_scores,
     move_week_down,
     move_week_up,
     pack_season_schedule,
@@ -205,6 +208,11 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
                 '<path:object_id>/move-live/',
                 self.admin_site.admin_view(self.move_live_view),
                 name='scheduling_season_move_live',
+            ),
+            path(
+                '<path:object_id>/move-to-working/',
+                self.admin_site.admin_view(self.move_to_working_view),
+                name='scheduling_season_move_to_working',
             ),
             path(
                 '<path:object_id>/compress-schedule/',
@@ -408,6 +416,9 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             context['move_live_url'] = reverse('admin:scheduling_season_move_live', args=[season.pk])
             context['compress_schedule_url'] = reverse('admin:scheduling_season_compress_schedule', args=[season.pk])
 
+        if season.status == Season.Status.ACTIVE and not season_has_scores(season):
+            context['move_to_working_url'] = reverse('admin:scheduling_season_move_to_working', args=[season.pk])
+
         if season.status == Season.Status.ACTIVE:
             context['archive_season_url'] = reverse('admin:scheduling_season_archive', args=[season.pk])
             context['archive_button_label'] = 'Archive Season'
@@ -598,6 +609,36 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
 
         self.message_user(request, 'Season moved live successfully.', level=messages.SUCCESS)
         return self._get_redirect_url(request, season)
+
+    def move_to_working_view(self, request, object_id):
+        """Move a live season that hasn't been scored yet back to working.
+        GET shows what will happen, including any working season that has to
+        be deleted first; nothing changes until the admin confirms."""
+        season = self._get_league_scoped_object(request, object_id)
+        manage_url = reverse('admin:scheduling_season_manage_schedule', args=[season.pk])
+
+        if request.method == 'POST':
+            if request.POST.get('confirm') != 'yes':
+                return HttpResponseRedirect(manage_url)
+            try:
+                deleted = move_season_to_working(season)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return HttpResponseRedirect(manage_url)
+            message = f'{season.name} moved back to working.'
+            if deleted:
+                message += f' Deleted the previous working season: {", ".join(deleted)}.'
+            self.message_user(request, message, level=messages.SUCCESS)
+            return HttpResponseRedirect(manage_url)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'season': season,
+            'plan': plan_move_season_to_working(season),
+            'manage_url': manage_url,
+        }
+        return TemplateResponse(request, 'admin/scheduling/season/move_to_working.html', context)
 
     def compress_schedule_view(self, request, object_id):
         """Repack a working season into the fewest weeks the venues allow.

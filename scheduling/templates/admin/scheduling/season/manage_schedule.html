@@ -311,6 +311,15 @@
             </li>
         {% endif %}
 
+        {% if move_to_working_url %}
+            <li>
+                {# Opens a confirmation page; nothing changes until it's confirmed there. #}
+                <form action="{{ move_to_working_url }}" method="get">
+                    <button type="submit" class="button" data-move-to-working>Move Back to Working</button>
+                </form>
+            </li>
+        {% endif %}
+
         {% if archive_season_url %}
             <li>
                 <form action="{{ archive_season_url }}" method="post">
