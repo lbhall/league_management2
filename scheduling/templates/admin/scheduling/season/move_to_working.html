@@ -1,0 +1,54 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Move back to working | {{ site_title|default:"Django site admin" }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='scheduling' %}">Scheduling</a>
+    &rsaquo; <a href="{% url 'admin:scheduling_season_changelist' %}">Seasons</a>
+    &rsaquo; <a href="{% url 'admin:scheduling_season_change' season.pk %}">{{ season.name }}</a>
+    &rsaquo; <a href="{{ manage_url }}">Manage Schedule</a>
+    &rsaquo; Move back to working
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Move {{ season.league.name }} &ndash; {{ season.name }} back to working?</h1>
+
+    {% if not plan.allowed %}
+        <p class="errornote" data-move-to-working-blocked>{{ plan.reason }}</p>
+        <p><a href="{{ manage_url }}" class="button cancel-link">Back to the schedule</a></p>
+    {% else %}
+        <p>
+            The schedule stays exactly as it is, but it stops being the live season:
+            {{ season.league.name }} has no live schedule on the public site until a season is moved live again.
+            You can then edit it with the working-schedule tools and move it live when it's ready.
+        </p>
+
+        {% if plan.working_seasons %}
+            <div class="errornote" data-working-season-warning>
+                <p><strong>Warning: {{ season.league.name }} already has a working schedule.</strong>
+                A league can only have one, so it will be <strong>deleted</strong> first, with all its weeks and matches:</p>
+                <ul>
+                    {% for entry in plan.working_seasons %}
+                        <li>{{ entry.season.name }}: {{ entry.play_weeks }} play week{{ entry.play_weeks|pluralize }}, {{ entry.matches }} match{{ entry.matches|pluralize:"es" }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="confirm" value="yes">
+            {% if plan.working_seasons %}<p>This can't be undone: the deleted working schedule can't be recovered.</p>{% endif %}
+            <div class="submit-row">
+                <input type="submit" class="button" style="background-color: #dc3545; color: white;"
+                       value="{% if plan.working_seasons %}Yes, delete the working schedule and move {{ season.name }} back{% else %}Yes, move {{ season.name }} back to working{% endif %}">
+                <a href="{{ manage_url }}" class="button cancel-link">No, take me back</a>
+            </div>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

@@ -695,6 +695,70 @@ def rebalance_season_matches(season):
 
 @transaction.atomic
 @transaction.atomic
+def season_has_scores(season):
+    """True once anything has been scored for the season: a saved result, or
+    a scoresheet being entered, played or scanned."""
+    from scoring.models import GameResult, MatchEntry, ScoresheetScan
+
+    return any(
+        model.objects.filter(match__week__season=season).exists()
+        for model in (MatchResult, GameResult, MatchEntry, ScoresheetScan)
+    )
+
+
+def plan_move_season_to_working(season):
+    """What moving a live season back to working involves.
+
+    Returns {'allowed', 'reason', 'working_seasons'}: ``working_seasons`` are
+    the league's other working seasons, which are deleted to make room, each
+    as {'season', 'play_weeks', 'matches', 'has_scores'}. It isn't allowed
+    once the live season has scores, or when a working season that would be
+    deleted has scores of its own (such as an earlier season that was
+    replaced when this one went live)."""
+    working_seasons = [
+        {
+            'season': other,
+            'play_weeks': other.weeks.filter(number__isnull=False).count(),
+            'matches': Match.objects.filter(week__season=other).count(),
+            'has_scores': season_has_scores(other),
+        }
+        for other in Season.objects.filter(
+            league=season.league, status=Season.Status.WORKING,
+        ).exclude(pk=season.pk).order_by('name')
+    ]
+
+    reason = ''
+    if season.status != Season.Status.ACTIVE:
+        reason = 'Only a live season can be moved back to working.'
+    elif season_has_scores(season):
+        reason = 'This season already has match results, so it can no longer be moved back to working.'
+    elif any(entry['has_scores'] for entry in working_seasons):
+        names = ', '.join(entry['season'].name for entry in working_seasons if entry['has_scores'])
+        reason = (
+            f'The working season {names} has match results, so it can\'t be deleted to make room. '
+            'Archive or clean it up first.'
+        )
+    return {'allowed': not reason, 'reason': reason, 'working_seasons': working_seasons}
+
+
+def move_season_to_working(season):
+    """Move a live season with no scores back to working, deleting the
+    league's other working seasons first. The plan is rebuilt inside the
+    transaction, so a result saved after the confirmation page was shown
+    stops the move. Returns the names of the deleted working seasons."""
+    with transaction.atomic():
+        season = Season.objects.select_for_update().get(pk=season.pk)
+        plan = plan_move_season_to_working(season)
+        if not plan['allowed']:
+            raise ValueError(plan['reason'])
+        deleted = [entry['season'].name for entry in plan['working_seasons']]
+        for entry in plan['working_seasons']:
+            entry['season'].delete()
+        season.status = Season.Status.WORKING
+        season.save(update_fields=['status'])
+    return deleted
+
+
 def archive_season(season):
     """Snapshot a season into the Archived* tables and mark it archived.
 
