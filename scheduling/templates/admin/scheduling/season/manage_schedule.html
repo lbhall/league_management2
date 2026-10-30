@@ -285,7 +285,7 @@
             <li>
                 <form action="{{ mirror_schedule_url }}" method="post">
                     {% csrf_token %}
-                    <button type="submit" class="button">Create Mirrored Season</button>
+                    <button type="submit" class="button"{% if schedule_mirrored %} disabled title="Already mirrored: every pairing has its return match"{% endif %}>Create Mirrored Season</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 </form>
             </li>

@@ -288,6 +288,33 @@ class MirrorScheduleViewTests(SeasonAdminTestCase):
         response = self.client.post(reverse('admin:scheduling_season_mirror_schedule', args=[season.pk]))
         self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
 
+    def mirror_button(self, season):
+        response = self.client.get(reverse('admin:scheduling_season_manage_schedule', args=[season.pk]))
+        html = response.content.decode()
+        start = html.index('<button', html.index(reverse('admin:scheduling_season_mirror_schedule', args=[season.pk])))
+        return html[start:html.index('</button>', start)]
+
+    def test_button_disabled_once_mirrored(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.WORKING)
+        week = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        Match.objects.create(week=week, home_team=self.home, away_team=self.away)
+        self.assertNotIn('disabled', self.mirror_button(season))
+
+        self.client.post(reverse('admin:scheduling_season_mirror_schedule', args=[season.pk]))
+        self.assertIn('disabled', self.mirror_button(season))
+
+    def test_second_mirror_is_refused(self):
+        season = Season.objects.create(league=self.league, name='S1', status=Season.Status.WORKING)
+        week = Week.objects.create(season=season, date=date(2026, 1, 5), number=1)
+        Match.objects.create(week=week, home_team=self.home, away_team=self.away)
+        url = reverse('admin:scheduling_season_mirror_schedule', args=[season.pk])
+        self.client.post(url)
+        self.assertEqual(Match.objects.filter(week__season=season).count(), 2)
+
+        response = self.client.post(url, follow=True)
+        self.assertEqual(Match.objects.filter(week__season=season).count(), 2)
+        self.assertContains(response, 'already been mirrored')
+
 
 class MoveWeekArrowsTests(SeasonAdminTestCase):
     def test_arrows_reflect_play_week_neighbours_not_holidays(self):

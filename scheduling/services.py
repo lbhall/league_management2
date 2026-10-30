@@ -493,6 +493,20 @@ def pack_season_schedule(season, random_seed=None, attempts=5000):
     return {'optimal': True, 'moved': moved, 'deleted_weeks': deleted, 'week_count': week_count}
 
 
+def is_schedule_mirrored(season):
+    """True once the season's schedule has its mirrored second half.
+
+    Mirroring gives every pairing a return match, so a mirrored schedule has
+    each pair of teams that meets meeting at least twice. Counting pairs
+    rather than home/away directions keeps this true after a match's home
+    and away are swapped; recreating the schedule makes it false again."""
+    pair_counts = {}
+    for home_id, away_id in Match.objects.filter(week__season=season).values_list('home_team_id', 'away_team_id'):
+        pair = frozenset((home_id, away_id))
+        pair_counts[pair] = pair_counts.get(pair, 0) + 1
+    return bool(pair_counts) and min(pair_counts.values()) >= 2
+
+
 def create_mirrored_season_schedule(season):
     existing_weeks = list(season.weeks.order_by('date', 'number'))
     if not existing_weeks:
