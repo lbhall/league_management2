@@ -693,8 +693,7 @@ def rebalance_season_matches(season):
 
     return moved_matches
 
-@transaction.atomic
-@transaction.atomic
+
 def season_has_scores(season):
     """True once anything has been scored for the season: a saved result, or
     a scoresheet being entered, played or scanned."""
@@ -759,6 +758,7 @@ def move_season_to_working(season):
     return deleted
 
 
+@transaction.atomic
 def archive_season(season):
     """Snapshot a season into the Archived* tables and mark it archived.
 
