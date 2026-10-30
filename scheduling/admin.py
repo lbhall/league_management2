@@ -416,6 +416,7 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         if season.status == Season.Status.WORKING:
             context['recreate_schedule_url'] = reverse('admin:scheduling_season_recreate_schedule', args=[season.pk])
             context['move_live_url'] = reverse('admin:scheduling_season_move_live', args=[season.pk])
+            context['current_live_season'] = self._current_live_season(season)
             context['compress_schedule_url'] = reverse('admin:scheduling_season_compress_schedule', args=[season.pk])
 
         if season.status == Season.Status.ACTIVE and not season_has_scores(season):
@@ -599,6 +600,17 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
         )
         return self._get_redirect_url(request, season)
 
+    @staticmethod
+    def _current_live_season(season):
+        """The league's live season other than ``season``, if there is one.
+        Only one season can be live, and the current one has to be archived
+        before another can take its place."""
+        return (
+            Season.objects.filter(league=season.league, status=Season.Status.ACTIVE)
+            .exclude(pk=season.pk)
+            .first()
+        )
+
     def move_live_view(self, request, object_id):
         season = self._get_league_scoped_object(request, object_id)
 
@@ -609,10 +621,14 @@ class SeasonAdmin(LeagueScopedAdminMixin, admin.ModelAdmin):
             self.message_user(request, 'Only a working season can be moved live.', level=messages.ERROR)
             return self._get_redirect_url(request, season)
 
-        Season.objects.filter(
-            league=season.league,
-            status=Season.Status.ACTIVE,
-        ).exclude(pk=season.pk).update(status=Season.Status.WORKING)
+        live_season = self._current_live_season(season)
+        if live_season:
+            self.message_user(
+                request,
+                f'{live_season.name} is already the live season. Archive it before moving {season.name} live.',
+                level=messages.ERROR,
+            )
+            return self._get_redirect_url(request, season)
 
         season.status = Season.Status.ACTIVE
         season.save(update_fields=['status'])
