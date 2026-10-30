@@ -305,7 +305,7 @@
             <li>
                 <form action="{{ move_live_url }}" method="post">
                     {% csrf_token %}
-                    <button type="submit" class="button">Move Season Live</button>
+                    <button type="submit" class="button" data-move-live{% if current_live_season %} disabled title="{{ current_live_season.name }} is live. Archive it before moving this season live."{% endif %}>Move Season Live</button>
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 </form>
             </li>

@@ -413,6 +413,34 @@ class MoveLiveViewTests(SeasonAdminTestCase):
         response = self.client.post(reverse('admin:scheduling_season_move_live', args=[season.pk]))
         self.assertRedirects(response, reverse('admin:scheduling_season_change', args=[season.pk]))
 
+    def test_refused_while_another_season_is_live(self):
+        live = Season.objects.create(league=self.league, name='Mid 2026', status=Season.Status.ACTIVE)
+        working = Season.objects.create(league=self.league, name='Late 2026', status=Season.Status.WORKING)
+        response = self.client.post(reverse('admin:scheduling_season_move_live', args=[working.pk]), follow=True)
+        self.assertContains(response, 'Mid 2026 is already the live season. Archive it before moving Late 2026 live.')
+        live.refresh_from_db()
+        working.refresh_from_db()
+        self.assertEqual(live.status, Season.Status.ACTIVE)
+        self.assertEqual(working.status, Season.Status.WORKING)
+
+    def test_button_disabled_while_another_season_is_live(self):
+        working = Season.objects.create(league=self.league, name='Late 2026', status=Season.Status.WORKING)
+        manage_url = reverse('admin:scheduling_season_manage_schedule', args=[working.pk])
+        self.assertNotContains(self.client.get(manage_url), 'data-move-live disabled')
+
+        Season.objects.create(league=self.league, name='Mid 2026', status=Season.Status.ACTIVE)
+        response = self.client.get(manage_url)
+        self.assertContains(response, 'data-move-live disabled')
+        self.assertContains(response, 'Mid 2026 is live. Archive it before moving this season live.')
+
+    def test_another_leagues_live_season_does_not_block(self):
+        other_league = make_league(name='Other League')
+        Season.objects.create(league=other_league, name='Theirs', status=Season.Status.ACTIVE)
+        working = Season.objects.create(league=self.league, name='Late 2026', status=Season.Status.WORKING)
+        self.client.post(reverse('admin:scheduling_season_move_live', args=[working.pk]))
+        working.refresh_from_db()
+        self.assertEqual(working.status, Season.Status.ACTIVE)
+
 
 class MoveToWorkingViewTests(SeasonAdminTestCase):
     def setUp(self):
