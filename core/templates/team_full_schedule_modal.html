@@ -8,7 +8,7 @@
             <div class="modal-body">
                 {% if schedule_weeks %}
                     {% for week_block in schedule_weeks %}
-                        <div class="mb-4">
+                        <div class="mb-4"{% if week_block.is_current %} data-current-week{% endif %}>
                             <h6 class="mb-2">
                                 {% if week_block.week.number %}
                                     Week {{ week_block.week.number }}
@@ -16,6 +16,9 @@
                                     {{ week_block.week.notes|default:"No play" }}
                                 {% endif %}
                                 <span class="text-muted">({{ week_block.week.date }})</span>
+                                {% if week_block.is_current %}
+                                    <span class="badge text-bg-primary ms-1">{% if week_block.is_today %}Tonight{% else %}Up next{% endif %}</span>
+                                {% endif %}
                             </h6>
 
                             {% if week_block.entries %}

@@ -231,6 +231,47 @@ def build_week_schedule_with_byes(active_league, week, team_standings=None):
     return match_entries + bye_entries
 
 
+def build_season_schedule(active_league, active_season, today=None):
+    """Every week of the season with its matches and byes, marking the week to open at.
+
+    The current week is the first one dated today or later; weeks before it are past.
+    Once the season's last week has gone by there is no current week and nothing is past.
+    """
+    today = today or timezone.localdate()
+    team_standings = build_team_standings(active_league, active_season)
+    weeks = list(
+        Week.objects.filter(season=active_season)
+        .prefetch_related(
+            Prefetch(
+                'matches',
+                queryset=Match.objects.select_related(
+                    'home_team',
+                    'away_team',
+                    'result',
+                ).order_by('sort_order', 'id'),
+            )
+        )
+        .order_by('date', 'number')
+    )
+    current_week = next((week for week in weeks if week.date >= today), None)
+
+    schedule_weeks = []
+    is_past = current_week is not None
+    for week in weeks:
+        if week == current_week:
+            is_past = False
+        entries = build_week_schedule_with_byes(active_league, week, team_standings=team_standings)
+        schedule_weeks.append({
+            'week': week,
+            'entries': entries,
+            'is_current': week == current_week,
+            'is_today': week == current_week and week.date == today,
+            'is_past': is_past,
+            'has_results': any(entry.get('result_label') for entry in entries),
+        })
+    return schedule_weeks
+
+
 def build_team_standings(active_league, active_season, through_week=None):
     teams = list(
         Team.objects.filter(league=active_league)
@@ -781,37 +822,19 @@ def schedule(request):
     active_season = get_active_season(active_league)
 
     schedule_weeks = []
+    teams = []
 
     if active_season and active_league:
-        team_standings = build_team_standings(active_league, active_season)
-        weeks = (
-            Week.objects.filter(season=active_season)
-            .prefetch_related(
-                Prefetch(
-                    'matches',
-                    queryset=Match.objects.select_related(
-                        'home_team',
-                        'away_team',
-                        'result',
-                    ).order_by('sort_order', 'id'),
-                )
-            )
-            .order_by('date', 'number')
-        )
-
-        schedule_weeks = [
-            {
-                'week': week,
-                'entries': build_week_schedule_with_byes(active_league, week, team_standings=team_standings),
-            }
-            for week in weeks
-        ]
+        schedule_weeks = build_season_schedule(active_league, active_season)
+        teams = Team.objects.filter(league=active_league).exclude(name__iexact='BYE').order_by('name')
 
     return render(request, 'schedule.html', {
         'active_league': active_league,
         'league_name': active_league.name if active_league else 'League Name',
         'active_season': active_season,
         'schedule_weeks': schedule_weeks,
+        'earlier_week_count': sum(1 for week_data in schedule_weeks if week_data['is_past']),
+        'teams': teams,
     })
 
 
@@ -1446,25 +1469,7 @@ def one_pocket_full_schedule_modal(request):
     schedule_weeks = []
 
     if active_season:
-        team_standings = build_team_standings(active_league, active_season)
-        weeks = (
-            Week.objects.filter(season=active_season)
-            .prefetch_related(
-                Prefetch(
-                    'matches',
-                    queryset=Match.objects.select_related('home_team', 'away_team', 'result').order_by('sort_order', 'id'),
-                )
-            )
-            .order_by('date', 'number')
-        )
-
-        schedule_weeks = [
-            {
-                'week': week,
-                'entries': build_week_schedule_with_byes(active_league, week, team_standings=team_standings),
-            }
-            for week in weeks
-        ]
+        schedule_weeks = build_season_schedule(active_league, active_season)
 
     html = render_to_string(
         'team_full_schedule_modal.html',

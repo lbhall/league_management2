@@ -26,6 +26,14 @@
             return;
         }
 
+        // Open at the week being played next rather than the start of the season.
+        modalElement.addEventListener('shown.bs.modal', function () {
+            const currentWeek = modalElement.querySelector('[data-current-week]');
+            if (currentWeek) {
+                currentWeek.scrollIntoView({ block: 'start' });
+            }
+        }, { once: true });
+
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
     }
