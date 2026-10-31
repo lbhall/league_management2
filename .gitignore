@@ -225,3 +225,5 @@ staticfiles/
 # Database copies and backups hold players' contact details; never commit them
 *.sqlite3
 *.sqlite3.*
+# Word documents can hold player details
+*.docx
