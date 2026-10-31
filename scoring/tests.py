@@ -1445,6 +1445,10 @@ class PwaEndpointTests(ScoringBase):
         response = self.client.get('/score/manifest.json')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['start_url'], '/score/')
+        self.assertEqual(
+            [icon['src'] for icon in response.json()['icons']],
+            ['/static/scoring/icon-192.png', '/static/scoring/icon-512.png'],
+        )
 
     def test_service_worker_served_as_javascript(self):
         response = self.client.get('/score/sw.js')

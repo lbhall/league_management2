@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -18,7 +18,7 @@
             {% if active_league.results_type != 'one_pocket' %}
             <a class="navbar-brand" href="/">{{ league_name }}</a>
             {% else %}
-            <a class="navbar-brand" href="/"><img src="/static/core/images/bogies.png" alt="One Pocket Logo"></a>
+            <a class="navbar-brand" href="/"><img src="{% static 'core/images/bogies.png' %}" alt="One Pocket Logo"></a>
             {% endif %}
             <button
                 class="navbar-toggler"
@@ -86,13 +86,13 @@
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous"
     ></script>
-    <script src="/static/core/js/player_scores_modal.js"></script>
-    <script src="/static/core/js/team_schedule_modal.js"></script>
-    <script src="/static/core/js/team_full_schedule_modal.js"></script>
-    <script src="/static/core/js/match_result_modal.js"></script>
-    <script src="/static/core/js/makeup_matches_modal.js"></script>
-    <script src="/static/core/js/archived_player_history_modal.js"></script>
-    <script src="/static/core/js/archived_standings_modal.js"></script>
+    <script src="{% static 'core/js/player_scores_modal.js' %}"></script>
+    <script src="{% static 'core/js/team_schedule_modal.js' %}"></script>
+    <script src="{% static 'core/js/team_full_schedule_modal.js' %}"></script>
+    <script src="{% static 'core/js/match_result_modal.js' %}"></script>
+    <script src="{% static 'core/js/makeup_matches_modal.js' %}"></script>
+    <script src="{% static 'core/js/archived_player_history_modal.js' %}"></script>
+    <script src="{% static 'core/js/archived_standings_modal.js' %}"></script>
 <br><br>
 </body>
 </html>

@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.templatetags.static import static
 from django.utils import timezone
 
 from core.models import League, Player
@@ -1739,8 +1740,8 @@ def manifest(request):
         'background_color': '#0c385f',
         'theme_color': '#0c385f',
         'icons': [
-            {'src': '/static/scoring/icon-192.png', 'sizes': '192x192', 'type': 'image/png'},
-            {'src': '/static/scoring/icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+            {'src': static('scoring/icon-192.png'), 'sizes': '192x192', 'type': 'image/png'},
+            {'src': static('scoring/icon-512.png'), 'sizes': '512x512', 'type': 'image/png'},
         ],
     })
 
