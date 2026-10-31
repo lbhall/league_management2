@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone as dt_timezone
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -895,3 +896,88 @@ class TeamPlayerStatsRosterTests(ViewTestCase):
         stats = response.context['team_player_stats']
         self.assertEqual(len(stats), 1)
         self.assertEqual(stats[0]['wins'], 0)
+
+
+class SchedulePageTests(ViewTestCase):
+    """The public Schedule page opens at the week being played next and can highlight one team."""
+
+    def setUp(self):
+        super().setUp()
+        self.league = make_league(name='Schedule Pool League', results_type=League.ResultsType.EIGHT_BALL, team_size=5)
+        venue = make_venue(self.league, name='Cue Club')
+        self.sharks = make_team(self.league, venue, 'Sharks')
+        self.jets = make_team(self.league, venue, 'Jets')
+        self.bye = make_team(self.league, venue, 'BYE')
+
+        season = Season.objects.create(league=self.league, name='Fall', status=Season.Status.ACTIVE)
+        # Mondays in January 2026.
+        self.weeks = [
+            Week.objects.create(season=season, date=date(2026, 1, day), number=number)
+            for number, day in enumerate([5, 12, 19, 26], start=1)
+        ]
+        played = Match.objects.create(week=self.weeks[0], home_team=self.sharks, away_team=self.jets, location='Cue Club')
+        MatchResult.objects.create(match=played, home_team_score=9, away_team_score=3)
+        for week in self.weeks[1:]:
+            Match.objects.create(week=week, home_team=self.jets, away_team=self.sharks, location='Cue Club')
+
+    def get_schedule(self, today):
+        with self.settings(FRONTEND_LEAGUE_ID=self.league.id), \
+                mock.patch('core.views.timezone.localdate', return_value=today):
+            response = self.client.get(reverse('schedule'))
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_opens_at_the_next_week_with_earlier_weeks_tucked_away(self):
+        response = self.get_schedule(date(2026, 1, 13))
+        html = response.content.decode()
+
+        current = [w['week'] for w in response.context['schedule_weeks'] if w['is_current']]
+        self.assertEqual(current, [self.weeks[2]])
+        for week in self.weeks[:2]:
+            self.assertIn(f'id="week-{week.id}" data-past-week hidden', html)
+        for week in self.weeks[2:]:
+            self.assertNotIn(f'id="week-{week.id}" data-past-week', html)
+        self.assertEqual(html.count('data-current-week'), 1)
+        self.assertContains(response, 'Up next')
+        self.assertContains(response, 'Show 2 earlier weeks')
+
+    def test_match_night_says_tonight(self):
+        response = self.get_schedule(date(2026, 1, 19))
+        self.assertContains(response, 'Tonight')
+        self.assertNotContains(response, 'Up next')
+
+    def test_after_the_last_week_everything_shows(self):
+        response = self.get_schedule(date(2026, 2, 10))
+        self.assertNotContains(response, 'data-past-week hidden')
+        self.assertNotContains(response, 'data-current-week')
+        self.assertNotContains(response, 'earlier week')
+
+    def test_team_picker_lists_real_teams_and_rows_carry_their_ids(self):
+        response = self.get_schedule(date(2026, 1, 1))
+        self.assertEqual(list(response.context['teams']), [self.jets, self.sharks])
+        self.assertNotContains(response, f'<option value="{self.bye.id}">')
+        self.assertContains(response, f'data-team-ids="{self.sharks.id} {self.jets.id}"')
+        # The BYE placeholder isn't scheduled, so it shows as a bye row for that team alone.
+        self.assertContains(response, f'data-team-ids="{self.bye.id}"')
+
+    def test_scores_show_only_on_weeks_with_results(self):
+        response = self.get_schedule(date(2026, 1, 1))
+        html = response.content.decode()
+        self.assertEqual(html.count('>Score</th>'), 1)
+        self.assertIn('>9-3</td>', html)
+
+    def test_bogies_full_schedule_marks_the_next_week(self):
+        league = make_league(name='Schedule One Pocket', results_type=League.ResultsType.ONE_POCKET)
+        venue = make_venue(league)
+        a, b = make_team(league, venue, 'Ann', team_rank=2), make_team(league, venue, 'Bo', team_rank=3)
+        season = Season.objects.create(league=league, name='Summer', status=Season.Status.ACTIVE)
+        Week.objects.create(season=season, date=date(2026, 6, 1), number=None, notes='Memorial Day')
+        upcoming = Week.objects.create(season=season, date=date(2026, 6, 8), number=1)
+        Match.objects.create(week=upcoming, home_team=a, away_team=b)
+
+        with self.settings(FRONTEND_LEAGUE_ID=league.id), \
+                mock.patch('core.views.timezone.localdate', return_value=date(2026, 6, 2)):
+            html = self.client.get(reverse('one_pocket_full_schedule_modal')).json()['html']
+        self.assertEqual(html.count('data-current-week'), 1)
+        self.assertRegex(html, r'data-current-week>\s*<h6 class="mb-2">\s*Week 1')
+        self.assertIn('Up next', html)
